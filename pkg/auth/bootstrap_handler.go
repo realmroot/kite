@@ -71,16 +71,16 @@ func (h *AuthHandler) Bootstrap(c *gin.Context) {
 }
 
 func currentBootstrapSetup() bootstrapSetupState {
-	// Realmroot owns identity provisioning and clusters are managed after login.
+	// The configured identity provider owns provisioning; clusters are managed after login.
 	return bootstrapSetupState{Initialized: true, Step: 2}
 }
 
 func (h *AuthHandler) bootstrapAuth() bootstrapAuthOptions {
 	return bootstrapAuthOptions{
-		Providers:           []string{"realmroot"},
+		Providers:           []string{"oidc"},
 		CredentialProviders: []string{},
-		OAuthProviders:      []string{"realmroot"},
-		LoginPrompt:         "Sign in with Realmroot. Kubernetes permissions come directly from your Realmroot groups.",
+		OAuthProviders:      []string{common.OIDCProviderName},
+		LoginPrompt:         "Kubernetes permissions come directly from your identity provider claims.",
 		MFAEnabled:          false,
 		PasskeyLoginEnabled: false,
 	}

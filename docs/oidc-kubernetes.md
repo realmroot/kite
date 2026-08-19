@@ -1,23 +1,23 @@
-# Realmroot-native Kubernetes architecture
+# OIDC-native Kubernetes architecture
 
 ## Security model
 
 Kite is an OIDC relying party and a browser-facing backend-for-frontend. It is
 not a Kubernetes identity provider or authorization proxy.
 
-1. The browser starts Realmroot Authorization Code flow with PKCE, state, and
+1. The browser starts the OIDC Authorization Code flow with PKCE, state, and
    nonce.
 2. Kite validates issuer, signature, audience, lifetime, and nonce, then keeps
    ID, access, and refresh tokens in an encrypted server-side session.
 3. The browser receives only an opaque, `HttpOnly`, `SameSite=Lax` session
    cookie.
 4. For every Kubernetes request, Kite constructs a fresh client using the
-   signed-in user's Realmroot ID token. No cross-user Kubernetes client or
+   signed-in user's OIDC ID token. No cross-user Kubernetes client or
    informer cache is shared.
-5. The Kubernetes API server authenticates the token and authorizes its email
-   and `groups` claims through native RBAC.
+5. The Kubernetes API server authenticates the token and authorizes the
+   configured username and group claims through native RBAC.
 
-`REALMROOT_ADMIN_GROUPS` controls only who may maintain Kite's shared cluster
+`PLATFORM_ADMIN_GROUPS` controls only who may maintain Kite's shared cluster
 catalog, templates, and audit view. It does not grant access to Kubernetes
 resources. Kubernetes RoleBindings and ClusterRoleBindings remain authoritative.
 
@@ -28,38 +28,50 @@ and kubeconfig import are intentionally unavailable in this fork.
 ## Required Kite configuration
 
 ```text
-REALMROOT_ISSUER=https://id.realmroot.dev/api/auth
-REALMROOT_CLIENT_ID=<confidential web application client ID>
-REALMROOT_CLIENT_SECRET=<client secret>
-REALMROOT_ADMIN_GROUPS=platform-admins
+OIDC_ISSUER=https://identity.example.com
+OIDC_CLIENT_ID=<confidential web application client ID>
+OIDC_CLIENT_SECRET=<client secret>
+OIDC_PROVIDER_NAME=Corporate Identity
+OIDC_SCOPES=openid profile email groups offline_access
+OIDC_USERNAME_CLAIM=email
+OIDC_GROUPS_CLAIM=groups
+OIDC_NAME_CLAIM=name
+OIDC_PICTURE_CLAIM=picture
+PLATFORM_ADMIN_GROUPS=platform-admins
 KITE_ENCRYPT_KEY=<random secret used for encrypted server sessions>
 JWT_SECRET=<independent random secret used for tunnel enrollment grants>
 HOST=https://kite.example.com
 ```
 
-Register `${HOST}/api/auth/callback` as the Realmroot callback. Request the
-`openid profile email groups offline_access` scopes. `groups` must be present in
-the ID token.
+Register `${HOST}/api/auth/callback` as the OIDC callback. The configured scopes
+must contain `openid`. Claim names are top-level ID-token claims and are not
+hard-coded; common group alternatives include `groups`, `roles`, and `memberOf`.
+
+Kite does not rewrite the ID token. `OIDC_USERNAME_CLAIM` selects Kite's local
+display identity and `OIDC_GROUPS_CLAIM` selects catalog-administrator groups;
+the API server's `--oidc-username-claim` and `--oidc-groups-claim` independently
+control Kubernetes identity. Configure both sides consistently to avoid an
+operator seeing a different username or group interpretation in each layer.
 
 ## Kubernetes API server OIDC configuration
 
 For a self-managed API server, configure equivalent flags:
 
 ```text
---oidc-issuer-url=https://id.realmroot.dev/api/auth
---oidc-client-id=<the same Realmroot client ID>
+--oidc-issuer-url=https://identity.example.com
+--oidc-client-id=<the same OIDC client ID>
 --oidc-username-claim=email
 --oidc-groups-claim=groups
 --authorization-mode=Node,RBAC
 ```
 
-Then bind Realmroot groups with normal Kubernetes RBAC. For example:
+Then bind provider users or groups with normal Kubernetes RBAC. For example:
 
 ```yaml
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: realmroot-platform-admins
+  name: oidc-platform-admins
 subjects:
   - kind: Group
     name: platform-admins
@@ -70,8 +82,8 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
 ```
 
-Managed Kubernetes offerings must support trusting Realmroot as an external
-OIDC issuer and accept the configured audience. If a provider only supports its
+Managed Kubernetes offerings must support trusting the configured external OIDC
+issuer and accept the configured audience. If a provider only supports its
 own IAM authenticator, this direct-token architecture requires a provider-
 specific authentication bridge and is not compatible as-is.
 
@@ -98,6 +110,6 @@ the end user's token traverses the tunnel to the API server unchanged.
 
 ## Helm installation
 
-Set the chart's Realmroot values and secret values. The Kite ServiceAccount has
+Set the chart's `oidc` and secret values. The Kite ServiceAccount has
 `automountServiceAccountToken: false`, and the chart does not install Kubernetes
-RBAC for Kite. Apply your Realmroot-group bindings separately.
+RBAC for Kite. Apply provider-user and provider-group bindings separately.

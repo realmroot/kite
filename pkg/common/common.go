@@ -31,15 +31,21 @@ var (
 	Host            = ""
 	Base            = ""
 
-	NodeTerminalImage     = "busybox:latest"
-	KubectlTerminalImage  = "zzde/kubectl:latest"
-	ClusterAgentImage     = "ghcr.io/kite-org/kite:latest"
-	RealmrootIssuer       = "https://id.realmroot.dev/api/auth"
-	RealmrootClientID     = ""
-	RealmrootClientSecret = ""
-	RealmrootAdminGroups  []string
-	DBType                = "sqlite"
-	DBDSN                 = "dev.db"
+	NodeTerminalImage    = "busybox:latest"
+	KubectlTerminalImage = "zzde/kubectl:latest"
+	ClusterAgentImage    = "ghcr.io/kite-org/kite:latest"
+	OIDCIssuer           = ""
+	OIDCClientID         = ""
+	OIDCClientSecret     = ""
+	OIDCProviderName     = "OpenID Connect"
+	OIDCScopes           = []string{"openid", "profile", "email", "offline_access"}
+	OIDCUsernameClaim    = "email"
+	OIDCGroupsClaim      = "groups"
+	OIDCNameClaim        = "name"
+	OIDCPictureClaim     = "picture"
+	PlatformAdminGroups  []string
+	DBType               = "sqlite"
+	DBDSN                = "dev.db"
 
 	KiteEncryptKey = "kite-default-encryption-key-change-in-production"
 
@@ -129,7 +135,7 @@ func LoadEnvs() {
 	if clusterAgentImage := os.Getenv("CLUSTER_AGENT_IMAGE"); clusterAgentImage != "" {
 		ClusterAgentImage = clusterAgentImage
 	}
-	loadRealmrootEnvs()
+	loadOIDCEnvs()
 	loadDatabaseEnvs()
 
 	if key := os.Getenv("KITE_ENCRYPT_KEY"); key != "" {
@@ -191,18 +197,46 @@ func LoadEnvs() {
 	klog.Infof("Trusted proxies configured: %v", TrustedProxies)
 }
 
-func loadRealmrootEnvs() {
-	if issuer := strings.TrimSpace(os.Getenv("REALMROOT_ISSUER")); issuer != "" {
-		RealmrootIssuer = strings.TrimRight(issuer, "/")
+func loadOIDCEnvs() {
+	OIDCProviderName = "OpenID Connect"
+	OIDCScopes = []string{"openid", "profile", "email", "offline_access"}
+	OIDCUsernameClaim = "email"
+	OIDCGroupsClaim = "groups"
+	OIDCNameClaim = "name"
+	OIDCPictureClaim = "picture"
+	OIDCIssuer = strings.TrimRight(strings.TrimSpace(os.Getenv("OIDC_ISSUER")), "/")
+	OIDCClientID = strings.TrimSpace(os.Getenv("OIDC_CLIENT_ID"))
+	OIDCClientSecret = os.Getenv("OIDC_CLIENT_SECRET")
+	if name := strings.TrimSpace(os.Getenv("OIDC_PROVIDER_NAME")); name != "" {
+		OIDCProviderName = name
 	}
-	RealmrootClientID = strings.TrimSpace(os.Getenv("REALMROOT_CLIENT_ID"))
-	RealmrootClientSecret = os.Getenv("REALMROOT_CLIENT_SECRET")
-	RealmrootAdminGroups = nil
-	for _, group := range strings.Split(os.Getenv("REALMROOT_ADMIN_GROUPS"), ",") {
+	if scopes := splitConfigList(os.Getenv("OIDC_SCOPES")); len(scopes) != 0 {
+		OIDCScopes = scopes
+	}
+	if claim := strings.TrimSpace(os.Getenv("OIDC_USERNAME_CLAIM")); claim != "" {
+		OIDCUsernameClaim = claim
+	}
+	if claim := strings.TrimSpace(os.Getenv("OIDC_GROUPS_CLAIM")); claim != "" {
+		OIDCGroupsClaim = claim
+	}
+	if claim := strings.TrimSpace(os.Getenv("OIDC_NAME_CLAIM")); claim != "" {
+		OIDCNameClaim = claim
+	}
+	if claim := strings.TrimSpace(os.Getenv("OIDC_PICTURE_CLAIM")); claim != "" {
+		OIDCPictureClaim = claim
+	}
+	PlatformAdminGroups = nil
+	for _, group := range splitConfigList(os.Getenv("PLATFORM_ADMIN_GROUPS")) {
 		if group = strings.TrimSpace(group); group != "" {
-			RealmrootAdminGroups = append(RealmrootAdminGroups, group)
+			PlatformAdminGroups = append(PlatformAdminGroups, group)
 		}
 	}
+}
+
+func splitConfigList(value string) []string {
+	return strings.FieldsFunc(value, func(r rune) bool {
+		return r == ',' || r == ' ' || r == '\t' || r == '\n'
+	})
 }
 
 func loadDatabaseEnvs() {

@@ -93,7 +93,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     await refetchBootstrap()
   }, [refetchBootstrap])
 
-  const login = useCallback(async (provider: string = 'realmroot') => {
+  const login = useCallback(async (provider: string = 'oidc') => {
     const { auth_url } = await initiateOAuthLogin(provider)
     window.location.href = auth_url
   }, [])

@@ -59,10 +59,22 @@ spec:
             - name: HOST
               value: {{ .Values.host }}
             {{- end }}
-            - name: REALMROOT_ISSUER
-              value: {{ .Values.realmroot.issuer | quote }}
-            - name: REALMROOT_ADMIN_GROUPS
-              value: {{ .Values.realmroot.adminGroups | quote }}
+            - name: OIDC_ISSUER
+              value: {{ required "oidc.issuer is required" .Values.oidc.issuer | quote }}
+            - name: OIDC_PROVIDER_NAME
+              value: {{ .Values.oidc.providerName | quote }}
+            - name: OIDC_SCOPES
+              value: {{ .Values.oidc.scopes | quote }}
+            - name: OIDC_USERNAME_CLAIM
+              value: {{ .Values.oidc.usernameClaim | quote }}
+            - name: OIDC_GROUPS_CLAIM
+              value: {{ .Values.oidc.groupsClaim | quote }}
+            - name: OIDC_NAME_CLAIM
+              value: {{ .Values.oidc.nameClaim | quote }}
+            - name: OIDC_PICTURE_CLAIM
+              value: {{ .Values.oidc.pictureClaim | quote }}
+            - name: PLATFORM_ADMIN_GROUPS
+              value: {{ required "platformAdminGroups is required" .Values.platformAdminGroups | quote }}
             {{- if eq .Values.db.type "sqlite" }}
             - name: DB_TYPE
               value: sqlite

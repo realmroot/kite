@@ -55,7 +55,7 @@ func (h *AuthHandler) RequireAuth() gin.HandlerFunc {
 		user, idToken, err := h.oidc.authenticatedSession(c)
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{
-				"error": "Invalid or expired Realmroot session",
+				"error": "Invalid or expired OIDC session",
 			})
 			setCookieSecure(c, sessionCookieName, "", -1)
 			c.Abort()

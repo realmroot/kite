@@ -3,7 +3,7 @@ package model
 import "time"
 
 // OIDCSession is the server-side half of Kite's BFF session. The browser only
-// receives the opaque session token; Realmroot tokens never leave the backend.
+// receives the opaque session token; provider tokens never leave the backend.
 type OIDCSession struct {
 	Model
 	TokenHash    string       `json:"-" gorm:"type:varchar(64);uniqueIndex;not null"`

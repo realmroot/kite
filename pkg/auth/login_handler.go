@@ -17,8 +17,8 @@ import (
 )
 
 func (h *AuthHandler) Login(c *gin.Context) {
-	if !realmrootConfigured() {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"message": "Realmroot OIDC is not configured"})
+	if !oidcConfigured() {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"message": "OIDC is not configured"})
 		return
 	}
 	authURL, err := h.oidc.authorizationURL(c)
@@ -28,7 +28,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"auth_url": authURL,
-		"provider": "realmroot",
+		"provider": common.OIDCProviderName,
 	})
 }
 
@@ -262,11 +262,11 @@ func (h *AuthHandler) Callback(c *gin.Context) {
 	}
 	token, claims, err := h.oidc.exchange(c, code, c.Query("state"))
 	if err != nil {
-		klog.Warningf("Realmroot OIDC callback failed: %v", err)
+		klog.Warningf("OIDC callback failed: %v", err)
 		c.Redirect(http.StatusFound, base+"/login?error=callback_error&reason=callback_failed")
 		return
 	}
-	user := userFromRealmrootClaims(claims)
+	user := userFromOIDCClaims(claims)
 	if err := model.FindWithSubOrUpsertUser(user); err != nil {
 		c.Redirect(http.StatusFound, base+"/login?error=callback_error&reason=user_upsert_failed")
 		return
@@ -282,7 +282,7 @@ func (h *AuthHandler) Callback(c *gin.Context) {
 	}
 	rawIDToken, _ := token.Extra("id_token").(string)
 	_, idToken, err := h.oidc.verifyIDToken(c.Request.Context(), provider, rawIDToken, "")
-	if err != nil || createRealmrootSession(c, user, token, idToken) != nil {
+	if err != nil || createOIDCSession(c, user, token, idToken) != nil {
 		c.Redirect(http.StatusFound, base+"/login?error=callback_error&reason=session_creation_failed")
 		return
 	}
@@ -338,7 +338,7 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 	_, _, err := h.oidc.authenticatedSession(c)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "Failed to refresh Realmroot session",
+			"error": "Failed to refresh OIDC session",
 		})
 		return
 	}

@@ -8,7 +8,7 @@ import (
 
 type AuthHandler struct {
 	manager *OAuthManager
-	oidc    *realmrootOIDC
+	oidc    *oidcAuthenticator
 	ldap    *LDAPAuthenticator
 }
 
@@ -19,7 +19,7 @@ var errInvalidCredentials = errors.New("invalid credentials")
 func NewAuthHandler() *AuthHandler {
 	return &AuthHandler{
 		manager: NewOAuthManager(),
-		oidc:    &realmrootOIDC{},
+		oidc:    &oidcAuthenticator{},
 		ldap:    NewLDAPAuthenticator(),
 	}
 }

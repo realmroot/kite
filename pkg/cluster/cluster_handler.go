@@ -43,7 +43,7 @@ func (cm *ClusterManager) GetClusters(c *gin.Context) {
 		return
 	}
 	result := make([]common.ClusterInfo, 0, len(clusters))
-	idToken := c.GetString("realmroot-id-token")
+	idToken := c.GetString("oidc-id-token")
 	for _, cluster := range clusters {
 		if !cluster.Enable {
 			continue

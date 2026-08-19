@@ -3,9 +3,13 @@
 Kite supports several environment variables by default to change the default values of some configuration items.
 
 - **KITE_CONFIG_FILE**: Optional path to a credential-free cluster catalog configuration file.
-- **REALMROOT_ISSUER**: Realmroot OIDC issuer. Defaults to `https://id.realmroot.dev/api/auth`.
-- **REALMROOT_CLIENT_ID** / **REALMROOT_CLIENT_SECRET**: Required confidential web application credentials.
-- **REALMROOT_ADMIN_GROUPS**: Required comma-separated Realmroot groups allowed to manage Kite's shared catalog. This does not grant Kubernetes access.
+- **OIDC_ISSUER**: Required OpenID Connect issuer URL. Kite uses standard provider discovery.
+- **OIDC_CLIENT_ID** / **OIDC_CLIENT_SECRET**: Required confidential web application credentials.
+- **OIDC_PROVIDER_NAME**: Login-page display name. Defaults to `OpenID Connect`.
+- **OIDC_SCOPES**: Space- or comma-separated scopes. Must contain `openid`.
+- **OIDC_USERNAME_CLAIM** / **OIDC_GROUPS_CLAIM**: Claims mapped to the local display identity and Kubernetes groups. Defaults to `email` and `groups`.
+- **OIDC_NAME_CLAIM** / **OIDC_PICTURE_CLAIM**: Optional profile claim names. Defaults to `name` and `picture`.
+- **PLATFORM_ADMIN_GROUPS**: Required groups allowed to manage Kite's shared catalog. This does not grant Kubernetes access.
 
 - **JWT_SECRET**: Secret key used for signing and verifying JWT
 - **KITE_ENCRYPT_KEY**: Secret key used to encrypt server-side OIDC tokens.

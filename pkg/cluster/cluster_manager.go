@@ -95,7 +95,7 @@ func (t *k8sProxyTransport) RoundTrip(req *http.Request) (*http.Response, error)
 
 func (cm *ClusterManager) GetClientSet(clusterName, idToken string) (*ClientSet, error) {
 	if idToken == "" {
-		return nil, errors.New("realmroot ID token is required")
+		return nil, errors.New("OIDC ID token is required")
 	}
 	if clusterName == "" {
 		clusters, err := model.ListClusters()

@@ -17,14 +17,11 @@ import (
 
 func initializeApp(ctx context.Context) (*cluster.ClusterManager, error) {
 	common.LoadEnvs()
-	if common.RealmrootClientID == "" || common.RealmrootClientSecret == "" {
-		return nil, errors.New("REALMROOT_CLIENT_ID and REALMROOT_CLIENT_SECRET are required")
-	}
-	if len(common.RealmrootAdminGroups) == 0 {
-		return nil, errors.New("REALMROOT_ADMIN_GROUPS must name at least one group that can manage the cluster catalog")
+	if err := validateOIDCConfiguration(); err != nil {
+		return nil, err
 	}
 	if common.KiteEncryptKey == "kite-default-encryption-key-change-in-production" {
-		return nil, errors.New("KITE_ENCRYPT_KEY must be set because Realmroot tokens are stored server-side")
+		return nil, errors.New("KITE_ENCRYPT_KEY must be set because OIDC tokens are stored server-side")
 	}
 	if common.JwtSecret == common.DefaultJWTSecret {
 		return nil, errors.New("JWT_SECRET must be set because it protects cluster tunnel enrollment grants")
@@ -51,6 +48,31 @@ func initializeApp(ctx context.Context) (*cluster.ClusterManager, error) {
 		klog.Warningf("Failed to watch config file: %v", err)
 	}
 	return cm, nil
+}
+
+func validateOIDCConfiguration() error {
+	if common.OIDCIssuer == "" || common.OIDCClientID == "" || common.OIDCClientSecret == "" {
+		return errors.New("OIDC_ISSUER, OIDC_CLIENT_ID, and OIDC_CLIENT_SECRET are required")
+	}
+	if len(common.PlatformAdminGroups) == 0 {
+		return errors.New("PLATFORM_ADMIN_GROUPS must name at least one group that can manage the cluster catalog")
+	}
+	if common.OIDCUsernameClaim == "" || common.OIDCGroupsClaim == "" {
+		return errors.New("OIDC_USERNAME_CLAIM and OIDC_GROUPS_CLAIM are required")
+	}
+	if !containsString(common.OIDCScopes, "openid") {
+		return errors.New("OIDC_SCOPES must include openid")
+	}
+	return nil
+}
+
+func containsString(values []string, expected string) bool {
+	for _, value := range values {
+		if value == expected {
+			return true
+		}
+	}
+	return false
 }
 
 func buildEngine(cm *cluster.ClusterManager) *gin.Engine {

@@ -34,7 +34,7 @@ func registerHelmReleaseAutoUpgradeExecutor(manager *Manager, cm *cluster.Cluste
 }
 
 func (e *helmReleaseAutoUpgradeExecutor) Run(ctx context.Context, task model.ScheduledTask) error {
-	return fmt.Errorf("scheduled Kubernetes operations are disabled because no interactive Realmroot identity is available")
+	return fmt.Errorf("scheduled Kubernetes operations are disabled because no interactive OIDC identity is available")
 }
 
 func HelmReleaseAutoUpgradeTaskKey(namespace, releaseName string) string {

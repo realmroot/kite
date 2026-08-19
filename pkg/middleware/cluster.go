@@ -35,9 +35,9 @@ func ClusterMiddleware(cm clusterClientSetProvider) gin.HandlerFunc {
 				}
 			}
 		}
-		idToken := c.GetString("realmroot-id-token")
+		idToken := c.GetString("oidc-id-token")
 		if idToken == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Realmroot ID token is missing"})
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "OIDC ID token is missing"})
 			c.Abort()
 			return
 		}

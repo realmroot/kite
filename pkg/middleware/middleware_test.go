@@ -236,7 +236,7 @@ func TestClusterMiddlewareNoClusters(t *testing.T) {
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
 	}
-	if !strings.Contains(rec.Body.String(), "Realmroot ID token is missing") {
+	if !strings.Contains(rec.Body.String(), "OIDC ID token is missing") {
 		t.Fatalf("response body = %q, want error message", rec.Body.String())
 	}
 }

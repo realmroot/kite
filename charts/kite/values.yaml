@@ -54,12 +54,19 @@ jwtSecret: ""
 # Ignored if using existingSecret
 encryptKey: ""
 
-realmroot:
-  issuer: "https://id.realmroot.dev/api/auth"
+oidc:
+  issuer: ""
+  providerName: "OpenID Connect"
   clientId: ""
   clientSecret: ""
-  # Comma-separated Realmroot groups allowed to manage the cluster catalog.
-  adminGroups: ""
+  scopes: "openid profile email offline_access"
+  usernameClaim: "email"
+  groupsClaim: "groups"
+  nameClaim: "name"
+  pictureClaim: "picture"
+
+# Comma-separated OIDC groups allowed to manage the shared cluster catalog.
+platformAdminGroups: ""
 
 # Secret handling
 # By default the chart will create a Kubernetes Secret containing sensitive values.
@@ -70,8 +77,8 @@ secret:
   # must contain all required keys.
   #  JWT_SECRET
   #  KITE_ENCRYPT_KEY
-  #  REALMROOT_CLIENT_ID
-  #  REALMROOT_CLIENT_SECRET
+  #  OIDC_CLIENT_ID
+  #  OIDC_CLIENT_SECRET
   #  DB_TYPE supported values: sqlite, postgres, mysql (defaults to sqlite if not set)
   #  DB_DSN (not required for sqlite)
   # if set, the db.dsn and db.type values from the chart will be ignored.

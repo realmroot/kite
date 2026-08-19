@@ -1,4 +1,4 @@
-# Kite — Realmroot-native Kubernetes Console
+# Kite — OIDC-native Kubernetes Console
 
 <div align="center">
 
@@ -22,14 +22,14 @@ _A Kubernetes dashboard where the user identity reaches the API server_
 </div>
 
 This fork keeps Kite's Kubernetes UI and replaces its local identity, local
-authorization, and shared privileged kubeconfigs with Realmroot OpenID Connect
-and Kubernetes-native RBAC. The browser signs in through Realmroot; Kite sends
-that user's validated ID token to the selected Kubernetes API server. Realmroot
-`groups` claims therefore map directly to Kubernetes RoleBindings and
-ClusterRoleBindings.
+authorization, and shared privileged kubeconfigs with standard OpenID Connect
+and Kubernetes-native RBAC. The browser signs in through the configured OIDC
+provider; Kite sends that user's validated ID token to the selected Kubernetes
+API server. Configured group claims therefore map directly to Kubernetes
+RoleBindings and ClusterRoleBindings.
 
-See [Realmroot Kubernetes architecture](docs/realmroot-kubernetes.md) and the
-[local kind demonstration](hack/demo/README.md).
+See the [OIDC Kubernetes architecture](docs/oidc-kubernetes.md). Provider-specific
+configuration belongs under `examples/` and never enters the core runtime.
 
 <img width="1586" height="1167" alt="image" src="https://github.com/user-attachments/assets/5710204d-5d34-44af-85dc-3b436e205c12" />
 
@@ -70,9 +70,9 @@ See [Realmroot Kubernetes architecture](docs/realmroot-kubernetes.md) and the
 
 ### Security
 
-- Realmroot Authorization Code + PKCE login
+- Provider-neutral OIDC Authorization Code + PKCE login
 - Server-side encrypted OIDC sessions; no tokens exposed to browser JavaScript
-- Realmroot `groups` mapped directly by the Kubernetes API server
+- Configurable group claims mapped directly by the Kubernetes API server
 - Kubernetes-native RBAC as the sole resource authorization policy
 - No stored kubeconfig, bearer token, client certificate, or privileged ServiceAccount
 
@@ -84,8 +84,8 @@ For detailed instructions, please refer to the [documentation](https://kite.zzde
 
 ### Docker
 
-Configure the required Realmroot and secret values described in
-[docs/realmroot-kubernetes.md](docs/realmroot-kubernetes.md). Startup fails
+Configure the required OIDC and secret values described in
+[docs/oidc-kubernetes.md](docs/oidc-kubernetes.md). Startup fails
 closed if they are absent or use the upstream development defaults.
 
 ### Deploy in Kubernetes

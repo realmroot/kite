@@ -456,7 +456,7 @@ func TestBootstrapWithManagedClusters(t *testing.T) {
 	}
 }
 
-// TestBootstrapWithManagedClustersNoUsers verifies Realmroot removes local-user setup.
+// TestBootstrapWithManagedClustersNoUsers verifies OIDC removes local-user setup.
 func TestBootstrapWithManagedClustersNoUsers(t *testing.T) {
 	setupTestDB(t)
 	saveManagedSections(t)

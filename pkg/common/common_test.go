@@ -23,6 +23,14 @@ func TestLoadEnvs(t *testing.T) {
 		Base                 string
 		CORSAllowedOrigins   []string
 		TrustedProxies       []string
+		OIDCIssuer           string
+		OIDCClientID         string
+		OIDCClientSecret     string
+		OIDCProviderName     string
+		OIDCScopes           []string
+		OIDCUsernameClaim    string
+		OIDCGroupsClaim      string
+		PlatformAdminGroups  []string
 	}{
 		JwtSecret:            JwtSecret,
 		Port:                 Port,
@@ -40,6 +48,14 @@ func TestLoadEnvs(t *testing.T) {
 		Base:                 Base,
 		CORSAllowedOrigins:   append([]string(nil), CORSAllowedOrigins...),
 		TrustedProxies:       append([]string(nil), TrustedProxies...),
+		OIDCIssuer:           OIDCIssuer,
+		OIDCClientID:         OIDCClientID,
+		OIDCClientSecret:     OIDCClientSecret,
+		OIDCProviderName:     OIDCProviderName,
+		OIDCScopes:           append([]string(nil), OIDCScopes...),
+		OIDCUsernameClaim:    OIDCUsernameClaim,
+		OIDCGroupsClaim:      OIDCGroupsClaim,
+		PlatformAdminGroups:  append([]string(nil), PlatformAdminGroups...),
 	}
 	defer func() {
 		JwtSecret = old.JwtSecret
@@ -58,6 +74,14 @@ func TestLoadEnvs(t *testing.T) {
 		Base = old.Base
 		CORSAllowedOrigins = append([]string(nil), old.CORSAllowedOrigins...)
 		TrustedProxies = append([]string(nil), old.TrustedProxies...)
+		OIDCIssuer = old.OIDCIssuer
+		OIDCClientID = old.OIDCClientID
+		OIDCClientSecret = old.OIDCClientSecret
+		OIDCProviderName = old.OIDCProviderName
+		OIDCScopes = append([]string(nil), old.OIDCScopes...)
+		OIDCUsernameClaim = old.OIDCUsernameClaim
+		OIDCGroupsClaim = old.OIDCGroupsClaim
+		PlatformAdminGroups = append([]string(nil), old.PlatformAdminGroups...)
 	}()
 
 	CORSAllowedOrigins = nil
@@ -80,6 +104,14 @@ func TestLoadEnvs(t *testing.T) {
 	t.Setenv("KITE_BASE", "kite/")
 	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:5173, https://example.com ,,")
 	t.Setenv("TRUSTED_PROXIES", "10.42.0.0/16, 192.0.2.10 ,, ")
+	t.Setenv("OIDC_ISSUER", "https://identity.example.com/")
+	t.Setenv("OIDC_CLIENT_ID", "kite-client")
+	t.Setenv("OIDC_CLIENT_SECRET", "client-secret")
+	t.Setenv("OIDC_PROVIDER_NAME", "Company Login")
+	t.Setenv("OIDC_SCOPES", "openid profile,email roles")
+	t.Setenv("OIDC_USERNAME_CLAIM", "preferred_username")
+	t.Setenv("OIDC_GROUPS_CLAIM", "roles")
+	t.Setenv("PLATFORM_ADMIN_GROUPS", "operators, platform-admins")
 
 	LoadEnvs()
 
@@ -134,6 +166,18 @@ func TestLoadEnvs(t *testing.T) {
 	wantTrustedProxies := []string{"10.42.0.0/16", "192.0.2.10"}
 	if !reflect.DeepEqual(TrustedProxies, wantTrustedProxies) {
 		t.Fatalf("TrustedProxies = %#v, want %#v", TrustedProxies, wantTrustedProxies)
+	}
+	if OIDCIssuer != "https://identity.example.com" || OIDCClientID != "kite-client" || OIDCClientSecret != "client-secret" {
+		t.Fatalf("OIDC client configuration was not loaded")
+	}
+	if OIDCProviderName != "Company Login" || OIDCUsernameClaim != "preferred_username" || OIDCGroupsClaim != "roles" {
+		t.Fatalf("OIDC display or claim configuration was not loaded")
+	}
+	if !reflect.DeepEqual(OIDCScopes, []string{"openid", "profile", "email", "roles"}) {
+		t.Fatalf("OIDCScopes = %#v", OIDCScopes)
+	}
+	if !reflect.DeepEqual(PlatformAdminGroups, []string{"operators", "platform-admins"}) {
+		t.Fatalf("PlatformAdminGroups = %#v", PlatformAdminGroups)
 	}
 }
 
