@@ -233,10 +233,10 @@ func TestClusterMiddlewareNoClusters(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/pods", nil)
 	r.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", rec.Code, http.StatusNotFound)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
 	}
-	if !strings.Contains(rec.Body.String(), "no clusters available") {
+	if !strings.Contains(rec.Body.String(), "Realmroot ID token is missing") {
 		t.Fatalf("response body = %q, want error message", rec.Body.String())
 	}
 }

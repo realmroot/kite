@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -25,6 +26,8 @@ func Run(ctx context.Context, args []string) error {
 	token := flags.String("token", "", "Cluster Agent token")
 	publicKey := flags.String("public-key", "", "Cluster Agent registration public key")
 	kubeconfig := flags.String("kubeconfig", "", "Path to kubeconfig file")
+	apiServer := flags.String("api-server", "", "Kubernetes API server URL without credentials")
+	caFile := flags.String("ca-file", "", "Kubernetes API server CA file")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -53,12 +56,21 @@ func Run(ctx context.Context, args []string) error {
 	}
 
 	var config *rest.Config
-	if *kubeconfig == "" {
+	switch {
+	case *apiServer != "":
+		config = &rest.Config{Host: *apiServer}
+		if *caFile != "" {
+			config.CAData, err = os.ReadFile(*caFile)
+			if err != nil {
+				return fmt.Errorf("load Kubernetes CA: %w", err)
+			}
+		}
+	case *kubeconfig == "":
 		config, err = rest.InClusterConfig()
 		if err != nil {
 			return fmt.Errorf("load in-cluster Kubernetes configuration: %w", err)
 		}
-	} else {
+	default:
 		config, err = clientcmd.BuildConfigFromFlags("", *kubeconfig)
 		if err != nil {
 			return fmt.Errorf("load kubeconfig: %w", err)

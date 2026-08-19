@@ -52,66 +52,20 @@ func (h *AuthHandler) RequireAPIKeyAuth(c *gin.Context, token string) {
 
 func (h *AuthHandler) RequireAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if common.AnonymousUserEnabled {
-			u := model.GetAnonymousUser()
-			if u == nil {
-				c.Set("user", model.AnonymousUser)
-			} else {
-				u.Roles = model.AnonymousUser.Roles
-				c.Set("user", *u)
-			}
-			c.Next()
-			return
-		}
-		authHeader := c.GetHeader("Authorization")
-		if authHeader != "" {
-			if after, ok := strings.CutPrefix(authHeader, "kite"); ok {
-				h.RequireAPIKeyAuth(c, after)
-				return
-			}
-		}
-		tokenString, _ := c.Cookie("auth_token")
-		if tokenString == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"error": "Invalid or expired token",
-			})
-			c.Abort()
-			return
-		}
-
-		claims, err := h.manager.ValidateJWT(tokenString)
+		user, idToken, err := h.oidc.authenticatedSession(c)
 		if err != nil {
-			refreshedToken, refreshErr := h.manager.RefreshJWT(c, tokenString)
-			if refreshErr != nil {
-				c.JSON(http.StatusUnauthorized, gin.H{
-					"error": "Invalid or expired token",
-				})
-				setCookieSecure(c, "auth_token", "", -1)
-				c.Abort()
-				return
-			}
-			setCookieSecure(c, "auth_token", refreshedToken, common.CookieExpirationSeconds)
-			claims, err = h.manager.ValidateJWT(refreshedToken)
-			if err != nil {
-				c.JSON(http.StatusUnauthorized, gin.H{
-					"error": "Failed to validate refreshed token",
-				})
-				setCookieSecure(c, "auth_token", "", -1)
-				c.Abort()
-				return
-			}
-		}
-		user, err := model.GetUserByIDCached(uint64(claims.UserID))
-		if err != nil || !user.Enabled {
 			c.JSON(http.StatusUnauthorized, gin.H{
-				"error": "user not found",
+				"error": "Invalid or expired Realmroot session",
 			})
-			setCookieSecure(c, "auth_token", "", -1)
+			setCookieSecure(c, sessionCookieName, "", -1)
 			c.Abort()
 			return
 		}
-		user.Roles = rbac.GetUserRoles(*user)
+		if platformAdmin(*user) {
+			user.Roles = []common.Role{platformAdminRole()}
+		}
 		c.Set("user", *user)
+		c.Set(idTokenContextKey, idToken)
 		c.Next()
 	}
 }
@@ -128,7 +82,7 @@ func (h *AuthHandler) RequireAdmin() gin.HandlerFunc {
 		}
 
 		u := user.(model.User)
-		if !rbac.UserHasRole(u, model.DefaultAdminRole.Name) {
+		if !platformAdmin(u) {
 			c.JSON(http.StatusForbidden, gin.H{
 				"error": "Admin role required",
 			})

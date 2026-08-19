@@ -35,7 +35,7 @@ func TestGetClusterAgentManifest(t *testing.T) {
 		t.Fatalf("adding cluster: %v", err)
 	}
 
-	manager := &ClusterManager{clusters: map[string]*ClientSet{}, errors: map[string]string{}, clusterAgentManager: clusteragent.NewManager(func() {})}
+	manager := &ClusterManager{clusterAgentManager: clusteragent.NewManager(func() {})}
 	grant, err := manager.clusterAgentManager.CreateManifestGrant(token)
 	if err != nil {
 		t.Fatalf("generating manifest grant: %v", err)
@@ -52,8 +52,6 @@ func TestGetClusterAgentManifest(t *testing.T) {
 	body := rec.Body.String()
 	for _, want := range []string{
 		"kind: Secret",
-		"kind: ServiceAccount",
-		"kind: ClusterRoleBinding",
 		"kind: Deployment",
 		"kite-cluster-agent",
 	} {
@@ -61,11 +59,14 @@ func TestGetClusterAgentManifest(t *testing.T) {
 			t.Errorf("manifest missing %q:\n%s", want, body)
 		}
 	}
+	if strings.Contains(body, "ClusterRoleBinding") || strings.Contains(body, "cluster-admin") {
+		t.Fatalf("transport-only manifest grants Kubernetes permissions:\n%s", body)
+	}
 }
 
 func TestGetClusterAgentManifestInvalidGrant(t *testing.T) {
 	setupClusterHandlerTestDB(t)
-	manager := &ClusterManager{clusters: map[string]*ClientSet{}, errors: map[string]string{}, clusterAgentManager: clusteragent.NewManager(func() {})}
+	manager := &ClusterManager{clusterAgentManager: clusteragent.NewManager(func() {})}
 	router := newClusterAgentManifestRouter(manager)
 
 	// Missing grant.
@@ -89,7 +90,7 @@ func TestGetClusterAgentManifestTokenNotAssociated(t *testing.T) {
 		t.Fatalf("generating token: %v", err)
 	}
 
-	manager := &ClusterManager{clusters: map[string]*ClientSet{}, errors: map[string]string{}, clusterAgentManager: clusteragent.NewManager(func() {})}
+	manager := &ClusterManager{clusterAgentManager: clusteragent.NewManager(func() {})}
 	grant, err := manager.clusterAgentManager.CreateManifestGrant(token)
 	if err != nil {
 		t.Fatalf("generating manifest grant: %v", err)
@@ -122,7 +123,7 @@ func TestGetClusterAgentManifestDisabledCluster(t *testing.T) {
 		t.Fatalf("disabling cluster: %v", err)
 	}
 
-	manager := &ClusterManager{clusters: map[string]*ClientSet{}, errors: map[string]string{}, clusterAgentManager: clusteragent.NewManager(func() {})}
+	manager := &ClusterManager{clusterAgentManager: clusteragent.NewManager(func() {})}
 	grant, err := manager.clusterAgentManager.CreateManifestGrant(token)
 	if err != nil {
 		t.Fatalf("generating manifest grant: %v", err)
@@ -138,12 +139,12 @@ func TestGetClusterAgentManifestDisabledCluster(t *testing.T) {
 func TestCreateClusterAgentClusterReturnsConnectionInfo(t *testing.T) {
 	setupClusterHandlerTestDB(t)
 
-	manager := &ClusterManager{clusters: map[string]*ClientSet{}, errors: map[string]string{}, clusterAgentManager: clusteragent.NewManager(func() {})}
+	manager := &ClusterManager{clusterAgentManager: clusteragent.NewManager(func() {})}
 	router := gin.New()
 	router.POST("/clusters", manager.CreateCluster)
 
 	rec := performClusterRequest(router, http.MethodPost, "/clusters",
-		`{"name":"agent-test","clusterAgent":true}`)
+		`{"name":"agent-test","connectionMode":"tunnel"}`)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("status = %d, want %d: %s", rec.Code, http.StatusCreated, rec.Body.String())
 	}
@@ -194,12 +195,12 @@ func TestCreateClusterAgentClusterReturnsConnectionInfo(t *testing.T) {
 func TestCreateClusterAgentClusterIgnoresKubeconfig(t *testing.T) {
 	setupClusterHandlerTestDB(t)
 
-	manager := &ClusterManager{clusters: map[string]*ClientSet{}, errors: map[string]string{}, clusterAgentManager: clusteragent.NewManager(func() {})}
+	manager := &ClusterManager{clusterAgentManager: clusteragent.NewManager(func() {})}
 	router := gin.New()
 	router.POST("/clusters", manager.CreateCluster)
 
 	rec := performClusterRequest(router, http.MethodPost, "/clusters",
-		`{"name":"agent-ignore","clusterAgent":true,"config":"should-be-ignored","inCluster":true,"prometheusURL":"https://prom.example.com"}`)
+		`{"name":"agent-ignore","connectionMode":"tunnel","config":"should-be-ignored","inCluster":true,"prometheusURL":"https://prom.example.com"}`)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("status = %d, want %d: %s", rec.Code, http.StatusCreated, rec.Body.String())
 	}
@@ -222,13 +223,13 @@ func TestCreateClusterAgentClusterIgnoresKubeconfig(t *testing.T) {
 func TestCreateClusterAgentClusterServerURLDerivation(t *testing.T) {
 	setupClusterHandlerTestDB(t)
 
-	manager := &ClusterManager{clusters: map[string]*ClientSet{}, errors: map[string]string{}, clusterAgentManager: clusteragent.NewManager(func() {})}
+	manager := &ClusterManager{clusterAgentManager: clusteragent.NewManager(func() {})}
 	router := gin.New()
 	router.POST("/clusters", manager.CreateCluster)
 
 	// Verify that X-Forwarded-Host and X-Forwarded-Proto are respected.
 	rec := httptest.NewRecorder()
-	body := strings.NewReader(`{"name":"agent-fwd","clusterAgent":true}`)
+	body := strings.NewReader(`{"name":"agent-fwd","connectionMode":"tunnel"}`)
 	req := httptest.NewRequest(http.MethodPost, "/clusters", body)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Forwarded-Host", "kite.example.com")

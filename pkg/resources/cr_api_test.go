@@ -52,7 +52,7 @@ type crAPITestFixture struct {
 
 type crAPITestClusterProvider map[string]*cluster.ClientSet
 
-func (p crAPITestClusterProvider) GetClientSet(clusterName string) (*cluster.ClientSet, error) {
+func (p crAPITestClusterProvider) GetClientSet(clusterName, _ string) (*cluster.ClientSet, error) {
 	if clusterName == "" {
 		clusterName = "cluster-a"
 	}
@@ -116,6 +116,7 @@ func newCRAPITestFixture(t *testing.T, config crAPITestConfig) *crAPITestFixture
 	router := gin.New()
 	router.Use(func(c *gin.Context) {
 		c.Set("user", config.user)
+		c.Set("realmroot-id-token", "test-id-token")
 	})
 
 	api := router.Group("/api/v1")

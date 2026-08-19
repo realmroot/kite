@@ -229,9 +229,45 @@ func NewClient(config *rest.Config) (*K8sClient, error) {
 	}, nil
 }
 
+// NewDirectClient creates an uncached client for a single authenticated user.
+// Sharing informer caches across principals can leak objects that another user
+// is not authorized to see, so user-scoped clients must always use this path.
+func NewDirectClient(config *rest.Config) (*K8sClient, error) {
+	config = rest.CopyConfig(config)
+	if config.QPS == 0 {
+		config.QPS = kubeAPIQPS()
+	}
+	if config.Burst == 0 {
+		config.Burst = kubeAPIBurst()
+	}
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return nil, err
+	}
+	metricsClient, err := metricsclient.NewForConfig(config)
+	if err != nil {
+		return nil, fmt.Errorf("create metrics client: %w", err)
+	}
+	directClient, err := client.New(config, client.Options{Scheme: runtimeScheme})
+	if err != nil {
+		return nil, fmt.Errorf("create Kubernetes client: %w", err)
+	}
+	_, cancel := context.WithCancel(context.Background())
+	return &K8sClient{
+		Client:        directClient,
+		ClientSet:     clientset,
+		Configuration: config,
+		MetricsClient: metricsClient,
+		CacheEnabled:  false,
+		cancel:        cancel,
+	}, nil
+}
+
 func (c *K8sClient) Stop(name string) {
 	klog.Infof("Stopping K8s client for %s", name)
-	c.cancel()
+	if c.cancel != nil {
+		c.cancel()
+	}
 }
 
 // GetScheme returns the runtime scheme used by the client

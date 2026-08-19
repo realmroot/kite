@@ -772,7 +772,7 @@
   },
   "settings": {
     "title": "设置",
-    "description": "管理集群、角色和权限",
+    "description": "管理无凭据的集群连接与共享控制台内容",
     "tabs": {
       "clusters": "集群",
       "general": "通用",

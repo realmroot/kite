@@ -16,11 +16,13 @@ import { fetchAPI } from './shared'
 export interface ClusterCreateRequest {
   name: string
   description?: string
-  config?: string
+  apiServerUrl?: string
+  caBundle?: string
+  tlsServerName?: string
+  connectionMode: 'direct' | 'tunnel'
   prometheusURL?: string
-  inCluster?: boolean
-  clusterAgent?: boolean
   isDefault?: boolean
+  enabled?: boolean
 }
 
 export interface ClusterUpdateRequest extends ClusterCreateRequest {

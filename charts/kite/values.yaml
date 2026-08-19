@@ -45,18 +45,21 @@ host: ""
 # Example: "/kite"
 basePath: ""
 
-# Set to true to enable the anonymous user with full-admin access
-# Be careful with this setting in production
-anonymousUserEnabled: false
-
-# Secret key for signing JWT tokens. Auto-generated if empty.
+# Secret key for protecting one-time tunnel enrollment grants.
 # Ignored if using existingSecret
 jwtSecret: ""
 
 # This is the key used for encrypting sensitive data
 # Change this in production
 # Ignored if using existingSecret
-encryptKey: "kite-default-encryption-key-change-in-production"
+encryptKey: ""
+
+realmroot:
+  issuer: "https://id.realmroot.dev/api/auth"
+  clientId: ""
+  clientSecret: ""
+  # Comma-separated Realmroot groups allowed to manage the cluster catalog.
+  adminGroups: ""
 
 # Secret handling
 # By default the chart will create a Kubernetes Secret containing sensitive values.
@@ -67,6 +70,8 @@ secret:
   # must contain all required keys.
   #  JWT_SECRET
   #  KITE_ENCRYPT_KEY
+  #  REALMROOT_CLIENT_ID
+  #  REALMROOT_CLIENT_SECRET
   #  DB_TYPE supported values: sqlite, postgres, mysql (defaults to sqlite if not set)
   #  DB_DSN (not required for sqlite)
   # if set, the db.dsn and db.type values from the chart will be ignored.
@@ -127,77 +132,16 @@ config:
   # The user is responsible for creating and managing this Secret.
   # Example: kubectl create secret generic kite-config --from-file=config.yaml=./my-config.yaml
   existingSecret: ""
-  # --- Inline configuration (used when existingSecret is empty) ---
-  # Super user configuration (created if the user doesn't exist, password updated on restart)
-  # superUser:
-  #   username: "admin"
-  #   password: "change-me-in-production"
-  # Sensitive values support ${ENV_VAR} placeholders, expanded from environment
-  # variables at startup. Use extraEnvs to inject secrets from Kubernetes Secrets:
-  #
-  # extraEnvs:
-  #   - name: PROD_KUBECONFIG
-  #     valueFrom:
-  #       secretKeyRef:
-  #         name: my-cluster-secrets
-  #         key: prod-kubeconfig
-  #   - name: OAUTH_SECRET
-  #     valueFrom:
-  #       secretKeyRef:
-  #         name: my-oauth-secrets
-  #         key: google-client-secret
-  #
-  # Then reference them in the config below:
-  # clusters:
-  #   - name: production
-  #     config: "${PROD_KUBECONFIG}"
-  # oauth:
-  #   - name: google
-  #     clientSecret: "${OAUTH_SECRET}"
-  #
-  # Cluster configurations
+  # --- Inline credential-free cluster catalog (used when existingSecret is empty) ---
   # clusters:
   #   - name: production
   #     description: "Production cluster"
-  #     config: |
-  #       apiVersion: v1
-  #       kind: Config
-  #       ...
+  #     connectionMode: direct
+  #     apiServerUrl: "https://api.production.example:6443"
+  #     caBundle: "<PEM or base64-encoded PEM>"
+  #     tlsServerName: "api.production.example"
   #     prometheusURL: "http://prometheus:9090"
   #     default: true
-  #   - name: in-cluster
-  #     inCluster: true
-  #
-  # OAuth provider configurations
-  # oauth:
-  #   - name: google
-  #     clientId: "xxx.apps.googleusercontent.com"
-  #     clientSecret: "secret-value"
-  #     issuer: "https://accounts.google.com"
-  #     scopes: "openid,profile,email"
-  #     enabled: true
-  #
-  # LDAP configuration
-  # ldap:
-  #   enabled: true
-  #   serverUrl: "ldap://ldap.example.com:389"
-  #   bindDn: "cn=admin,dc=example,dc=com"
-  #   bindPassword: "secret"
-  #   userBaseDn: "ou=users,dc=example,dc=com"
-  #   groupBaseDn: "ou=groups,dc=example,dc=com"
-  #
-  # RBAC configuration (roles and role mappings)
-  # rbac:
-  #   roles:
-  #     - name: admin
-  #       description: "Full access"
-  #       clusters: ["*"]
-  #       namespaces: ["*"]
-  #       resources: ["*"]
-  #       verbs: ["*"]
-  #   roleMapping:
-  #     - name: admin
-  #       users: ["alice"]
   #       oidcGroups: ["admins"]
 
 # This section builds out the service account more information can be found here: https://kubernetes.io/docs/concepts/security/service-accounts/
@@ -205,21 +149,12 @@ serviceAccount:
   # Specifies whether a service account should be created
   create: true
   # Automatically mount a ServiceAccount's API credentials?
-  automount: true
+  automount: false
   # Annotations to add to the service account
   annotations: {}
   # The name of the service account to use.
   # If not set and create is true, a name is generated using the fullname template
   name: ""
-
-rbac:
-  create: true
-  rules:
-    - apiGroups: ["*"]
-      resources: ["*"]
-      verbs: ["*"]
-    - nonResourceURLs: ["*"]
-      verbs: ["*"]
 
 # This is for setting Kubernetes Annotations to a Pod.
 # For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/

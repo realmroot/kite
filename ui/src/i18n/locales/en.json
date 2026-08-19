@@ -762,7 +762,7 @@
   },
   "settings": {
     "title": "Settings",
-    "description": "Manage clusters, roles and permissions",
+    "description": "Manage credential-free cluster connections and shared dashboard content",
     "tabs": {
       "clusters": "Cluster",
       "general": "General",

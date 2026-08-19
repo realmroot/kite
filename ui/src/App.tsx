@@ -4,10 +4,8 @@ import { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Outlet, useSearchParams } from 'react-router-dom'
 
-import { AIChatbox, StandaloneAIChatbox } from './components/ai-chat/ai-chatbox'
 import { AppSidebar } from './components/app-sidebar'
 import { ErrorBoundary } from './components/error-boundary'
-import { FloatingTerminal } from './components/floating-terminal'
 import { GlobalSearch } from './components/global-search'
 import {
   GlobalSearchProvider,
@@ -16,9 +14,7 @@ import {
 import { SiteHeader } from './components/site-header'
 import { SidebarInset, SidebarProvider } from './components/ui/sidebar'
 import { Toaster } from './components/ui/sonner'
-import { AIChatProvider } from './contexts/ai-chat-context'
 import { ClusterProvider } from './contexts/cluster-context'
-import { TerminalProvider, useTerminal } from './contexts/terminal-context'
 import { useCluster } from './hooks/use-cluster'
 
 function ClusterGate({ children }: { children: ReactNode }) {
@@ -51,7 +47,6 @@ function ClusterGate({ children }: { children: ReactNode }) {
 
 function AppContent() {
   const { isOpen, closeSearch } = useGlobalSearch()
-  const { isOpen: isTerminalOpen } = useTerminal()
   const [searchParams] = useSearchParams()
   const isIframe = searchParams.get('iframe') === 'true'
 
@@ -79,14 +74,6 @@ function AppContent() {
       {isOpen ? (
         <GlobalSearch open={isOpen} onOpenChange={closeSearch} />
       ) : null}
-      {isTerminalOpen ? (
-        <ErrorBoundary fallback={null}>
-          <FloatingTerminal />
-        </ErrorBoundary>
-      ) : null}
-      <ErrorBoundary fallback={null}>
-        <AIChatbox />
-      </ErrorBoundary>
       <Toaster />
     </>
   )
@@ -94,13 +81,9 @@ function AppContent() {
 
 function AppProviders({ children }: { children: ReactNode }) {
   return (
-    <TerminalProvider>
-      <ClusterProvider>
-        <GlobalSearchProvider>
-          <AIChatProvider>{children}</AIChatProvider>
-        </GlobalSearchProvider>
-      </ClusterProvider>
-    </TerminalProvider>
+    <ClusterProvider>
+      <GlobalSearchProvider>{children}</GlobalSearchProvider>
+    </ClusterProvider>
   )
 }
 
@@ -109,16 +92,6 @@ function App() {
     <AppProviders>
       <ClusterGate>
         <AppContent />
-      </ClusterGate>
-    </AppProviders>
-  )
-}
-
-export function StandaloneAIChatApp() {
-  return (
-    <AppProviders>
-      <ClusterGate>
-        <StandaloneAIChatbox />
       </ClusterGate>
     </AppProviders>
   )

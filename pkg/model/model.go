@@ -102,6 +102,7 @@ func InitDB() {
 		ResourceHistory{},
 		ResourceTemplate{},
 		PendingSession{},
+		OIDCSession{},
 		HelmRepository{},
 		ScheduledTask{},
 	}

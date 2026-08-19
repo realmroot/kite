@@ -32,12 +32,14 @@ type SuperUserConfig struct {
 }
 
 type ClusterConfig struct {
-	Name          string `yaml:"name"`
-	Description   string `yaml:"description"`
-	Config        string `yaml:"config"`
-	PrometheusURL string `yaml:"prometheusURL"`
-	InCluster     bool   `yaml:"inCluster"`
-	Default       bool   `yaml:"default"`
+	Name           string `yaml:"name"`
+	Description    string `yaml:"description"`
+	APIServerURL   string `yaml:"apiServerUrl"`
+	CABundle       string `yaml:"caBundle"`
+	TLSServerName  string `yaml:"tlsServerName"`
+	ConnectionMode string `yaml:"connectionMode"`
+	PrometheusURL  string `yaml:"prometheusURL"`
+	Default        bool   `yaml:"default"`
 }
 
 type OAuthConfig struct {
@@ -240,14 +242,21 @@ func applyClusters(clusters []ClusterConfig) error {
 		}
 
 		for _, c := range clusters {
+			connectionMode := c.ConnectionMode
+			if connectionMode == "" {
+				connectionMode = "direct"
+			}
 			cluster := &model.Cluster{
-				Name:          c.Name,
-				Description:   c.Description,
-				Config:        model.SecretString(c.Config),
-				PrometheusURL: c.PrometheusURL,
-				InCluster:     c.InCluster,
-				IsDefault:     c.Default,
-				Enable:        true,
+				Name:           c.Name,
+				Description:    c.Description,
+				APIServerURL:   c.APIServerURL,
+				CABundle:       c.CABundle,
+				TLSServerName:  c.TLSServerName,
+				ConnectionMode: connectionMode,
+				ClusterAgent:   connectionMode == "tunnel",
+				PrometheusURL:  c.PrometheusURL,
+				IsDefault:      c.Default,
+				Enable:         true,
 			}
 			if err := tx.Create(cluster).Error; err != nil {
 				return err

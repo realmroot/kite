@@ -1,10 +1,10 @@
-# Kite - Modern Kubernetes Dashboard
+# Kite — Realmroot-native Kubernetes Console
 
 <div align="center">
 
 <img src="./docs/assets/logo.svg" alt="Kite Logo" width="128" height="128">
 
-_A modern Kubernetes dashboard_
+_A Kubernetes dashboard where the user identity reaches the API server_
 
 <a href="https://trendshift.io/repositories/21820" target="_blank"><img src="https://trendshift.io/api/badge/repositories/21820" alt="kite-org%2Fkite | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
 
@@ -21,7 +21,15 @@ _A modern Kubernetes dashboard_
 
 </div>
 
-Kite is a lightweight, modern Kubernetes dashboard that unifies real-time observability, multi-cluster and resource management, enterprise-grade user governance (OAuth, MFA, passkeys, RBAC, and audit logs), and AI agents in one workspace. Not just a tool, but more like a platform.
+This fork keeps Kite's Kubernetes UI and replaces its local identity, local
+authorization, and shared privileged kubeconfigs with Realmroot OpenID Connect
+and Kubernetes-native RBAC. The browser signs in through Realmroot; Kite sends
+that user's validated ID token to the selected Kubernetes API server. Realmroot
+`groups` claims therefore map directly to Kubernetes RoleBindings and
+ClusterRoleBindings.
+
+See [Realmroot Kubernetes architecture](docs/realmroot-kubernetes.md) and the
+[local kind demonstration](hack/demo/README.md).
 
 <img width="1586" height="1167" alt="image" src="https://github.com/user-attachments/assets/5710204d-5d34-44af-85dc-3b436e205c12" />
 
@@ -38,8 +46,8 @@ Kite is a lightweight, modern Kubernetes dashboard that unifies real-time observ
 
 - Switch between multiple Kubernetes clusters
 - Independent Prometheus configuration per cluster
-- Automatic discovery from kubeconfig
-- Fine-grained cluster access permissions
+- Direct and private-tunnel connectivity without stored Kubernetes credentials
+- Add, edit, switch, and remove credential-free cluster catalog entries
 
 ### Resource Management
 
@@ -58,17 +66,15 @@ Kite is a lightweight, modern Kubernetes dashboard that unifies real-time observ
 
 - Real-time CPU, memory, and network charts (Prometheus)
 - Live pod logs with filtering and search
-- Web terminal for pods and nodes
-- Built-in kubectl console.
-- AI assistant.
+- Pod logs and workload metrics, subject to Kubernetes RBAC
 
 ### Security
 
-- OAuth integration
-- MFA for password users
-- Passkey login
-- Role-based access control
-- User management and role allocation
+- Realmroot Authorization Code + PKCE login
+- Server-side encrypted OIDC sessions; no tokens exposed to browser JavaScript
+- Realmroot `groups` mapped directly by the Kubernetes API server
+- Kubernetes-native RBAC as the sole resource authorization policy
+- No stored kubeconfig, bearer token, client certificate, or privileged ServiceAccount
 
 ---
 
@@ -78,9 +84,9 @@ For detailed instructions, please refer to the [documentation](https://kite.zzde
 
 ### Docker
 
-```bash
-docker run -d -p 8080:8080 -v ./data:/data -e DB_DSN=/data/db.sqlite ghcr.io/kite-org/kite:latest
-```
+Configure the required Realmroot and secret values described in
+[docs/realmroot-kubernetes.md](docs/realmroot-kubernetes.md). Startup fails
+closed if they are absent or use the upstream development defaults.
 
 ### Deploy in Kubernetes
 

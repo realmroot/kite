@@ -31,11 +31,15 @@ var (
 	Host            = ""
 	Base            = ""
 
-	NodeTerminalImage    = "busybox:latest"
-	KubectlTerminalImage = "zzde/kubectl:latest"
-	ClusterAgentImage    = "ghcr.io/kite-org/kite:latest"
-	DBType               = "sqlite"
-	DBDSN                = "dev.db"
+	NodeTerminalImage     = "busybox:latest"
+	KubectlTerminalImage  = "zzde/kubectl:latest"
+	ClusterAgentImage     = "ghcr.io/kite-org/kite:latest"
+	RealmrootIssuer       = "https://id.realmroot.dev/api/auth"
+	RealmrootClientID     = ""
+	RealmrootClientSecret = ""
+	RealmrootAdminGroups  []string
+	DBType                = "sqlite"
+	DBDSN                 = "dev.db"
 
 	KiteEncryptKey = "kite-default-encryption-key-change-in-production"
 
@@ -125,17 +129,8 @@ func LoadEnvs() {
 	if clusterAgentImage := os.Getenv("CLUSTER_AGENT_IMAGE"); clusterAgentImage != "" {
 		ClusterAgentImage = clusterAgentImage
 	}
-
-	if dbDSN := os.Getenv("DB_DSN"); dbDSN != "" {
-		DBDSN = dbDSN
-	}
-
-	if dbType := os.Getenv("DB_TYPE"); dbType != "" {
-		if dbType != "sqlite" && dbType != "mysql" && dbType != "postgres" {
-			klog.Fatalf("Invalid DB_TYPE: %s, must be one of sqlite, mysql, postgres", dbType)
-		}
-		DBType = dbType
-	}
+	loadRealmrootEnvs()
+	loadDatabaseEnvs()
 
 	if key := os.Getenv("KITE_ENCRYPT_KEY"); key != "" {
 		KiteEncryptKey = key
@@ -194,4 +189,30 @@ func LoadEnvs() {
 		}
 	}
 	klog.Infof("Trusted proxies configured: %v", TrustedProxies)
+}
+
+func loadRealmrootEnvs() {
+	if issuer := strings.TrimSpace(os.Getenv("REALMROOT_ISSUER")); issuer != "" {
+		RealmrootIssuer = strings.TrimRight(issuer, "/")
+	}
+	RealmrootClientID = strings.TrimSpace(os.Getenv("REALMROOT_CLIENT_ID"))
+	RealmrootClientSecret = os.Getenv("REALMROOT_CLIENT_SECRET")
+	RealmrootAdminGroups = nil
+	for _, group := range strings.Split(os.Getenv("REALMROOT_ADMIN_GROUPS"), ",") {
+		if group = strings.TrimSpace(group); group != "" {
+			RealmrootAdminGroups = append(RealmrootAdminGroups, group)
+		}
+	}
+}
+
+func loadDatabaseEnvs() {
+	if dbDSN := os.Getenv("DB_DSN"); dbDSN != "" {
+		DBDSN = dbDSN
+	}
+	if dbType := os.Getenv("DB_TYPE"); dbType != "" {
+		if dbType != "sqlite" && dbType != "mysql" && dbType != "postgres" {
+			klog.Fatalf("Invalid DB_TYPE: %s, must be one of sqlite, mysql, postgres", dbType)
+		}
+		DBType = dbType
+	}
 }

@@ -59,10 +59,10 @@ spec:
             - name: HOST
               value: {{ .Values.host }}
             {{- end }}
-            {{- if .Values.anonymousUserEnabled }}
-            - name: ANONYMOUS_USER_ENABLED
-              value: "true"
-            {{- end }}
+            - name: REALMROOT_ISSUER
+              value: {{ .Values.realmroot.issuer | quote }}
+            - name: REALMROOT_ADMIN_GROUPS
+              value: {{ .Values.realmroot.adminGroups | quote }}
             {{- if eq .Values.db.type "sqlite" }}
             - name: DB_TYPE
               value: sqlite

@@ -23,14 +23,11 @@ import (
 const registrationMaxBytes = 2 << 20
 
 type clusterAgentRegistration struct {
-	APIServer     string `json:"apiServer"`
-	CAData        []byte `json:"caData,omitempty"`
-	CertData      []byte `json:"certData,omitempty"`
-	KeyData       []byte `json:"keyData,omitempty"`
-	ServerName    string `json:"serverName,omitempty"`
-	Insecure      bool   `json:"insecure,omitempty"`
-	Authorization string `json:"authorization,omitempty"`
-	AgentVersion  string `json:"agentVersion,omitempty"`
+	APIServer    string `json:"apiServer"`
+	CAData       []byte `json:"caData,omitempty"`
+	ServerName   string `json:"serverName,omitempty"`
+	Insecure     bool   `json:"insecure,omitempty"`
+	AgentVersion string `json:"agentVersion,omitempty"`
 }
 
 type registeredCluster struct {
@@ -114,47 +111,11 @@ func decryptClusterAgentRegistration(encrypted encryptedClusterAgentRegistration
 	return registration, nil
 }
 
-type credentialCaptureRoundTripper struct{}
-
-func (credentialCaptureRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	return &http.Response{
-		Status:     "200 OK",
-		StatusCode: http.StatusOK,
-		Body:       http.NoBody,
-		Request:    req,
-	}, nil
-}
-
-type authorizationRoundTripper struct {
-	next      http.RoundTripper
-	manager   *Manager
-	clientKey string
-}
-
-func (t *authorizationRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	t.manager.mu.RLock()
-	authorization := t.manager.registrations[t.clientKey].registration.Authorization
-	t.manager.mu.RUnlock()
-	request := req.Clone(req.Context())
-	request.Header = req.Header.Clone()
-	for name := range request.Header {
-		if strings.HasPrefix(strings.ToLower(name), "impersonate-") {
-			request.Header.Del(name)
-		}
-	}
-	if authorization != "" {
-		request.Header.Set("Authorization", authorization)
-	}
-	return t.next.RoundTrip(request)
-}
-
 func sameTransportConfig(a, b clusterAgentRegistration) bool {
 	return a.APIServer == b.APIServer &&
 		a.ServerName == b.ServerName &&
 		a.Insecure == b.Insecure &&
-		bytes.Equal(a.CAData, b.CAData) &&
-		bytes.Equal(a.CertData, b.CertData) &&
-		bytes.Equal(a.KeyData, b.KeyData)
+		bytes.Equal(a.CAData, b.CAData)
 }
 
 func (m *Manager) Register(rw http.ResponseWriter, req *http.Request) {
@@ -186,15 +147,10 @@ func (m *Manager) Register(rw http.ResponseWriter, req *http.Request) {
 		http.Error(rw, "invalid Kubernetes API server URL", http.StatusBadRequest)
 		return
 	}
-	if (len(registration.CertData) == 0) != (len(registration.KeyData) == 0) {
-		http.Error(rw, "client certificate and key must be provided together", http.StatusBadRequest)
+	if registration.Insecure {
+		http.Error(rw, "insecure Kubernetes TLS is not supported", http.StatusBadRequest)
 		return
 	}
-	if registration.Authorization == "" && len(registration.CertData) == 0 {
-		http.Error(rw, "Kubernetes credentials are required", http.StatusBadRequest)
-		return
-	}
-
 	clientKey := strconv.FormatUint(uint64(cluster.ID), 10)
 	m.mu.Lock()
 	current, exists := m.registrations[clientKey]
@@ -225,8 +181,6 @@ func (m *Manager) RESTConfig(clusterID uint) (*rest.Config, uint64, error) {
 		Host: registration.APIServer,
 		TLSClientConfig: rest.TLSClientConfig{
 			CAData:     append([]byte(nil), registration.CAData...),
-			CertData:   append([]byte(nil), registration.CertData...),
-			KeyData:    append([]byte(nil), registration.KeyData...),
 			ServerName: registration.ServerName,
 			Insecure:   registration.Insecure,
 			NextProtos: []string{"http/1.1"},
@@ -238,9 +192,6 @@ func (m *Manager) RESTConfig(clusterID uint) (*rest.Config, uint64, error) {
 		Proxy: func(*http.Request) (*url.URL, error) {
 			return nil, nil
 		},
-	}
-	config.WrapTransport = func(next http.RoundTripper) http.RoundTripper {
-		return &authorizationRoundTripper{next: next, manager: m, clientKey: clientKey}
 	}
 	return config, registered.generation, nil
 }
@@ -286,49 +237,12 @@ func registrationFromConfig(config *rest.Config) (clusterAgentRegistration, erro
 	if err != nil {
 		return clusterAgentRegistration{}, fmt.Errorf("load Kubernetes CA: %w", err)
 	}
-	certData, err := loadTLSData(config.CertData, config.CertFile)
-	if err != nil {
-		return clusterAgentRegistration{}, fmt.Errorf("load Kubernetes client certificate: %w", err)
-	}
-	keyData, err := loadTLSData(config.KeyData, config.KeyFile)
-	if err != nil {
-		return clusterAgentRegistration{}, fmt.Errorf("load Kubernetes client key: %w", err)
-	}
-
-	authConfig := rest.CopyConfig(config)
-	// Run client-go's auth wrappers against a local transport to resolve the current token without dialing the API server.
-	authConfig.WrapTransport = func(http.RoundTripper) http.RoundTripper {
-		return credentialCaptureRoundTripper{}
-	}
-	authTransport, err := rest.TransportFor(authConfig)
-	if err != nil {
-		return clusterAgentRegistration{}, fmt.Errorf("create Kubernetes authentication transport: %w", err)
-	}
-	authRequest, err := http.NewRequest(http.MethodGet, config.Host, nil)
-	if err != nil {
-		return clusterAgentRegistration{}, fmt.Errorf("create Kubernetes authentication request: %w", err)
-	}
-	authResponse, err := authTransport.RoundTrip(authRequest)
-	if err != nil {
-		return clusterAgentRegistration{}, fmt.Errorf("resolve Kubernetes credentials: %w", err)
-	}
-	if authResponse.Body != nil {
-		_ = authResponse.Body.Close()
-	}
-	authorization := authResponse.Request.Header.Get("Authorization")
-	if authorization == "" && len(certData) == 0 {
-		return clusterAgentRegistration{}, errors.New("kubernetes configuration must provide bearer/basic authentication or a client certificate")
-	}
-
 	return clusterAgentRegistration{
-		APIServer:     config.Host,
-		CAData:        caData,
-		CertData:      certData,
-		KeyData:       keyData,
-		ServerName:    config.ServerName,
-		Insecure:      config.Insecure,
-		Authorization: authorization,
-		AgentVersion:  version.Version,
+		APIServer:    config.Host,
+		CAData:       caData,
+		ServerName:   config.ServerName,
+		Insecure:     config.Insecure,
+		AgentVersion: version.Version,
 	}, nil
 }
 

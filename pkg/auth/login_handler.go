@@ -17,33 +17,18 @@ import (
 )
 
 func (h *AuthHandler) Login(c *gin.Context) {
-	provider := c.Query("provider")
-	if provider == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"message": "Provider parameter is required",
-		})
+	if !realmrootConfigured() {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"message": "Realmroot OIDC is not configured"})
 		return
 	}
-
-	oauthProvider, err := h.manager.GetProvider(c, provider)
+	authURL, err := h.oidc.authorizationURL(c)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"message": err.Error(),
-		})
+		c.JSON(http.StatusBadGateway, gin.H{"message": err.Error()})
 		return
 	}
-
-	state := h.manager.GenerateState()
-
-	klog.V(1).Infof("OAuth Login - Provider: %s, State: %s", provider, state)
-
-	setCookieSecure(c, "oauth_state", state, 600)
-	setCookieSecure(c, "oauth_provider", provider, 600)
-
-	authURL := oauthProvider.GetAuthURL(state)
 	c.JSON(http.StatusOK, gin.H{
 		"auth_url": authURL,
-		"provider": provider,
+		"provider": "realmroot",
 	})
 }
 
@@ -271,98 +256,46 @@ func (h *AuthHandler) authenticatePasswordUser(username, password string) (*mode
 func (h *AuthHandler) Callback(c *gin.Context) {
 	base := common.Base
 	code := c.Query("code")
-	provider, err := c.Cookie("oauth_provider")
-	if err != nil {
-		klog.Error("OAuth Callback - No provider found in cookie: ", err)
-		c.Redirect(http.StatusFound, base+"/login?error=missing_provider&reason=no_provider_in_cookie")
-		return
-	}
-
-	stateParam := c.Query("state")
-	cookieState, stateErr := c.Cookie("oauth_state")
-
-	klog.V(1).Infof("OAuth Callback - Using provider: %s\n", provider)
-
-	if stateErr != nil || stateParam == "" || cookieState == "" || stateParam != cookieState {
-		klog.Warningf("OAuth Callback - state mismatch or missing (cookieState=%v, stateParam=%v, err=%v)", cookieState, stateParam, stateErr)
-		setCookieSecure(c, "oauth_state", "", -1)
-		setCookieSecure(c, "oauth_provider", "", -1)
-		c.Redirect(http.StatusFound, base+"/login?error=invalid_state&reason=state_mismatch")
-		return
-	}
-
-	setCookieSecure(c, "oauth_state", "", -1)
-	setCookieSecure(c, "oauth_provider", "", -1)
-
 	if code == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Authorization code not provided",
-		})
+		c.Redirect(http.StatusFound, base+"/login?error=callback_error&reason=missing_code")
 		return
 	}
-
-	oauthProvider, err := h.manager.GetProvider(c, provider)
+	token, claims, err := h.oidc.exchange(c, code, c.Query("state"))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Provider not found: " + provider,
-		})
+		klog.Warningf("Realmroot OIDC callback failed: %v", err)
+		c.Redirect(http.StatusFound, base+"/login?error=callback_error&reason=callback_failed")
 		return
 	}
-
-	klog.V(1).Infof("OAuth Callback - Exchanging code for token with provider: %s", provider)
-	tokenResp, err := oauthProvider.ExchangeCodeForToken(code)
-	if err != nil {
-		c.Redirect(http.StatusFound, base+"/login?error=token_exchange_failed&reason=token_exchange_failed&provider="+provider)
-		return
-	}
-
-	klog.V(1).Infof("OAuth Callback - Getting user info with provider: %s", provider)
-	user, err := oauthProvider.GetUserInfo(tokenResp.AccessToken)
-	if err != nil {
-		if errors.Is(err, ErrNotInAllowedGroups) {
-			c.Redirect(http.StatusFound, base+"/login?error=insufficient_permissions&reason=not_in_allowed_groups&provider="+provider)
-			return
-		}
-		c.Redirect(http.StatusFound, base+"/login?error=user_info_failed&reason=user_info_failed&provider="+provider)
-		return
-	}
-
-	if user.Sub == "" {
-		c.Redirect(http.StatusFound, base+"/login?error=user_info_failed&reason=user_info_failed&provider="+provider)
-		return
-	}
-
+	user := userFromRealmrootClaims(claims)
 	if err := model.FindWithSubOrUpsertUser(user); err != nil {
-		c.Redirect(http.StatusFound, base+"/login?error=user_upsert_failed&reason=user_upsert_failed&provider="+provider)
-		return
-	}
-	klog.V(1).Infof("OAuth Callback - User details: Username=%s, Name=%s, Sub=%s, Email=%s, OIDCGroups=%v",
-		user.Username, user.Name, user.Sub, user.Username, user.OIDCGroups)
-	role := rbac.GetUserRoles(*user)
-	if len(role) == 0 {
-		klog.Warningf("OAuth Callback - Access denied for user: %s (provider: %s), Username: %s, Name: %s, Sub: %s, OIDCGroups: %v",
-			user.Key(), provider, user.Username, user.Name, user.Sub, user.OIDCGroups)
-		c.Redirect(http.StatusFound, base+"/login?error=insufficient_permissions&reason=insufficient_permissions&user="+user.Key()+"&provider="+provider)
+		c.Redirect(http.StatusFound, base+"/login?error=callback_error&reason=user_upsert_failed")
 		return
 	}
 	if !user.Enabled {
 		c.Redirect(http.StatusFound, base+"/login?error=user_disabled&reason=user_disabled")
 		return
 	}
-
-	jwtToken, err := h.manager.GenerateJWT(user, tokenResp.RefreshToken)
+	provider, err := h.oidc.discoveredProvider(c.Request.Context())
 	if err != nil {
-		c.Redirect(http.StatusFound, base+"/login?error=jwt_generation_failed&reason=jwt_generation_failed&user="+user.Key()+"&provider="+provider)
+		c.Redirect(http.StatusFound, base+"/login?error=callback_error&reason=provider_discovery_failed")
 		return
 	}
-
-	setCookieSecure(c, "auth_token", jwtToken, common.CookieExpirationSeconds)
-
+	rawIDToken, _ := token.Extra("id_token").(string)
+	_, idToken, err := h.oidc.verifyIDToken(c.Request.Context(), provider, rawIDToken, "")
+	if err != nil || createRealmrootSession(c, user, token, idToken) != nil {
+		c.Redirect(http.StatusFound, base+"/login?error=callback_error&reason=session_creation_failed")
+		return
+	}
 	c.Redirect(http.StatusFound, base+"/")
 }
 
 func (h *AuthHandler) Logout(c *gin.Context) {
-	setCookieSecure(c, "auth_token", "", -1)
+	if opaqueToken, err := c.Cookie(sessionCookieName); err == nil {
+		if session, err := model.GetOIDCSessionByHash(hashOpaqueValue(opaqueToken)); err == nil {
+			_ = model.DeleteOIDCSession(session)
+		}
+	}
+	setCookieSecure(c, sessionCookieName, "", -1)
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "Logged out successfully",
@@ -379,7 +312,7 @@ func (h *AuthHandler) GetUser(c *gin.Context) {
 	}
 
 	currentUser := user.(model.User)
-	isAdmin := rbac.UserHasRole(currentUser, model.DefaultAdminRole.Name)
+	isAdmin := platformAdmin(currentUser)
 	setting, err := model.GetGeneralSetting()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -402,23 +335,13 @@ func (h *AuthHandler) GetUser(c *gin.Context) {
 }
 
 func (h *AuthHandler) RefreshToken(c *gin.Context) {
-	tokenString, err := c.Cookie("auth_token")
+	_, _, err := h.oidc.authenticatedSession(c)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "No token found",
+			"error": "Failed to refresh Realmroot session",
 		})
 		return
 	}
-
-	newToken, err := h.manager.RefreshJWT(c, tokenString)
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "Failed to refresh token",
-		})
-		return
-	}
-
-	setCookieSecure(c, "auth_token", newToken, common.CookieExpirationSeconds)
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,

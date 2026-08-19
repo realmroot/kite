@@ -13,14 +13,15 @@ func TestGenerateManifest(t *testing.T) {
 		"name: kite-cluster-agent-token",
 		"namespace: kube-system",
 		"token: \"my-token\"",
-		"apiVersion: v1\nkind: ServiceAccount",
 		"name: kite-cluster-agent",
-		"apiVersion: rbac.authorization.k8s.io/v1\nkind: ClusterRoleBinding",
-		"name: cluster-admin",
 		"apiVersion: apps/v1\nkind: Deployment",
 		`image: "ghcr.io/kite-org/kite:v1.0"`,
 		"--server=$(KITE_SERVER)",
 		"--token=$(CLUSTER_AGENT_TOKEN)",
+		"--api-server=https://kubernetes.default.svc",
+		"--ca-file=/var/run/kite/ca/ca.crt",
+		"automountServiceAccountToken: false",
+		"name: kube-root-ca.crt",
 		"value: \"https://kite.example.com\"",
 	}
 	for _, want := range checks {
@@ -29,9 +30,12 @@ func TestGenerateManifest(t *testing.T) {
 		}
 	}
 
-	// Should contain exactly 4 documents separated by ---
-	if strings.Count(manifest, "---") != 3 {
-		t.Errorf("expected 3 document separators, got %d", strings.Count(manifest, "---"))
+	if strings.Contains(manifest, "ClusterRoleBinding") || strings.Contains(manifest, "cluster-admin") || strings.Contains(manifest, "serviceAccountName:") {
+		t.Fatalf("transport-only agent manifest must not grant Kubernetes permissions:\n%s", manifest)
+	}
+	// Secret and Deployment only.
+	if strings.Count(manifest, "---") != 1 {
+		t.Errorf("expected 1 document separator, got %d", strings.Count(manifest, "---"))
 	}
 }
 

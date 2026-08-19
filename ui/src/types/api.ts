@@ -630,9 +630,11 @@ export interface Cluster {
   name: string
   description?: string
   version?: string
-  config?: string
+  apiServerUrl?: string
+  caBundle?: string
+  tlsServerName?: string
+  connectionMode: 'direct' | 'tunnel'
   enabled: boolean
-  inCluster: boolean
   clusterAgent: boolean
   clusterAgentVersion?: string
   connected: boolean

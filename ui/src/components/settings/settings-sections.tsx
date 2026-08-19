@@ -1,14 +1,9 @@
 import type { ComponentType, ReactNode } from 'react'
 import type { TFunction } from 'i18next'
 
-import { APIKeyManagement } from './apikey-management'
 import { AuditLog } from './audit-log'
-import { AuthenticationManagement } from './authentication-management'
 import { ClusterManagement } from './cluster-management'
-import { GeneralManagement } from './general-management'
-import { RBACManagement } from './rbac-management'
 import { TemplateManagement } from './template-management'
-import { UserManagement } from './user-management'
 
 export interface SettingsSectionDefinition {
   value: string
@@ -33,40 +28,10 @@ function createSettingsSectionDefinition(
 
 export const settingsSectionRegistry: SettingsSectionDefinition[] = [
   createSettingsSectionDefinition(
-    'general',
-    'settings.tabs.general',
-    'General',
-    GeneralManagement
-  ),
-  createSettingsSectionDefinition(
     'clusters',
     'settings.tabs.clusters',
     'Cluster',
     ClusterManagement
-  ),
-  createSettingsSectionDefinition(
-    'oauth',
-    'settings.tabs.oauth',
-    'Authentication',
-    AuthenticationManagement
-  ),
-  createSettingsSectionDefinition(
-    'rbac',
-    'settings.tabs.rbac',
-    'RBAC',
-    RBACManagement
-  ),
-  createSettingsSectionDefinition(
-    'users',
-    'settings.tabs.users',
-    'User',
-    UserManagement
-  ),
-  createSettingsSectionDefinition(
-    'apikeys',
-    'settings.tabs.apikeys',
-    'API Keys',
-    APIKeyManagement
   ),
   createSettingsSectionDefinition(
     'templates',

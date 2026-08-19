@@ -37,11 +37,6 @@ type PasswordLoginRequest struct {
 	MFACode  string `json:"mfa_code"`
 }
 
-type ImportClustersRequest struct {
-	Config    string `json:"config"`
-	InCluster bool   `json:"inCluster"`
-}
-
 type ClusterInfo struct {
 	Name      string `json:"name"`
 	Version   string `json:"version"`

@@ -18,14 +18,14 @@ import (
 
 func TestClusterConfigurationLifecyclePreservesSecretsAndDefault(t *testing.T) {
 	setupClusterHandlerTestDB(t)
-	manager := &ClusterManager{clusters: map[string]*ClientSet{}, errors: map[string]string{}}
+	manager := &ClusterManager{}
 	router := gin.New()
 	router.POST("/clusters", manager.CreateCluster)
 	router.GET("/clusters", manager.GetClusterList)
 	router.PUT("/clusters/:id", manager.UpdateCluster)
 	router.DELETE("/clusters/:id", manager.DeleteCluster)
 
-	create := performClusterRequest(router, http.MethodPost, "/clusters", `{"name":"primary","description":"main","config":"secret-kubeconfig","isDefault":true}`)
+	create := performClusterRequest(router, http.MethodPost, "/clusters", `{"name":"primary","description":"main","connectionMode":"direct","apiServerUrl":"https://k8s.example.com","caBundle":"ca-data","isDefault":true}`)
 	if create.Code != http.StatusCreated {
 		t.Fatalf("create status = %d, want %d: %s", create.Code, http.StatusCreated, create.Body.String())
 	}
@@ -33,11 +33,11 @@ func TestClusterConfigurationLifecyclePreservesSecretsAndDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loading created cluster: %v", err)
 	}
-	if !primary.IsDefault || !primary.Enable || string(primary.Config) != "secret-kubeconfig" {
+	if !primary.IsDefault || !primary.Enable || primary.APIServerURL != "https://k8s.example.com" || string(primary.Config) != "" {
 		t.Fatalf("created cluster = %#v", primary)
 	}
 
-	updateBody := `{"name":"renamed","description":"updated","config":"","prometheusURL":"https://prom.example.com","isDefault":true,"enabled":true}`
+	updateBody := `{"name":"renamed","description":"updated","apiServerUrl":"https://new-k8s.example.com","caBundle":"new-ca","prometheusURL":"https://prom.example.com","isDefault":true,"enabled":true}`
 	update := performClusterRequest(router, http.MethodPut, fmt.Sprintf("/clusters/%d", primary.ID), updateBody)
 	if update.Code != http.StatusOK {
 		t.Fatalf("update status = %d, want %d: %s", update.Code, http.StatusOK, update.Body.String())
@@ -49,13 +49,10 @@ func TestClusterConfigurationLifecyclePreservesSecretsAndDefault(t *testing.T) {
 	if updated.Name != "renamed" || updated.Description != "updated" || updated.PrometheusURL != "https://prom.example.com" {
 		t.Fatalf("updated cluster = %#v", updated)
 	}
-	if string(updated.Config) != "secret-kubeconfig" {
-		t.Fatalf("blank update erased kubeconfig: %q", updated.Config)
+	if updated.APIServerURL != "https://new-k8s.example.com" || updated.CABundle != "new-ca" || string(updated.Config) != "" {
+		t.Fatalf("updated cluster persisted credentials or lost transport metadata: %#v", updated)
 	}
 
-	manager.mu.Lock()
-	manager.clusters["renamed"] = &ClientSet{Name: "renamed", Version: "v1.36.2"}
-	manager.mu.Unlock()
 	list := performClusterRequest(router, http.MethodGet, "/clusters", "")
 	if list.Code != http.StatusOK {
 		t.Fatalf("list status = %d, want %d", list.Code, http.StatusOK)
@@ -64,10 +61,10 @@ func TestClusterConfigurationLifecyclePreservesSecretsAndDefault(t *testing.T) {
 	if err := json.Unmarshal(list.Body.Bytes(), &listed); err != nil {
 		t.Fatalf("decoding list response: %v", err)
 	}
-	if len(listed) != 1 || listed[0]["config"] != "" || listed[0]["version"] != "v1.36.2" {
+	if len(listed) != 1 || listed[0]["config"] != "" || listed[0]["apiServerUrl"] != "https://new-k8s.example.com" {
 		t.Fatalf("listed clusters = %#v", listed)
 	}
-	if strings.Contains(list.Body.String(), "secret-kubeconfig") {
+	if strings.Contains(list.Body.String(), "kubeconfig") {
 		t.Fatal("cluster list exposed kubeconfig")
 	}
 
@@ -76,7 +73,7 @@ func TestClusterConfigurationLifecyclePreservesSecretsAndDefault(t *testing.T) {
 		t.Fatalf("default delete status = %d, want %d", deleteDefault.Code, http.StatusBadRequest)
 	}
 
-	secondary := &model.Cluster{Name: "secondary", Config: "secondary-config", Enable: true}
+	secondary := &model.Cluster{Name: "secondary", APIServerURL: "https://secondary.example.com", ConnectionMode: "direct", Enable: true}
 	if err := model.AddCluster(secondary); err != nil {
 		t.Fatalf("creating secondary cluster: %v", err)
 	}
@@ -89,45 +86,43 @@ func TestClusterConfigurationLifecyclePreservesSecretsAndDefault(t *testing.T) {
 	}
 }
 
-func TestGetClustersFiltersByAccessAndSortsFailures(t *testing.T) {
+func TestGetClusterListUsesCredentialFreeCatalog(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	manager := &ClusterManager{
-		clusters: map[string]*ClientSet{
-			"secret": {Name: "secret", Version: "v1.35.0"},
-			"public": {Name: "public", Version: "v1.36.0"},
-		},
-		errors:         map[string]string{"broken": "invalid kubeconfig", "hidden-error": "timeout"},
-		defaultContext: "public",
+	setupClusterHandlerTestDB(t)
+	for _, cluster := range []*model.Cluster{
+		{Name: "first", APIServerURL: "https://first.example.com", ConnectionMode: "direct", Enable: true},
+		{Name: "second", APIServerURL: "https://second.example.com", ConnectionMode: "direct", Enable: true, IsDefault: true},
+	} {
+		if err := model.AddCluster(cluster); err != nil {
+			t.Fatal(err)
+		}
 	}
+	manager := &ClusterManager{}
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
 	ctx.Request = httptest.NewRequest(http.MethodGet, "/clusters", nil)
-	ctx.Set("user", model.User{Username: "alice", Roles: []common.Role{{
-		Name:     "limited",
-		Clusters: []string{"public", "broken"},
-	}}})
 
-	manager.GetClusters(ctx)
+	manager.GetClusterList(ctx)
 
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
 	}
-	var result []common.ClusterInfo
+	var result []map[string]any
 	if err := json.Unmarshal(recorder.Body.Bytes(), &result); err != nil {
 		t.Fatalf("decoding response: %v", err)
 	}
-	if len(result) != 2 || result[0].Name != "broken" || result[1].Name != "public" {
+	if len(result) != 2 || result[0]["apiServerUrl"] != "https://first.example.com" || result[1]["isDefault"] != true {
 		t.Fatalf("clusters = %#v", result)
 	}
-	if result[0].Error != "invalid kubeconfig" || !result[1].IsDefault {
-		t.Fatalf("cluster metadata = %#v", result)
+	if result[0]["config"] != "" || result[1]["config"] != "" {
+		t.Fatalf("cluster catalog exposed credentials: %#v", result)
 	}
 }
 
 func TestClusterMutationsHonorManagedConfiguration(t *testing.T) {
 	setupClusterHandlerTestDB(t)
 	common.SetManagedSections(map[string]bool{"clusters": true})
-	manager := &ClusterManager{clusters: map[string]*ClientSet{}, errors: map[string]string{}}
+	manager := &ClusterManager{}
 	router := gin.New()
 	router.POST("/clusters", manager.CreateCluster)
 
@@ -161,10 +156,6 @@ func setupClusterHandlerTestDB(t *testing.T) {
 	model.DB = db
 	gin.SetMode(gin.TestMode)
 	t.Cleanup(func() {
-		select {
-		case <-syncNow:
-		default:
-		}
 		sqlDB, err := db.DB()
 		if err == nil {
 			_ = sqlDB.Close()

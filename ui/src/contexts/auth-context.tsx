@@ -52,7 +52,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 const defaultCapabilities: BootstrapCapabilities = {
   aiEnabled: false,
-  kubectlEnabled: true,
+  kubectlEnabled: false,
 }
 
 export function useAuth() {
@@ -93,7 +93,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     await refetchBootstrap()
   }, [refetchBootstrap])
 
-  const login = useCallback(async (provider: string = 'github') => {
+  const login = useCallback(async (provider: string = 'realmroot') => {
     const { auth_url } = await initiateOAuthLogin(provider)
     window.location.href = auth_url
   }, [])

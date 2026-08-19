@@ -4,18 +4,16 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/zxh326/kite/pkg/clusteragent"
 	"github.com/zxh326/kite/pkg/common"
 	"github.com/zxh326/kite/pkg/model"
-	"github.com/zxh326/kite/pkg/rbac"
 	"gorm.io/gorm"
-	"k8s.io/client-go/tools/clientcmd"
 )
 
 // clusterAgentServerURL derives the Kite server URL from the request context,
@@ -39,28 +37,31 @@ func clusterAgentServerURL(c *gin.Context) string {
 }
 
 func (cm *ClusterManager) GetClusters(c *gin.Context) {
-	clusters, errors, defaultContext := cm.snapshotState()
-	result := make([]common.ClusterInfo, 0, len(clusters))
-	user := c.MustGet("user").(model.User)
-	for name, cluster := range clusters {
-		if !rbac.CanAccessCluster(user, name) {
-			continue
-		}
-		result = append(result, common.ClusterInfo{
-			Name:      name,
-			Version:   cluster.Version,
-			IsDefault: name == defaultContext,
-		})
+	clusters, err := model.ListClusters()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
-	for name, errMsg := range errors {
-		if !rbac.CanAccessCluster(user, name) {
+	result := make([]common.ClusterInfo, 0, len(clusters))
+	idToken := c.GetString("realmroot-id-token")
+	for _, cluster := range clusters {
+		if !cluster.Enable {
 			continue
 		}
+		version := ""
+		errorMessage := ""
+		clientSet, err := cm.GetClientSet(cluster.Name, idToken)
+		if err != nil {
+			errorMessage = err.Error()
+		} else {
+			version = clientSet.Version
+			clientSet.K8sClient.Stop(cluster.Name)
+		}
 		result = append(result, common.ClusterInfo{
-			Name:      name,
-			Version:   "",
-			IsDefault: false,
-			Error:     errMsg,
+			Name:      cluster.Name,
+			Version:   version,
+			IsDefault: cluster.IsDefault,
+			Error:     errorMessage,
 		})
 	}
 	sort.Slice(result, func(i, j int) bool {
@@ -76,30 +77,26 @@ func (cm *ClusterManager) GetClusterList(c *gin.Context) {
 		return
 	}
 
-	clusterState, errorState, _ := cm.snapshotState()
 	result := make([]gin.H, 0, len(clusters))
 	for _, cluster := range clusters {
 		clusterInfo := gin.H{
-			"id":            cluster.ID,
-			"name":          cluster.Name,
-			"description":   cluster.Description,
-			"enabled":       cluster.Enable,
-			"inCluster":     cluster.InCluster,
-			"clusterAgent":  cluster.ClusterAgent,
-			"connected":     cluster.ClusterAgent && cm.clusterAgentManager.Connected(cluster.ID),
-			"isDefault":     cluster.IsDefault,
-			"prometheusURL": cluster.PrometheusURL,
-			"config":        "",
+			"id":             cluster.ID,
+			"name":           cluster.Name,
+			"description":    cluster.Description,
+			"apiServerUrl":   cluster.APIServerURL,
+			"caBundle":       cluster.CABundle,
+			"tlsServerName":  cluster.TLSServerName,
+			"connectionMode": cluster.ConnectionMode,
+			"enabled":        cluster.Enable,
+			"inCluster":      cluster.InCluster,
+			"clusterAgent":   cluster.ClusterAgent,
+			"connected":      cluster.ClusterAgent && cm.clusterAgentManager.Connected(cluster.ID),
+			"isDefault":      cluster.IsDefault,
+			"prometheusURL":  cluster.PrometheusURL,
+			"config":         "",
 		}
 		if cluster.ClusterAgent {
 			clusterInfo["clusterAgentVersion"] = cm.clusterAgentManager.Version(cluster.ID)
-		}
-
-		if clientSet, exists := clusterState[cluster.Name]; exists {
-			clusterInfo["version"] = clientSet.Version
-		}
-		if errMsg, exists := errorState[cluster.Name]; exists {
-			clusterInfo["error"] = errMsg
 		}
 
 		result = append(result, clusterInfo)
@@ -115,22 +112,32 @@ func (cm *ClusterManager) CreateCluster(c *gin.Context) {
 	}
 
 	var req struct {
-		Name          string `json:"name" binding:"required"`
-		Description   string `json:"description"`
-		Config        string `json:"config"`
-		PrometheusURL string `json:"prometheusURL"`
-		InCluster     bool   `json:"inCluster"`
-		ClusterAgent  bool   `json:"clusterAgent"`
-		IsDefault     bool   `json:"isDefault"`
+		Name           string `json:"name" binding:"required"`
+		Description    string `json:"description"`
+		APIServerURL   string `json:"apiServerUrl"`
+		CABundle       string `json:"caBundle"`
+		TLSServerName  string `json:"tlsServerName"`
+		ConnectionMode string `json:"connectionMode" binding:"required"`
+		PrometheusURL  string `json:"prometheusURL"`
+		IsDefault      bool   `json:"isDefault"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if req.ClusterAgent {
-		req.InCluster = false
-		req.Config = ""
+	req.Name = strings.TrimSpace(req.Name)
+	req.APIServerURL = strings.TrimSpace(req.APIServerURL)
+	if req.ConnectionMode != "direct" && req.ConnectionMode != "tunnel" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "connectionMode must be direct or tunnel"})
+		return
+	}
+	if req.ConnectionMode == "direct" {
+		apiURL, err := url.Parse(req.APIServerURL)
+		if err != nil || apiURL.Scheme != "https" || apiURL.Host == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "apiServerUrl must be a valid HTTPS URL"})
+			return
+		}
 	}
 
 	if _, err := model.GetClusterByName(req.Name); err == nil {
@@ -153,7 +160,7 @@ func (cm *ClusterManager) CreateCluster(c *gin.Context) {
 	var clusterAgentPublicKey string
 	var clusterAgentPrivateKey string
 	var clusterAgentManifestGrant string
-	if req.ClusterAgent {
+	if req.ConnectionMode == "tunnel" {
 		var err error
 		clusterAgentToken, clusterAgentTokenHash, err = clusteragent.NewToken()
 		if err != nil {
@@ -175,10 +182,12 @@ func (cm *ClusterManager) CreateCluster(c *gin.Context) {
 	cluster := &model.Cluster{
 		Name:                   req.Name,
 		Description:            req.Description,
-		Config:                 model.SecretString(req.Config),
+		APIServerURL:           req.APIServerURL,
+		CABundle:               req.CABundle,
+		TLSServerName:          req.TLSServerName,
+		ConnectionMode:         req.ConnectionMode,
 		PrometheusURL:          req.PrometheusURL,
-		InCluster:              req.InCluster,
-		ClusterAgent:           req.ClusterAgent,
+		ClusterAgent:           req.ConnectionMode == "tunnel",
 		ClusterAgentTokenHash:  clusterAgentTokenHash,
 		ClusterAgentPublicKey:  clusterAgentPublicKey,
 		ClusterAgentPrivateKey: model.SecretString(clusterAgentPrivateKey),
@@ -191,13 +200,11 @@ func (cm *ClusterManager) CreateCluster(c *gin.Context) {
 		return
 	}
 
-	TriggerClusterSync()
-
 	result := gin.H{
 		"id":      cluster.ID,
 		"message": "cluster created successfully",
 	}
-	if req.ClusterAgent {
+	if req.ConnectionMode == "tunnel" {
 		serverURL := clusterAgentServerURL(c)
 		result["clusterAgentServer"] = serverURL
 		result["clusterAgentToken"] = clusterAgentToken
@@ -223,9 +230,10 @@ func (cm *ClusterManager) UpdateCluster(c *gin.Context) {
 	var req struct {
 		Name          string `json:"name"`
 		Description   string `json:"description"`
-		Config        string `json:"config"`
+		APIServerURL  string `json:"apiServerUrl"`
+		CABundle      string `json:"caBundle"`
+		TLSServerName string `json:"tlsServerName"`
 		PrometheusURL string `json:"prometheusURL"`
-		InCluster     bool   `json:"inCluster"`
 		IsDefault     bool   `json:"isDefault"`
 		Enabled       bool   `json:"enabled"`
 	}
@@ -251,33 +259,24 @@ func (cm *ClusterManager) UpdateCluster(c *gin.Context) {
 			return
 		}
 	}
-	if cluster.ClusterAgent {
-		req.InCluster = false
-		req.Config = ""
-	}
-
 	updates := map[string]interface{}{
-		"description":    req.Description,
-		"prometheus_url": req.PrometheusURL,
-		"in_cluster":     req.InCluster,
-		"is_default":     req.IsDefault,
-		"enable":         req.Enabled,
+		"description":     req.Description,
+		"api_server_url":  req.APIServerURL,
+		"ca_bundle":       req.CABundle,
+		"tls_server_name": req.TLSServerName,
+		"prometheus_url":  req.PrometheusURL,
+		"is_default":      req.IsDefault,
+		"enable":          req.Enabled,
 	}
 
 	if req.Name != "" && req.Name != cluster.Name {
 		updates["name"] = req.Name
 	}
 
-	if req.Config != "" {
-		updates["config"] = model.SecretString(req.Config)
-	}
-
 	if err := model.UpdateCluster(cluster, updates); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-
-	TriggerClusterSync()
 
 	c.JSON(http.StatusOK, gin.H{"message": "cluster updated successfully"})
 }
@@ -317,8 +316,6 @@ func (cm *ClusterManager) DeleteCluster(c *gin.Context) {
 	if cluster.ClusterAgent {
 		cm.clusterAgentManager.Disconnect(cluster.ID)
 	}
-
-	TriggerClusterSync()
 
 	c.JSON(http.StatusOK, gin.H{"message": "cluster deleted successfully"})
 }
@@ -364,70 +361,4 @@ func (cm *ClusterManager) GetClusterAgentManifest(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	c.Header("Content-Disposition", `attachment; filename="kite-cluster-agent.yaml"`)
 	c.Data(http.StatusOK, "text/yaml; charset=utf-8", []byte(manifest))
-}
-
-func (cm *ClusterManager) ImportClustersFromKubeconfig(c *gin.Context) {
-	if common.IsSectionManaged("clusters") {
-		c.JSON(http.StatusForbidden, gin.H{"error": common.ManagedSectionError})
-		return
-	}
-
-	var clusterReq common.ImportClustersRequest
-	if err := c.ShouldBindJSON(&clusterReq); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	if !clusterReq.InCluster && clusterReq.Config == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "config is required when inCluster is false"})
-		return
-	}
-
-	cc, err := model.CountClusters()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	if clusterReq.InCluster && cc > 0 {
-		c.JSON(http.StatusForbidden, gin.H{"error": "in-cluster import not allowed when clusters exist"})
-		return
-	}
-
-	if clusterReq.InCluster {
-		// In-cluster config
-		cluster := &model.Cluster{
-			Name:        "in-cluster",
-			InCluster:   true,
-			Description: "Kubernetes in-cluster config",
-			IsDefault:   true,
-			Enable:      true,
-		}
-		if err := model.AddCluster(cluster); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-		TriggerClusterSync()
-		// wait for sync to complete
-		time.Sleep(1 * time.Second)
-		c.JSON(http.StatusCreated, gin.H{
-			"message":       fmt.Sprintf("imported %d clusters successfully", 1),
-			"importedCount": 1,
-		})
-		return
-	}
-
-	kubeconfig, err := clientcmd.Load([]byte(clusterReq.Config))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	importedCount := ImportClustersFromKubeconfig(kubeconfig, cc == 0)
-	TriggerClusterSync()
-	// wait for sync to complete
-	time.Sleep(1 * time.Second)
-	c.JSON(http.StatusCreated, gin.H{
-		"message":       fmt.Sprintf("imported %d clusters successfully", importedCount),
-		"importedCount": importedCount,
-	})
 }

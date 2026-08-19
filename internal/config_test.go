@@ -65,17 +65,13 @@ func saveManagedSections(t *testing.T) {
 const testConfigYAML = `clusters:
   - name: prod
     description: "Production cluster"
-    config: |
-      apiVersion: v1
-      kind: Config
-      clusters:
-        - cluster:
-            server: https://k8s.example.com
-          name: prod
+    apiServerUrl: https://k8s.example.com
+    connectionMode: direct
     prometheusURL: "http://prom:9090"
     default: true
   - name: local
-    inCluster: true
+    apiServerUrl: https://local.example.com
+    connectionMode: direct
 
 oauth:
   - name: google
@@ -193,8 +189,11 @@ func TestLoadConfigFromFile_EndToEnd(t *testing.T) { //nolint:gocyclo // end-to-
 		if local == nil {
 			t.Fatal("local cluster not found")
 		}
-		if !local.InCluster {
-			t.Error("local should be inCluster")
+		if local.APIServerURL != "https://local.example.com" || local.ConnectionMode != "direct" {
+			t.Errorf("local transport metadata = %#v", local)
+		}
+		if string(prod.Config) != "" || string(local.Config) != "" {
+			t.Fatal("credential-free cluster config persisted a kubeconfig")
 		}
 	})
 
@@ -457,8 +456,7 @@ func TestBootstrapWithManagedClusters(t *testing.T) {
 	}
 }
 
-// TestBootstrapWithManagedClustersNoUsers tests that bootstrap returns initialized=false
-// when clusters are managed but no user exists.
+// TestBootstrapWithManagedClustersNoUsers verifies Realmroot removes local-user setup.
 func TestBootstrapWithManagedClustersNoUsers(t *testing.T) {
 	setupTestDB(t)
 	saveManagedSections(t)
@@ -489,11 +487,11 @@ func TestBootstrapWithManagedClustersNoUsers(t *testing.T) {
 	if !ok {
 		t.Fatalf("setup = %v, want object", result["setup"])
 	}
-	if init, ok := setup["initialized"].(bool); !ok || init {
-		t.Errorf("initialized = %v, want false (no users)", setup["initialized"])
+	if init, ok := setup["initialized"].(bool); !ok || !init {
+		t.Errorf("initialized = %v, want true", setup["initialized"])
 	}
-	if step, ok := setup["step"].(float64); !ok || step != 0 {
-		t.Errorf("step = %v, want 0 (no users)", setup["step"])
+	if step, ok := setup["step"].(float64); !ok || step != 2 {
+		t.Errorf("step = %v, want 2", setup["step"])
 	}
 }
 

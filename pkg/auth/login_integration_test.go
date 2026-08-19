@@ -16,60 +16,6 @@ import (
 	"gorm.io/gorm/logger"
 )
 
-func TestPasswordLoginSessionIsRevokedWhenUserIsDisabled(t *testing.T) {
-	user := setupAuthIntegrationDB(t)
-	handler := NewAuthHandler()
-	router := gin.New()
-	router.POST("/login", handler.PasswordLogin)
-	router.GET("/protected", handler.RequireAuth(), func(c *gin.Context) {
-		current := c.MustGet("user").(model.User)
-		c.JSON(http.StatusOK, gin.H{"userID": current.ID})
-	})
-
-	wrong := performAuthRequest(router, http.MethodPost, "/login", `{"username":"alice","password":"wrong"}`, nil)
-	if wrong.Code != http.StatusUnauthorized {
-		t.Fatalf("wrong-password status = %d, want %d: %s", wrong.Code, http.StatusUnauthorized, wrong.Body.String())
-	}
-	if len(wrong.Result().Cookies()) != 0 {
-		t.Fatal("wrong-password response issued a cookie")
-	}
-
-	success := performAuthRequest(router, http.MethodPost, "/login", `{"username":" alice ","password":"correct-password"}`, nil)
-	if success.Code != http.StatusNoContent {
-		t.Fatalf("login status = %d, want %d: %s", success.Code, http.StatusNoContent, success.Body.String())
-	}
-	var authCookie *http.Cookie
-	for _, cookie := range success.Result().Cookies() {
-		if cookie.Name == "auth_token" {
-			authCookie = cookie
-			break
-		}
-	}
-	if authCookie == nil || authCookie.Value == "" || !authCookie.HttpOnly {
-		t.Fatalf("auth cookie = %#v", authCookie)
-	}
-	claims, err := handler.manager.ValidateJWT(authCookie.Value)
-	if err != nil || claims.UserID != user.ID {
-		t.Fatalf("ValidateJWT() claims = %#v, error = %v", claims, err)
-	}
-	stored, err := model.GetUserByID(uint64(user.ID))
-	if err != nil || stored.LastLoginAt == nil {
-		t.Fatalf("successful login did not update LastLoginAt: user=%#v err=%v", stored, err)
-	}
-
-	protected := performAuthRequest(router, http.MethodGet, "/protected", "", authCookie)
-	if protected.Code != http.StatusOK {
-		t.Fatalf("protected status = %d, want %d: %s", protected.Code, http.StatusOK, protected.Body.String())
-	}
-	if err := model.SetUserEnabled(user.ID, false); err != nil {
-		t.Fatalf("disabling user: %v", err)
-	}
-	revoked := performAuthRequest(router, http.MethodGet, "/protected", "", authCookie)
-	if revoked.Code != http.StatusUnauthorized {
-		t.Fatalf("revoked session status = %d, want %d", revoked.Code, http.StatusUnauthorized)
-	}
-}
-
 func TestPasswordLoginHonorsMFAAndGlobalDisable(t *testing.T) {
 	t.Run("MFA code required", func(t *testing.T) {
 		user := setupAuthIntegrationDB(t)

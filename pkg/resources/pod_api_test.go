@@ -55,7 +55,7 @@ type podAPITestFixture struct {
 
 type podAPITestClusterProvider map[string]*cluster.ClientSet
 
-func (p podAPITestClusterProvider) GetClientSet(clusterName string) (*cluster.ClientSet, error) {
+func (p podAPITestClusterProvider) GetClientSet(clusterName, _ string) (*cluster.ClientSet, error) {
 	if clusterName == "" {
 		clusterName = "cluster-a"
 	}
@@ -153,6 +153,7 @@ func newPodAPITestFixture(t *testing.T, config podAPITestConfig) *podAPITestFixt
 	router := gin.New()
 	router.Use(func(c *gin.Context) {
 		c.Set("user", config.user)
+		c.Set("realmroot-id-token", "test-id-token")
 	})
 
 	api := router.Group("/api/v1")

@@ -5,8 +5,8 @@ import (
 	"strings"
 )
 
-// GenerateManifest builds the Kubernetes manifest (Secret, ServiceAccount,
-// ClusterRoleBinding, Deployment) used to deploy the Cluster Agent inside a
+// GenerateManifest builds the Kubernetes manifest (Secret and Deployment)
+// used to deploy the transport-only Cluster Agent inside a
 // target cluster. The image and server URL are injected so the manifest is
 // always consistent with the platform configuration.
 func GenerateManifest(serverURL, token, publicKey, image string) string {
@@ -30,25 +30,6 @@ type: Opaque
 stringData:
   token: %s
 ---
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: kite-cluster-agent
-  namespace: kube-system
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: kite-cluster-agent
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: cluster-admin
-subjects:
-  - kind: ServiceAccount
-    name: kite-cluster-agent
-    namespace: kube-system
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -66,7 +47,6 @@ spec:
       labels:
         app.kubernetes.io/name: kite-cluster-agent
     spec:
-      serviceAccountName: kite-cluster-agent
       containers:
         - name: cluster-agent
           image: %s
@@ -77,6 +57,8 @@ spec:
             - --server=$(KITE_SERVER)
             - --token=$(CLUSTER_AGENT_TOKEN)
             - --public-key=$(CLUSTER_AGENT_PUBLIC_KEY)
+            - --api-server=https://kubernetes.default.svc
+            - --ca-file=/var/run/kite/ca/ca.crt
           env:
             - name: KITE_SERVER
               value: %s
@@ -87,5 +69,26 @@ spec:
                   key: token
             - name: CLUSTER_AGENT_PUBLIC_KEY
               value: %s
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+          volumeMounts:
+            - name: kube-root-ca
+              mountPath: /var/run/kite/ca
+              readOnly: true
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+        - name: kube-root-ca
+          configMap:
+            name: kube-root-ca.crt
+            items:
+              - key: ca.crt
+                path: ca.crt
 `, tokenJSON, tokenHashJSON, imageJSON, serverJSON, publicKeyJSON)
 }

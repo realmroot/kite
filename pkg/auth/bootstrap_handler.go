@@ -7,8 +7,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/zxh326/kite/pkg/common"
 	"github.com/zxh326/kite/pkg/model"
-	"github.com/zxh326/kite/pkg/rbac"
-	"k8s.io/klog/v2"
 )
 
 type bootstrapSetupState struct {
@@ -61,10 +59,10 @@ func (h *AuthHandler) Bootstrap(c *gin.Context) {
 
 	c.JSON(http.StatusOK, bootstrapResponse{
 		Setup: setup,
-		Auth:  h.bootstrapAuth(setting),
+		Auth:  h.bootstrapAuth(),
 		Capabilities: bootstrapCapabilities{
-			AIEnabled:      setting.AIAgentEnabled && strings.TrimSpace(string(setting.AIAPIKey)) != "",
-			KubectlEnabled: setting.KubectlEnabled,
+			AIEnabled:      false,
+			KubectlEnabled: false,
 		},
 		User:                       user,
 		HasGlobalSidebarPreference: globalSidebarPreference != "",
@@ -73,99 +71,31 @@ func (h *AuthHandler) Bootstrap(c *gin.Context) {
 }
 
 func currentBootstrapSetup() bootstrapSetupState {
-	step := 0
-	uc, _ := model.CountUsers()
-	if uc == 0 && !common.AnonymousUserEnabled {
-		return bootstrapSetupState{Initialized: false, Step: step}
-	}
-	if uc > 0 || common.AnonymousUserEnabled {
-		step++
-	}
-
-	if common.IsSectionManaged("clusters") {
-		step++
-	} else {
-		cc, _ := model.CountClusters()
-		if cc > 0 {
-			step++
-		}
-	}
-
-	return bootstrapSetupState{Initialized: step == 2, Step: step}
+	// Realmroot owns identity provisioning and clusters are managed after login.
+	return bootstrapSetupState{Initialized: true, Step: 2}
 }
 
-func (h *AuthHandler) bootstrapAuth(setting *model.GeneralSetting) bootstrapAuthOptions {
-	var credentialProviders []string
-	loginPrompt := ""
-
-	if setting == nil || !setting.PasswordLoginDisabled {
-		credentialProviders = append(credentialProviders, model.AuthProviderPassword)
-	}
-	if setting != nil {
-		loginPrompt = setting.LoginPrompt
-	}
-
-	oauthProviders := uniqueStrings(h.manager.GetAvailableProviders())
-
-	ldapSetting, err := model.GetLDAPSetting()
-	if err != nil {
-		klog.Warningf("Failed to load ldap setting for providers: %v", err)
-	} else if ldapSetting.Enabled {
-		credentialProviders = append(credentialProviders, model.AuthProviderLDAP)
-	}
-
-	credentialProviders = uniqueStrings(credentialProviders)
-	providers := append(append([]string{}, credentialProviders...), oauthProviders...)
-
+func (h *AuthHandler) bootstrapAuth() bootstrapAuthOptions {
 	return bootstrapAuthOptions{
-		Providers:           providers,
-		CredentialProviders: credentialProviders,
-		OAuthProviders:      oauthProviders,
-		LoginPrompt:         loginPrompt,
-		MFAEnabled:          setting == nil || setting.EnableMFA,
-		PasskeyLoginEnabled: setting != nil && setting.EnablePasskeyLogin,
+		Providers:           []string{"realmroot"},
+		CredentialProviders: []string{},
+		OAuthProviders:      []string{"realmroot"},
+		LoginPrompt:         "Sign in with Realmroot. Kubernetes permissions come directly from your Realmroot groups.",
+		MFAEnabled:          false,
+		PasskeyLoginEnabled: false,
 	}
 }
 
 func (h *AuthHandler) bootstrapUser(c *gin.Context, setting *model.GeneralSetting) *model.User {
-	if common.AnonymousUserEnabled {
-		u := model.GetAnonymousUser()
-		if u == nil {
-			anonymousUser := model.AnonymousUser
-			applyBootstrapSidebarPreference(&anonymousUser, setting)
-			return &anonymousUser
-		}
-		currentUser := *u
-		currentUser.Roles = model.AnonymousUser.Roles
-		applyBootstrapSidebarPreference(&currentUser, setting)
-		return &currentUser
-	}
-
-	tokenString, _ := c.Cookie("auth_token")
-	if tokenString == "" {
-		return nil
-	}
-
-	claims, err := h.manager.ValidateJWT(tokenString)
+	user, _, err := h.oidc.authenticatedSession(c)
 	if err != nil {
-		refreshedToken, refreshErr := h.manager.RefreshJWT(c, tokenString)
-		if refreshErr != nil {
-			return nil
-		}
-		setCookieSecure(c, "auth_token", refreshedToken, common.CookieExpirationSeconds)
-		claims, err = h.manager.ValidateJWT(refreshedToken)
-		if err != nil {
-			return nil
-		}
-	}
-
-	user, err := model.GetUserByIDCached(uint64(claims.UserID))
-	if err != nil || !user.Enabled {
 		return nil
 	}
 
 	currentUser := *user
-	currentUser.Roles = rbac.GetUserRoles(currentUser)
+	if platformAdmin(currentUser) {
+		currentUser.Roles = []common.Role{platformAdminRole()}
+	}
 	applyBootstrapSidebarPreference(&currentUser, setting)
 
 	return &currentUser
@@ -173,7 +103,7 @@ func (h *AuthHandler) bootstrapUser(c *gin.Context, setting *model.GeneralSettin
 
 func applyBootstrapSidebarPreference(user *model.User, setting *model.GeneralSetting) {
 	globalSidebarPreference := strings.TrimSpace(setting.GlobalSidebarPreference)
-	if globalSidebarPreference != "" && (!rbac.UserHasRole(*user, model.DefaultAdminRole.Name) || strings.TrimSpace(user.SidebarPreference) == "") {
+	if globalSidebarPreference != "" && (!platformAdmin(*user) || strings.TrimSpace(user.SidebarPreference) == "") {
 		user.SidebarPreference = globalSidebarPreference
 	}
 }

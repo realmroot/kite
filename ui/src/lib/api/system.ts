@@ -1,6 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
 
-import { apiClient, authApiClient } from '../api-client'
 import { fetchBootstrap, useBootstrap } from './bootstrap'
 import { fetchAPI } from './shared'
 
@@ -43,29 +42,4 @@ export const useVersionInfo = () => {
     staleTime: 1000 * 60 * 60, // 1 hour
     refetchInterval: 0, // No auto-refresh
   })
-}
-
-// User registration for initial setup
-export interface CreateUserRequest {
-  username: string
-  password: string
-  name?: string
-}
-
-export const createSuperUser = async (
-  userData: CreateUserRequest
-): Promise<void> => {
-  await authApiClient.post('/auth/setup/create_super_user', userData)
-}
-
-// Cluster import for initial setup
-export interface ImportClustersRequest {
-  config: string
-  inCluster?: boolean
-}
-
-export const importClusters = async (
-  request: ImportClustersRequest
-): Promise<{ message: string; importedCount: number }> => {
-  return await apiClient.post('/admin/clusters/import', request)
 }

@@ -1,13 +1,12 @@
 import { createBrowserRouter } from 'react-router-dom'
 
-import App, { StandaloneAIChatApp } from './App'
+import App from './App'
 import { InitCheckRoute } from './components/init-check-route'
 import { ProtectedRoute } from './components/protected-route'
 import { getSubPath } from './lib/subpath'
 import { CRListPage } from './pages/cr-list-page'
 import { HelmChartDetailPage } from './pages/helm-chart-detail-page'
 import { HelmChartListPage } from './pages/helm-chart-list-page'
-import { InitializationPage } from './pages/initialization'
 import { LoginPage } from './pages/login'
 import { Overview } from './pages/overview'
 import { ResourceDetail } from './pages/resource-detail'
@@ -19,24 +18,10 @@ const subPath = getSubPath()
 export const router = createBrowserRouter(
   [
     {
-      path: '/setup',
-      element: <InitializationPage />,
-    },
-    {
       path: '/login',
       element: (
         <InitCheckRoute allowIncompleteSetup>
           <LoginPage />
-        </InitCheckRoute>
-      ),
-    },
-    {
-      path: '/ai-chat-box',
-      element: (
-        <InitCheckRoute>
-          <ProtectedRoute>
-            <StandaloneAIChatApp />
-          </ProtectedRoute>
         </InitCheckRoute>
       ),
     },

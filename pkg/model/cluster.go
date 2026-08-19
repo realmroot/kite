@@ -2,9 +2,15 @@ package model
 
 type Cluster struct {
 	Model
-	Name                   string       `json:"name" gorm:"type:varchar(100);uniqueIndex;not null"`
-	Description            string       `json:"description" gorm:"type:text"`
-	Config                 SecretString `json:"config" gorm:"type:text"`
+	Name           string `json:"name" gorm:"type:varchar(100);uniqueIndex;not null"`
+	Description    string `json:"description" gorm:"type:text"`
+	APIServerURL   string `json:"apiServerUrl" gorm:"type:text"`
+	CABundle       string `json:"caBundle,omitempty" gorm:"type:text"`
+	TLSServerName  string `json:"tlsServerName,omitempty" gorm:"type:varchar(255)"`
+	ConnectionMode string `json:"connectionMode" gorm:"type:varchar(20);default:direct"`
+	// Config is retained only so old databases can be migrated. New requests
+	// never accept, return, or use persisted Kubernetes credentials.
+	Config                 SecretString `json:"-" gorm:"type:text"`
 	PrometheusURL          string       `json:"prometheus_url,omitempty" gorm:"type:text"`
 	InCluster              bool         `json:"in_cluster" gorm:"type:boolean;default:false"`
 	ClusterAgent           bool         `json:"clusterAgent" gorm:"type:boolean;default:false"`
