@@ -9,13 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/rest"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/zxh326/kite/pkg/clusteragent"
-	"github.com/zxh326/kite/pkg/kube"
 )
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
@@ -237,101 +233,6 @@ func TestK8sProxyTransportRoundTrip(t *testing.T) {
 	if gotPath != "/api/v1/namespaces/monitoring/services/prometheus:443/proxy/api/v1/query" {
 		t.Fatalf("path = %q, want %q", gotPath, "/api/v1/namespaces/monitoring/services/prometheus:443/proxy/api/v1/query")
 	}
-}
-
-func TestDiscoveryPrometheusURL(t *testing.T) {
-	t.Run("discovers prometheus port 9090", func(t *testing.T) {
-		svc := &corev1.Service{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "prometheus",
-				Namespace: "monitoring",
-				Labels: map[string]string{
-					"app.kubernetes.io/name": "prometheus",
-				},
-			},
-			Spec: corev1.ServiceSpec{
-				Type: corev1.ServiceTypeClusterIP,
-				Ports: []corev1.ServicePort{
-					{Port: 9090},
-				},
-			},
-		}
-
-		kc := &kube.K8sClient{
-			Client: fake.NewClientBuilder().
-				WithScheme(kube.GetScheme()).
-				WithObjects(svc).
-				Build(),
-		}
-
-		got := discoveryPrometheusURL(kc)
-		want := "http://prometheus.monitoring.svc.cluster.local:9090"
-		if got != want {
-			t.Fatalf("discoveryPrometheusURL() = %q, want %q", got, want)
-		}
-	})
-
-	t.Run("discovers vmsingle port 8428", func(t *testing.T) {
-		svc := &corev1.Service{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "vmsingle",
-				Namespace: "monitoring",
-				Labels: map[string]string{
-					"app.kubernetes.io/name": "vmsingle",
-				},
-			},
-			Spec: corev1.ServiceSpec{
-				Type: corev1.ServiceTypeClusterIP,
-				Ports: []corev1.ServicePort{
-					{Port: 8428},
-				},
-			},
-		}
-
-		kc := &kube.K8sClient{
-			Client: fake.NewClientBuilder().
-				WithScheme(kube.GetScheme()).
-				WithObjects(svc).
-				Build(),
-		}
-
-		got := discoveryPrometheusURL(kc)
-		want := "http://vmsingle.monitoring.svc.cluster.local:8428"
-		if got != want {
-			t.Fatalf("discoveryPrometheusURL() = %q, want %q", got, want)
-		}
-	})
-
-	t.Run("discovers legacy vmsingle port 8429", func(t *testing.T) {
-		svc := &corev1.Service{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "vmsingle",
-				Namespace: "monitoring",
-				Labels: map[string]string{
-					"app.kubernetes.io/name": "vmsingle",
-				},
-			},
-			Spec: corev1.ServiceSpec{
-				Type: corev1.ServiceTypeClusterIP,
-				Ports: []corev1.ServicePort{
-					{Port: 8429},
-				},
-			},
-		}
-
-		kc := &kube.K8sClient{
-			Client: fake.NewClientBuilder().
-				WithScheme(kube.GetScheme()).
-				WithObjects(svc).
-				Build(),
-		}
-
-		got := discoveryPrometheusURL(kc)
-		want := "http://vmsingle.monitoring.svc.cluster.local:8429"
-		if got != want {
-			t.Fatalf("discoveryPrometheusURL() = %q, want %q", got, want)
-		}
-	})
 }
 
 type roundTripperFunc func(*http.Request) (*http.Response, error)

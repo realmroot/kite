@@ -38,10 +38,6 @@ type cachedArchive struct {
 	expiresAt time.Time
 }
 
-func LoadRepositoryArchive(repository model.HelmRepository, entry *repo.ChartVersion) (*chart.Chart, error) {
-	return LoadRepositoryArchiveContext(context.Background(), repository, entry)
-}
-
 func LoadRepositoryArchiveContext(ctx context.Context, repository model.HelmRepository, entry *repo.ChartVersion) (*chart.Chart, error) {
 	if len(entry.URLs) == 0 {
 		return nil, nil
@@ -51,10 +47,6 @@ func LoadRepositoryArchiveContext(ctx context.Context, repository model.HelmRepo
 		return nil, err
 	}
 	return LoadArchiveContext(ctx, chartURL, &repository)
-}
-
-func LoadArchive(chartURL string, repository *model.HelmRepository) (*chart.Chart, error) {
-	return LoadArchiveContext(context.Background(), chartURL, repository)
 }
 
 func LoadArchiveContext(ctx context.Context, chartURL string, repository *model.HelmRepository) (*chart.Chart, error) {

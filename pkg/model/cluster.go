@@ -104,22 +104,10 @@ func DeleteCluster(cluster *Cluster) error {
 	})
 }
 
-func DisableCluster(cluster *Cluster) error {
-	return DB.Model(cluster).Update("enable", false).Error
-}
-
-func EnableCluster(cluster *Cluster) error {
-	return DB.Model(cluster).Update("enable", true).Error
-}
-
 func ListClusters() ([]*Cluster, error) {
 	var clusters []*Cluster
 	if err := DB.Find(&clusters).Error; err != nil {
 		return nil, err
 	}
 	return clusters, nil
-}
-
-func CountClusters() (count int64, err error) {
-	return count, DB.Model(&Cluster{}).Count(&count).Error
 }

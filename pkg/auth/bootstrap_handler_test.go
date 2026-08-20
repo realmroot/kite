@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/zxh326/kite/pkg/common"
+	"github.com/zxh326/kite/pkg/model"
 )
 
 func TestBootstrapAuthPublishesOneConfiguredOIDCProvider(t *testing.T) {
@@ -13,7 +14,7 @@ func TestBootstrapAuthPublishesOneConfiguredOIDCProvider(t *testing.T) {
 	common.OIDCProviderName = "Company Identity"
 	t.Cleanup(func() { common.OIDCProviderName = original })
 
-	value := (&AuthHandler{}).bootstrapAuth()
+	value := (&AuthHandler{}).bootstrapAuth(&model.GeneralSetting{})
 	if value.ProviderName != "Company Identity" {
 		t.Fatalf("provider name = %q", value.ProviderName)
 	}
@@ -26,5 +27,19 @@ func TestBootstrapAuthPublishesOneConfiguredOIDCProvider(t *testing.T) {
 		if strings.Contains(text, legacyField) {
 			t.Fatalf("bootstrap auth contains legacy field %s: %s", legacyField, text)
 		}
+	}
+}
+
+func TestBootstrapAuthUsesConfiguredLoginPrompt(t *testing.T) {
+	value := (&AuthHandler{}).bootstrapAuth(&model.GeneralSetting{LoginPrompt: "  Sign in with your company account.  "})
+	if value.LoginPrompt != "Sign in with your company account." {
+		t.Fatalf("login prompt = %q", value.LoginPrompt)
+	}
+}
+
+func TestBootstrapAuthUsesDefaultLoginPrompt(t *testing.T) {
+	value := (&AuthHandler{}).bootstrapAuth(&model.GeneralSetting{})
+	if value.LoginPrompt != "Kubernetes permissions come directly from your identity provider claims." {
+		t.Fatalf("login prompt = %q", value.LoginPrompt)
 	}
 }

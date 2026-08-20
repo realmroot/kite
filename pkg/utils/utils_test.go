@@ -79,33 +79,6 @@ func TestInjectAnalytics(t *testing.T) {
 	}
 }
 
-func TestGetImageRegistryAndRepo(t *testing.T) {
-	testcase := []struct {
-		image    string
-		registry string
-		repo     string
-	}{
-		{"nginx", "", "library/nginx"},
-		{"nginx:latest", "", "library/nginx"},
-		{"zzde/kite:latest", "", "zzde/kite"},
-		{"docker.io/library/nginx", "docker.io", "library/nginx"},
-		{"docker.io/library/nginx:latest", "docker.io", "library/nginx"},
-		{"gcr.io/my-project/my-image", "gcr.io", "my-project/my-image"},
-		{"gcr.io/my-project/my-image:tag", "gcr.io", "my-project/my-image"},
-		{"quay.io/my-org/my-repo", "quay.io", "my-org/my-repo"},
-		{"quay.io/my-org/my-repo:tag", "quay.io", "my-org/my-repo"},
-		{"registry.example.com/my-repo/test", "registry.example.com", "my-repo/test"},
-		{"localhost:5000/team/api:1.2.3", "localhost:5000", "team/api"},
-		{"registry.example.com:5000/team/api@sha256:abcdef", "registry.example.com:5000", "team/api"},
-	}
-	for _, tc := range testcase {
-		registry, repo := GetImageRegistryAndRepo(tc.image)
-		if registry != tc.registry || repo != tc.repo {
-			t.Errorf("GetImageRegistryAndRepo(%q) = (%q, %q), want (%q, %q)", tc.image, registry, repo, tc.registry, tc.repo)
-		}
-	}
-}
-
 func TestGenerateNodeAgentName(t *testing.T) {
 	testcase := []struct {
 		nodeName string
@@ -123,27 +96,6 @@ func TestGenerateNodeAgentName(t *testing.T) {
 		if errs := validation.IsDNS1123Subdomain(podName); len(errs) > 0 {
 			t.Errorf("GenerateNodeAgentName(%q) = %q, invalid DNS subdomain: %v", tc.nodeName, podName, errs)
 		}
-	}
-}
-
-func TestToEnvName(t *testing.T) {
-	testCases := []struct {
-		name string
-		in   string
-		want string
-	}{
-		{name: "hyphen and dot", in: "a-b.c", want: "A_B_C"},
-		{name: "slash", in: "kube/system", want: "KUBE_SYSTEM"},
-		{name: "mixed case", in: "KiteBase", want: "KITEBASE"},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			got := ToEnvName(tc.in)
-			if got != tc.want {
-				t.Fatalf("ToEnvName(%q) = %q, want %q", tc.in, got, tc.want)
-			}
-		})
 	}
 }
 

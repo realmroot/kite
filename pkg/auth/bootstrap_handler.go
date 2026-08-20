@@ -42,7 +42,7 @@ func (h *AuthHandler) Bootstrap(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, bootstrapResponse{
-		Auth: h.bootstrapAuth(),
+		Auth: h.bootstrapAuth(setting),
 		Capabilities: bootstrapCapabilities{
 			KubectlEnabled: setting.KubectlEnabled,
 		},
@@ -53,10 +53,14 @@ func (h *AuthHandler) Bootstrap(c *gin.Context) {
 	})
 }
 
-func (h *AuthHandler) bootstrapAuth() bootstrapAuthOptions {
+func (h *AuthHandler) bootstrapAuth(setting *model.GeneralSetting) bootstrapAuthOptions {
+	loginPrompt := strings.TrimSpace(setting.LoginPrompt)
+	if loginPrompt == "" {
+		loginPrompt = "Kubernetes permissions come directly from your identity provider claims."
+	}
 	return bootstrapAuthOptions{
 		ProviderName: common.OIDCProviderName,
-		LoginPrompt:  "Kubernetes permissions come directly from your identity provider claims.",
+		LoginPrompt:  loginPrompt,
 	}
 }
 

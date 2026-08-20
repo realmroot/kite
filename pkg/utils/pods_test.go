@@ -91,20 +91,4 @@ func TestPodStatusHelpers(t *testing.T) {
 			t.Fatal("IsPodReady() = true, want false")
 		}
 	})
-
-	t.Run("is pod error or success", func(t *testing.T) {
-		for _, phase := range []corev1.PodPhase{corev1.PodFailed, corev1.PodSucceeded} {
-			pod := &corev1.Pod{Status: corev1.PodStatus{Phase: phase}}
-			if !IsPodErrorOrSuccess(pod) {
-				t.Fatalf("IsPodErrorOrSuccess(%s) = false, want true", phase)
-			}
-		}
-	})
-
-	t.Run("is pod neither error nor success", func(t *testing.T) {
-		pod := &corev1.Pod{Status: corev1.PodStatus{Phase: corev1.PodRunning}}
-		if IsPodErrorOrSuccess(pod) {
-			t.Fatal("IsPodErrorOrSuccess() = true, want false")
-		}
-	})
 }

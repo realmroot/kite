@@ -38,16 +38,6 @@ func IsPodReady(pod *corev1.Pod) bool {
 	return false
 }
 
-func IsPodErrorOrSuccess(pod *corev1.Pod) bool {
-	if pod == nil {
-		return false
-	}
-	if pod.Status.Phase == corev1.PodFailed || pod.Status.Phase == corev1.PodSucceeded {
-		return true
-	}
-	return false
-}
-
 func GenerateNodeAgentName(nodeName string) string {
 	truncateNodeName := nodeName
 	if len(nodeName)+len(common.NodeTerminalPodName)+7 > 63 {

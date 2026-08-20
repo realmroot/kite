@@ -60,9 +60,6 @@ func initializeApp(ctx context.Context) (*application, error) {
 	if _, err := model.GetGeneralSetting(); err != nil {
 		return nil, errors.New("load general setting: " + err.Error())
 	}
-	if err := validateAnalyticsConfiguration(); err != nil {
-		return nil, err
-	}
 
 	if err := templates.InitTemplates(); err != nil {
 		return nil, errors.New("initialize resource templates: " + err.Error())

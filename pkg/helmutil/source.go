@@ -84,10 +84,6 @@ func repositoryChartPackage(ctx context.Context, repositoryName, chartName, vers
 	}, nil
 }
 
-func LoadRepositoryIndex(repository model.HelmRepository) (*repo.IndexFile, error) {
-	return LoadRepositoryIndexContext(context.Background(), repository)
-}
-
 func LoadRepositoryIndexContext(ctx context.Context, repository model.HelmRepository) (*repo.IndexFile, error) {
 	indexURL, err := repo.ResolveReferenceURL(repository.URL, "index.yaml")
 	if err != nil {
