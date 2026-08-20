@@ -2,6 +2,8 @@ package cluster
 
 import (
 	"encoding/base64"
+	"encoding/pem"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/zxh326/kite/pkg/model"
@@ -9,14 +11,15 @@ import (
 
 func TestBaseRESTConfigContainsOnlyClusterConnectionMetadata(t *testing.T) {
 	manager := &ClusterManager{}
-	ca := "-----BEGIN CERTIFICATE-----\ntest\n-----END CERTIFICATE-----"
+	server := httptest.NewTLSServer(nil)
+	t.Cleanup(server.Close)
+	ca := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.Certificate().Raw})
 	config, generation, err := manager.baseRESTConfig(&model.Cluster{
 		Name:           "production",
 		APIServerURL:   "https://api.example.com:6443",
-		CABundle:       base64.StdEncoding.EncodeToString([]byte(ca)),
+		CABundle:       base64.StdEncoding.EncodeToString(ca),
 		TLSServerName:  "api.internal",
 		ConnectionMode: "direct",
-		Config:         model.SecretString("legacy-secret-that-must-not-be-used"),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -24,7 +27,7 @@ func TestBaseRESTConfigContainsOnlyClusterConnectionMetadata(t *testing.T) {
 	if config.Host != "https://api.example.com:6443" || config.BearerToken != "" || generation != 0 {
 		t.Fatalf("unexpected config: %#v", config)
 	}
-	if string(config.CAData) != ca || config.ServerName != "api.internal" {
+	if string(config.CAData) != string(ca) || config.ServerName != "api.internal" {
 		t.Fatalf("TLS metadata was not preserved: %#v", config.TLSClientConfig)
 	}
 	if config.Username != "" || config.Password != "" || len(config.CertData) != 0 || len(config.KeyData) != 0 || config.BearerTokenFile != "" {

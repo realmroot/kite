@@ -1,11 +1,9 @@
 package model
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/zxh326/kite/pkg/common"
-	"gorm.io/gorm"
 )
 
 func TestSliceString_Scan(t *testing.T) {
@@ -16,10 +14,11 @@ func TestSliceString_Scan(t *testing.T) {
 		wantErr  bool
 	}{
 		{"nil value", nil, nil, false},
-		{"empty string", "", SliceString{""}, false},
-		{"comma separated string", "a,b,c", SliceString{"a", "b", "c"}, false},
-		{"byte slice", []byte("x,y,z"), SliceString{"x", "y", "z"}, false},
-		{"single value string", "single", SliceString{"single"}, false},
+		{"empty string", "", SliceString{}, false},
+		{"JSON string", `["a","b,c"]`, SliceString{"a", "b,c"}, false},
+		{"JSON bytes", []byte(`["x","y,z"]`), SliceString{"x", "y,z"}, false},
+		{"legacy comma encoding", "a,b,c", nil, true},
+		{"single legacy value", "single", nil, true},
 		{"unsupported type", 123, nil, true},
 	}
 
@@ -43,10 +42,10 @@ func TestSliceString_Value(t *testing.T) {
 		input    SliceString
 		expected string
 	}{
-		{"nil slice", nil, ""},
-		{"empty slice", SliceString{}, ""},
-		{"single value", SliceString{"foo"}, "foo"},
-		{"multiple values", SliceString{"a", "b", "c"}, "a,b,c"},
+		{"nil slice", nil, "[]"},
+		{"empty slice", SliceString{}, "[]"},
+		{"single value", SliceString{"foo"}, `["foo"]`},
+		{"multiple values preserve commas", SliceString{"a", "b,c"}, `["a","b,c"]`},
 	}
 
 	for _, tt := range tests {
@@ -188,28 +187,6 @@ func TestJSONField_UnmarshalNil(t *testing.T) {
 	}
 	if got.Name != "" {
 		t.Fatalf("Unmarshal() mutated destination = %+v", got)
-	}
-}
-
-func TestIsUniqueConstraintError(t *testing.T) {
-	tests := []struct {
-		name string
-		err  error
-		want bool
-	}{
-		{"nil", nil, false},
-		{"gorm duplicated key", gorm.ErrDuplicatedKey, true},
-		{"duplicate key message", errors.New("duplicate key value violates unique constraint"), true},
-		{"duplicate entry message", errors.New("Duplicate entry 'x' for key"), true},
-		{"other error", errors.New("something else"), false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := isUniqueConstraintError(tt.err); got != tt.want {
-				t.Fatalf("isUniqueConstraintError() = %v, want %v", got, tt.want)
-			}
-		})
 	}
 }
 

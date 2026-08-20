@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -17,6 +18,10 @@ const (
 
 type Executor interface {
 	Run(context.Context, model.ScheduledTask) error
+}
+
+type permanentError interface {
+	IsPermanent() bool
 }
 
 type Manager struct {
@@ -129,6 +134,11 @@ func (m *Manager) finish(task model.ScheduledTask, runAt time.Time, err error) {
 	switch {
 	case err != nil:
 		updates["last_error"] = err.Error()
+		var permanent permanentError
+		if errors.As(err, &permanent) && permanent.IsPermanent() {
+			updates["enabled"] = false
+			updates["next_run_at"] = nil
+		}
 	case scheduleErr != nil:
 		updates["last_error"] = scheduleErr.Error()
 	default:

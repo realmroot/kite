@@ -14,6 +14,7 @@ type ScheduledTask struct {
 	Key             string     `json:"key" gorm:"type:varchar(255);not null;uniqueIndex:idx_scheduled_tasks_cluster_type_key"`
 	Name            string     `json:"name" gorm:"type:varchar(255)"`
 	CreatorID       uint       `json:"creatorId" gorm:"index"`
+	OIDCSessionID   uint       `json:"-" gorm:"column:oidc_session_id;index"`
 	Enabled         bool       `json:"enabled" gorm:"type:boolean;not null;default:false;index"`
 	ScheduleType    string     `json:"scheduleType" gorm:"type:varchar(20);not null;default:interval;index"`
 	IntervalMinutes int        `json:"intervalMinutes" gorm:"not null;default:60"`

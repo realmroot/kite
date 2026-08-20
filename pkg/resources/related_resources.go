@@ -15,11 +15,15 @@ import (
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
 	v1 "k8s.io/api/networking/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
@@ -251,6 +255,49 @@ func discoveryWorkloads(ctx context.Context, k8sClient *kube.K8sClient, namespac
 }
 
 func discoverPodsByService(ctx context.Context, k8sClient *kube.K8sClient, service *corev1.Service) []common.RelatedResource {
+	var sliceList discoveryv1.EndpointSliceList
+	err := k8sClient.List(
+		ctx,
+		&sliceList,
+		client.InNamespace(service.Namespace),
+		client.MatchingLabels{discoveryv1.LabelServiceName: service.Name},
+	)
+	if err == nil {
+		seen := make(map[string]struct{})
+		var relatedPods []common.RelatedResource
+		for _, slice := range sliceList.Items {
+			for _, endpoint := range slice.Endpoints {
+				if endpoint.Conditions.Ready != nil && !*endpoint.Conditions.Ready {
+					continue
+				}
+				if endpoint.TargetRef == nil || endpoint.TargetRef.Kind != "Pod" {
+					continue
+				}
+				namespace := endpoint.TargetRef.Namespace
+				if namespace == "" {
+					namespace = service.Namespace
+				}
+				key := namespace + "\x00" + endpoint.TargetRef.Name
+				if _, exists := seen[key]; exists {
+					continue
+				}
+				seen[key] = struct{}{}
+				relatedPods = append(relatedPods, common.RelatedResource{
+					Type:      string(common.Pods),
+					Namespace: namespace,
+					Name:      endpoint.TargetRef.Name,
+				})
+			}
+		}
+		return relatedPods
+	}
+	if !apierrors.IsNotFound(err) && !meta.IsNoMatchError(err) && !runtime.IsNotRegisteredError(err) {
+		return nil
+	}
+
+	// EndpointSlice has been stable since Kubernetes 1.21. Fall back only when
+	// the API is genuinely unavailable so an authorization failure is never
+	// hidden behind a different resource read.
 	var endpoints corev1.Endpoints
 	if err := k8sClient.Get(ctx, client.ObjectKey{Namespace: service.Namespace, Name: service.Name}, &endpoints); err != nil {
 		// Endpoints might not be found, which is not a critical error.

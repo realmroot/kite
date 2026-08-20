@@ -6,13 +6,13 @@ Kite 在 `/api/v1/<resource>` 下为内置 Kubernetes 资源提供通用的 CRUD
 
 资源接口需要：
 
-- 一个已经认证的用户或 API 密钥
+- 已认证的 OIDC 浏览器会话
 - 一个目标集群，通常通过 `x-cluster-name` 传入
 
 示例：
 
 ```bash
--H "Authorization: kite12-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \
+-H "Cookie: kite_session=<opaque-session-cookie>" \
 -H "x-cluster-name: demo-cluster"
 ```
 
@@ -63,7 +63,7 @@ DELETE /api/v1/<resource>/_all/<name>
 ```bash
 curl \
   -X POST \
-  -H "Authorization: kite12-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \
+  -H "Cookie: kite_session=<opaque-session-cookie>" \
   -H "x-cluster-name: demo-cluster" \
   -H "Content-Type: application/json" \
   -d '{
@@ -90,7 +90,7 @@ curl \
 ```bash
 curl \
   -X PUT \
-  -H "Authorization: kite12-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \
+  -H "Cookie: kite_session=<opaque-session-cookie>" \
   -H "x-cluster-name: demo-cluster" \
   -H "Content-Type: application/json" \
   -d '{
@@ -122,7 +122,7 @@ curl \
 ```bash
 curl \
   -X PATCH \
-  -H "Authorization: kite12-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \
+  -H "Cookie: kite_session=<opaque-session-cookie>" \
   -H "x-cluster-name: demo-cluster" \
   -H "Content-Type: application/json" \
   -d '{
@@ -138,7 +138,7 @@ curl \
 ```bash
 curl \
   -X PATCH \
-  -H "Authorization: kite12-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \
+  -H "Cookie: kite_session=<opaque-session-cookie>" \
   -H "x-cluster-name: demo-cluster" \
   -H "Content-Type: application/json" \
   -d '{
@@ -162,7 +162,7 @@ curl \
 ```bash
 curl \
   -X DELETE \
-  -H "Authorization: kite12-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \
+  -H "Cookie: kite_session=<opaque-session-cookie>" \
   -H "x-cluster-name: demo-cluster" \
   https://kite.example.com/api/v1/configmaps/default/example-config
 ```
@@ -178,7 +178,7 @@ curl \
 ```bash
 curl \
   -X DELETE \
-  -H "Authorization: kite12-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \
+  -H "Cookie: kite_session=<opaque-session-cookie>" \
   -H "x-cluster-name: demo-cluster" \
   "https://kite.example.com/api/v1/deployments/default/example-app?force=true&wait=false"
 ```
@@ -192,7 +192,7 @@ curl \
 ```bash
 curl \
   -X PATCH \
-  -H "Authorization: kite12-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \
+  -H "Cookie: kite_session=<opaque-session-cookie>" \
   -H "x-cluster-name: demo-cluster" \
   -H "Content-Type: application/json" \
   -d '{
@@ -219,3 +219,19 @@ curl \
 - 自定义资源支持 list 和 get
 - 自定义资源支持 update 和 delete
 - 这里没有把自定义资源的 create 和 patch 作为当前稳定文档面来写，当前通用的 create / update / patch / delete 示例以已注册的内置资源路由为准
+
+## 资源历史
+
+内置资源和自定义资源详情路由通过
+`/<resource>/<namespace>/<name>/history` 提供分页历史；集群级资源使用 `_all`。
+读取 Kite 历史数据库之前，后端会使用当前用户 Token 向 Kubernetes 提交
+`SelfSubjectAccessReview`，检查该资源准确的 group、plural、namespace、name 上的
+`get` 权限。拒绝结果返回 `403`；平台管理权限不能绕过这项检查。
+
+历史分页使用从 1 开始的 `page` 和 `pageSize`，其中 `pageSize` 最大为 100。
+Kubernetes Secret 操作仍保留操作者、成功或失败等审计元数据，但 Kite 不会保存
+Secret YAML 正文或原始 Secret 错误详情。从历史执行回滚会产生一次新的 apply，
+并再次由 Kubernetes 授权。
+
+历史记录在内部绑定不可变的集群目录 ID，而不是只依赖显示名称。重命名集群仍能
+保留历史；删除后再使用相同名称创建新集群，也不会把旧 YAML 关联到新集群。

@@ -1,6 +1,6 @@
 # 什么是 Kite？
 
-Kite 是一个轻量级、现代化的 Kubernetes Dashboard，将实时可观测性、多集群与资源管理、企业级用户治理（OAuth、MFA、Passkey、RBAC 和审计日志）以及 AI Agent 集成到同一个工作空间中。它不只是一个工具，更像一个平台。
+Kite 是一个轻量级、现代化的 Kubernetes Dashboard，专注于实时可观测性与多集群资源管理。
 
 ![Dashboard Overview](/screenshots/overview.png)
 
@@ -16,9 +16,9 @@ Kite 是一个轻量级、现代化的 Kubernetes Dashboard，将实时可观测
 ### 多集群管理
 
 - 在多个 Kubernetes 集群间切换
-- 按集群独立配置 Prometheus
-- 自动从 kubeconfig 发现集群
-- 细粒度的集群访问权限控制
+- 每个集群通过 Kubernetes 授权访问 Prometheus
+- 无凭据 Direct 与私网 Tunnel 连接
+- 添加、编辑、切换和删除集群目录记录
 
 ### 资源管理
 
@@ -38,26 +38,26 @@ Kite 是一个轻量级、现代化的 Kubernetes Dashboard，将实时可观测
 - 支持过滤和搜索的实时 Pod 日志
 - 面向 Pod 和 Node 的 Web 终端
 - 内置 kubectl 控制台
-- AI 助手
 
 ### 安全
 
-- OAuth 集成
-- 密码用户 MFA
-- Passkey 登录
-- 基于角色的访问控制
-- 用户管理和角色分配
+- 与提供方无关的 OIDC Authorization Code + PKCE
+- 加密的服务端 Provider 会话
+- 所有资源操作使用 Kubernetes 原生 RBAC
+- 不保存 kubeconfig、bearer token、客户端证书或高权限 ServiceAccount
 
 ## Kite 与 Headlamp / Kubernetes Dashboard 的差异
 
-Headlamp 和 Kubernetes Dashboard 都是优秀的集群操作工具，核心侧重在资源查看与控制。Kite 具备这些 Dashboard 能力，但定位是面向团队协作的运维平台：
+Headlamp 和 Kubernetes Dashboard 都是优秀的资源查看与操作工具。Kite 属于
+同一类专注的 Dashboard，并提供多集群界面：
 
-- 在同一个工作空间整合可观测性、多集群运维、治理能力与 AI 助手
-- 内置团队治理能力：OAuth、MFA、Passkey、RBAC、用户角色映射与审计日志
-- 不止资源视图，还覆盖运维工作流：Web 终端、内置 kubectl 控制台、Kube Proxy
-- 让运维、开发和管理员在同一套系统中协作，而不是拼接多个工具
+- 在同一个工作空间整合可观测性与多集群资源运维
+- 将 OIDC 用户身份直接传递给 Kubernetes 原生授权
+- 日志、Metrics、Helm、Search、终端与 Kube Proxy 等运维工作流
+- 无需第二套资源权限数据库即可记录可归因操作
 
-一句话：它们更像 Dashboard 工具，Kite 更像 Kubernetes 日常运维与协作平台。
+Kite 的产品边界是专业 Kubernetes 资源 Dashboard，而不是通用身份、自动化或
+AI 平台。
 
 ## 开始使用
 

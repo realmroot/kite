@@ -2,6 +2,7 @@ package cluster
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -9,7 +10,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/zxh326/kite/pkg/clusteragent"
+	"github.com/zxh326/kite/pkg/common"
 	"github.com/zxh326/kite/pkg/model"
+	"gorm.io/gorm"
 )
 
 func TestGetClusterAgentManifest(t *testing.T) {
@@ -187,12 +190,9 @@ func TestCreateClusterAgentClusterReturnsConnectionInfo(t *testing.T) {
 	if cluster.ClusterAgentTokenHash == "" {
 		t.Error("ClusterAgentTokenHash should not be empty")
 	}
-	if string(cluster.Config) != "" {
-		t.Errorf("cluster agent cluster should have empty config, got %q", cluster.Config)
-	}
 }
 
-func TestCreateClusterAgentClusterIgnoresKubeconfig(t *testing.T) {
+func TestCreateClusterRejectsCredentialBearingLegacyFields(t *testing.T) {
 	setupClusterHandlerTestDB(t)
 
 	manager := &ClusterManager{clusterAgentManager: clusteragent.NewManager(func() {})}
@@ -201,38 +201,29 @@ func TestCreateClusterAgentClusterIgnoresKubeconfig(t *testing.T) {
 
 	rec := performClusterRequest(router, http.MethodPost, "/clusters",
 		`{"name":"agent-ignore","connectionMode":"tunnel","config":"should-be-ignored","inCluster":true,"prometheusURL":"https://prom.example.com"}`)
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("status = %d, want %d: %s", rec.Code, http.StatusCreated, rec.Body.String())
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d: %s", rec.Code, http.StatusBadRequest, rec.Body.String())
 	}
 
-	cluster, err := model.GetClusterByName("agent-ignore")
-	if err != nil {
-		t.Fatalf("loading cluster: %v", err)
-	}
-	if string(cluster.Config) != "" {
-		t.Errorf("cluster agent cluster config should be empty, got %q", cluster.Config)
-	}
-	if cluster.InCluster {
-		t.Error("cluster agent cluster InCluster should be false")
-	}
-	if cluster.PrometheusURL != "https://prom.example.com" {
-		t.Errorf("cluster agent cluster PrometheusURL = %q, want %q", cluster.PrometheusURL, "https://prom.example.com")
+	if _, err := model.GetClusterByName("agent-ignore"); !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Fatalf("credential-bearing request persisted a cluster: %v", err)
 	}
 }
 
-func TestCreateClusterAgentClusterServerURLDerivation(t *testing.T) {
+func TestCreateClusterAgentClusterUsesConfiguredPublicOrigin(t *testing.T) {
 	setupClusterHandlerTestDB(t)
+	common.Host = "https://kite.example.com"
+	common.Base = "/console"
 
 	manager := &ClusterManager{clusterAgentManager: clusteragent.NewManager(func() {})}
 	router := gin.New()
 	router.POST("/clusters", manager.CreateCluster)
 
-	// Verify that X-Forwarded-Host and X-Forwarded-Proto are respected.
 	rec := httptest.NewRecorder()
 	body := strings.NewReader(`{"name":"agent-fwd","connectionMode":"tunnel"}`)
 	req := httptest.NewRequest(http.MethodPost, "/clusters", body)
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Forwarded-Host", "kite.example.com")
+	req.Header.Set("X-Forwarded-Host", "attacker.example.com")
 	req.Header.Set("X-Forwarded-Proto", "https")
 	router.ServeHTTP(rec, req)
 	if rec.Code != http.StatusCreated {
@@ -244,8 +235,8 @@ func TestCreateClusterAgentClusterServerURLDerivation(t *testing.T) {
 		t.Fatalf("decoding response: %v", err)
 	}
 	serverURL, _ := result["clusterAgentServer"].(string)
-	if !strings.HasPrefix(serverURL, "https://kite.example.com") {
-		t.Errorf("serverURL = %q, want https://kite.example.com prefix", serverURL)
+	if serverURL != "https://kite.example.com/console" {
+		t.Errorf("serverURL = %q, want configured public origin", serverURL)
 	}
 }
 

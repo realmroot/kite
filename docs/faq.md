@@ -4,11 +4,10 @@
 
 By default, Kite does not collect any analytics data.
 
-If you would like to help improve the product, you can set the environment variable `ENABLE_ANALYTICS` to `true`.
-
-Kite will use umami to collect minimal anonymous usage data.
-
-The source code can be found [here](https://github.com/kite-org/kite/blob/main/pkg/utils/utils.go#L10-L16).
+Kite has no built-in analytics account or destination. An operator may configure
+their own Umami-compatible `ANALYTICS_SCRIPT_URL` and `ANALYTICS_WEBSITE_ID`,
+then enable the integration with `ENABLE_ANALYTICS=true` or the admin settings
+page. The browser script is not loaded while the integration is disabled.
 
 ## Permission Issues
 
@@ -18,17 +17,19 @@ If you encounter an error message like the following when accessing resources:
 User admin does not have permission to get configmaps in namespace kite in cluster in-cluster
 ```
 
-This means that user `admin` does not have permission to access `configmaps` resources in the `kite` namespace.
+This means Kubernetes authenticated the displayed OIDC identity but native RBAC
+does not allow it to read `configmaps` in the `kite` namespace.
 
 You need to refer to the [RBAC Configuration Guide](./config/rbac-config) to configure user permissions.
 
 ## Managed Kubernetes Cluster Connection Issues
 
-If you're using a managed Kubernetes cluster (AKS, EKS, GKE, etc.) and encounter authentication errors when adding the cluster to Kite, this is usually because the default kubeconfig uses `exec` plugins that require CLI tools (like `kubelogin`, `aws`, or `gcloud`).
+Cloud CLI kubeconfigs and `exec` plugins are not used by Kite. The managed API
+server must accept the same external OIDC issuer and audience used for Kite
+login; otherwise direct user-token propagation is not compatible as-is. Do not
+work around this by creating a shared ServiceAccount token.
 
-Kite runs as a server-side application and cannot execute these client-side authentication tools. Instead, you should use Service Account token-based authentication.
-
-Please refer to the [Managed Kubernetes Cluster Configuration Guide](./config/managed-k8s-auth) for detailed instructions on creating and using Service Account tokens for authentication.
+See the [Managed Kubernetes authentication guide](./config/managed-k8s-auth).
 
 ## Persistence Issues
 
@@ -57,14 +58,12 @@ This issue is related to the pure Go SQLite driver used by Kite (to avoid CGO de
 ```yaml
 db:
   sqlite:
-    options: "_journal_mode=WAL&_busy_timeout=5000"
+    options: "_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)"
 ```
 
 These options enable Write-Ahead Logging (WAL) mode and increase the busy timeout, which resolves most hostPath compatibility issues.
 
 **Recommended for Production**: For production deployments requiring persistent storage, use MySQL or PostgreSQL instead of SQLite. These databases are better suited for containerized environments and persistent storage scenarios.
-
-For more details, see [Issue #204](https://github.com/kite-org/kite/issues/204).
 
 ## How to Change Font
 
@@ -96,7 +95,7 @@ body {
 
 We welcome contributions! You can:
 
-- Report bugs and feature requests on [GitHub Issues](https://github.com/kite-org/kite/issues)
+- Report bugs and feature requests in this repository's issue tracker
 - Submit pull requests
 - Improve documentation
 - Share feedback and use cases
@@ -105,9 +104,10 @@ We welcome contributions! You can:
 
 You can get support through:
 
-- [GitHub Issues](https://github.com/kite-org/kite/issues) for bug reports and feature requests
-- [Slack Community](https://join.slack.com/t/kite-dashboard/shared_invite/zt-3amy6f23n-~QZYoricIOAYtgLs_JagEw) for questions and community support
+- This repository's issue tracker for bug reports and feature requests
+- The deployment and architecture guides for operational questions
 
 ---
 
-**Didn't find what you're looking for?** Feel free to [open an issue](https://github.com/kite-org/kite/issues/new) on GitHub or start a [discussion](https://github.com/kite-org/kite/discussions).
+**Didn't find what you're looking for?** Open an issue in the repository that
+published your Kite build and include the version endpoint output.

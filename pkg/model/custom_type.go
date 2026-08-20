@@ -84,24 +84,36 @@ func (s *SliceString) Scan(value interface{}) error {
 		*s = nil
 		return nil
 	}
-	var strArray []string
+	var encoded []byte
 	switch v := value.(type) {
 	case string:
-		strArray = strings.Split(v, ",")
+		encoded = []byte(v)
 	case []byte:
-		strArray = strings.Split(string(v), ",")
+		encoded = v
 	default:
 		return fmt.Errorf("cannot scan %T into SliceString", value)
 	}
-	*s = SliceString(strArray)
+	if len(encoded) == 0 {
+		*s = SliceString{}
+		return nil
+	}
+	var values []string
+	if err := json.Unmarshal(encoded, &values); err != nil {
+		return fmt.Errorf("decode string list: %w", err)
+	}
+	*s = SliceString(values)
 	return nil
 }
 
 func (s SliceString) Value() (driver.Value, error) {
 	if s == nil {
-		return "", nil
+		return "[]", nil
 	}
-	return strings.Join(s, ","), nil
+	encoded, err := json.Marshal([]string(s))
+	if err != nil {
+		return nil, fmt.Errorf("encode string list: %w", err)
+	}
+	return string(encoded), nil
 }
 
 // JSONField stores arbitrary JSON data

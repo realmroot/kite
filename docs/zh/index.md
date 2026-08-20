@@ -5,7 +5,7 @@ layout: home
 hero:
   name: "Kite"
   text: "现代 Kubernetes 仪表盘"
-  tagline: "在一个工作空间中统一可观测性、多集群运维、用户治理与 AI Agent"
+  tagline: "跨集群查看、操作与排查 Kubernetes 资源"
   image:
     src: /logo.svg
     alt: Kite Logo
@@ -14,11 +14,8 @@ hero:
       text: 开始使用
       link: /zh/guide/
     - theme: alt
-      text: GitHub 查看
-      link: https://github.com/kite-org/kite
-    - theme: alt
-      text: 查看演示
-      link: https://kite-demo.zzde.me
+      text: 架构说明
+      link: /oidc-kubernetes
 
 features:
   - icon: 🖥️
@@ -26,7 +23,7 @@ features:
     details: 暗色/亮色/彩色主题、全局搜索、响应式设计与国际化支持
   - icon: 🏘
     title: 多集群管理
-    details: 快速切换多个集群，支持按集群独立配置 Prometheus、kubeconfig 自动发现与细粒度访问控制
+    details: 无凭据 Direct/Tunnel 连接，以及经 Kubernetes 授权的 Prometheus
   - icon: 🔍
     title: 资源管理
     details: 全资源覆盖、实时 YAML 编辑、资源关系展示、CRD 与 Helm 支持、Kube Proxy 直连访问
@@ -35,8 +32,5 @@ features:
     details: 实时指标、Pod 日志、Pod/Node Web 终端与内置 kubectl 控制台
   - icon: 🔐
     title: 安全
-    details: OAuth 集成、MFA、Passkey 登录、RBAC、用户管理、角色映射与审计日志
-  - icon: 🤖
-    title: AI 助手
-    details: 内置 AI 助手，加速日常集群运维与问题排查
+    details: 标准 OIDC 会话、身份直传、Kubernetes 原生 RBAC 与审计记录
 ---

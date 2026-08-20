@@ -27,7 +27,7 @@ func Logger() gin.HandlerFunc {
 			name := "-"
 			if v, ok := param.Keys["user"]; ok {
 				if user, ok := v.(model.User); ok {
-					name = user.Key()
+					name = user.Username
 				}
 			}
 

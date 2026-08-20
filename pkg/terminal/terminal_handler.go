@@ -37,7 +37,7 @@ func (h *TerminalHandler) HandleTerminalWebSocket(c *gin.Context) {
 		defer session.Close()
 
 		if err := session.Start(ws.Context, "exec"); err != nil {
-			klog.Errorf("Terminal session error: %v", err)
+			klog.V(2).Infof("Terminal session ended: %v", err)
 		}
 	})
 }

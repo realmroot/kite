@@ -8,7 +8,11 @@ import { ClusterProvider } from './cluster-context'
 
 const mocks = vi.hoisted(() => ({
   resetQueries: vi.fn().mockResolvedValue(undefined),
-  refetchClusters: vi.fn(),
+  clusterQuery: {
+    data: [{ name: 'local-kind', isDefault: true }],
+    isLoading: false,
+    error: null,
+  },
 }))
 
 vi.mock('@tanstack/react-query', () => ({
@@ -16,7 +20,7 @@ vi.mock('@tanstack/react-query', () => ({
 }))
 
 vi.mock('@/lib/api/cluster', () => ({
-  useCurrentClusterList: () => ({ refetch: mocks.refetchClusters }),
+  useCurrentClusterList: () => mocks.clusterQuery,
 }))
 
 const wrapper = ({ children }: { children: ReactNode }) => (
@@ -28,9 +32,7 @@ describe('ClusterProvider', () => {
     localStorage.setItem('current-cluster', 'removed-cluster')
     sessionStorage.setItem('current-cluster', 'removed-cluster')
     mocks.resetQueries.mockClear()
-    mocks.refetchClusters.mockResolvedValue({
-      data: [{ name: 'local-kind', isDefault: true }],
-    })
+    mocks.clusterQuery.data = [{ name: 'local-kind', isDefault: true }]
   })
 
   it('recovers a removed persisted cluster without requiring a reload', async () => {

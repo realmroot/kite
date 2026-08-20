@@ -18,11 +18,21 @@ on:
       - "**/*.tsx"
       - "**/*.css"
       - "go.mod"
+      - "go.sum"
+      - "ui/pnpm-lock.yaml"
       - "ui/package.json"
       - "ui/vite.config.ts"
       - "ui/tsconfig*.json"
       - "ui/eslint.config.js"
+      - "docs/**"
+      - "README.md"
+      - "README_zh.md"
       - "Dockerfile*"
+      - "charts/**"
+      - "deploy/**"
+      - "scripts/**"
+      - "Makefile"
+      - ".github/workflows/**"
   pull_request:
     branches: [main]
     paths:
@@ -32,11 +42,21 @@ on:
       - "**/*.css"
       - ".github/workflows/ci.yml"
       - "go.mod"
+      - "go.sum"
+      - "ui/pnpm-lock.yaml"
       - "ui/package.json"
       - "ui/vite.config.ts"
       - "ui/tsconfig*.json"
       - "ui/eslint.config.js"
+      - "docs/**"
+      - "README.md"
+      - "README_zh.md"
       - "Dockerfile*"
+      - "charts/**"
+      - "deploy/**"
+      - "scripts/**"
+      - "Makefile"
+      - ".github/workflows/**"
 
 env:
   GO_VERSION: "1.26"
@@ -53,13 +73,15 @@ jobs:
 
       - uses: pnpm/action-setup@v4
         with:
-          version: 10
+          version: 10.30.2
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "pnpm"
-          cache-dependency-path: ui/pnpm-lock.yaml
+          cache-dependency-path: |
+            ui/pnpm-lock.yaml
+            docs/pnpm-lock.yaml
 
       - name: Setup Go
         uses: actions/setup-go@v6
@@ -77,6 +99,8 @@ jobs:
         with:
           version: v2.11.4
       - name: lint
-        run: make pre-commit
+        run: make verify
       - name: Test
         run: make test
+      - name: Documentation
+        run: make docs-build

@@ -8,68 +8,51 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"github.com/zxh326/kite/pkg/cluster"
-	"github.com/zxh326/kite/pkg/common"
 	"github.com/zxh326/kite/pkg/kube"
-	"github.com/zxh326/kite/pkg/model"
 	"github.com/zxh326/kite/pkg/wsutil"
 )
 
-func TestLogsWebSocketEnforcesRBACAndValidatesOptions(t *testing.T) {
-	t.Skip("application RBAC prechecks were removed; Kubernetes authorizes log requests")
+func TestLogsWebSocketValidatesOptionsBeforeStreaming(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	clientSet := &cluster.ClientSet{Name: "prod", K8sClient: &kube.K8sClient{}}
-	handler := &LogsHandler{}
 	router := gin.New()
-	router.GET("/unauthorized/:namespace/:podName", func(c *gin.Context) {
+	router.GET("/logs/:namespace/:podName", func(c *gin.Context) {
 		c.Set("cluster", clientSet)
-		c.Set("user", model.User{Username: "alice"})
-		handler.HandleLogsWebSocket(c)
-	})
-	router.GET("/authorized/:namespace/:podName", func(c *gin.Context) {
-		c.Set("cluster", clientSet)
-		c.Set("user", model.User{Username: "alice", Roles: []common.Role{{
-			Name:       "log-reader",
-			Clusters:   []string{"prod"},
-			Namespaces: []string{"default"},
-			Resources:  []string{"pods"},
-			Verbs:      []string{"log"},
-		}}})
-		handler.HandleLogsWebSocket(c)
+		NewLogsHandler().HandleLogsWebSocket(c)
 	})
 	server := httptest.NewServer(router)
 	t.Cleanup(server.Close)
 
 	tests := []struct {
-		path        string
+		name        string
+		query       string
 		wantMessage string
 	}{
-		{"/unauthorized/default/web", "does not have permission to log pods"},
-		{"/authorized/default/web?tailLines=invalid", "invalid tailLines parameter"},
-		{"/authorized/default/web?sinceSeconds=invalid", "invalid sinceSeconds parameter"},
+		{name: "tail lines", query: "tailLines=invalid", wantMessage: "invalid tailLines parameter"},
+		{name: "since seconds", query: "sinceSeconds=invalid", wantMessage: "invalid sinceSeconds parameter"},
+		{name: "label selector", query: "labelSelector=%5Binvalid", wantMessage: "invalid labelSelector parameter"},
 	}
-	for _, tt := range tests {
-		t.Run(tt.path, func(t *testing.T) {
-			url := "ws" + strings.TrimPrefix(server.URL, "http") + tt.path
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			url := "ws" + strings.TrimPrefix(server.URL, "http") + "/logs/default/" + func() string {
+				if test.name == "label selector" {
+					return "_all"
+				}
+				return "web"
+			}() + "?" + test.query
 			conn, response, err := websocket.DefaultDialer.Dial(url, nil)
 			if response != nil {
-				defer func() {
-					_ = response.Body.Close()
-				}()
+				defer func() { _ = response.Body.Close() }()
 			}
 			if err != nil {
-				if response != nil {
-					t.Fatalf("dialing WebSocket: %v, status=%d", err, response.StatusCode)
-				}
-				t.Fatalf("dialing WebSocket: %v", err)
+				t.Fatalf("dial WebSocket: %v", err)
 			}
-			defer func() {
-				_ = conn.Close()
-			}()
+			defer func() { _ = conn.Close() }()
 			var message wsutil.Message
 			if err := conn.ReadJSON(&message); err != nil {
-				t.Fatalf("reading error message: %v", err)
+				t.Fatalf("read error message: %v", err)
 			}
-			if message.Type != "error" || !strings.Contains(message.Data, tt.wantMessage) {
+			if message.Type != "error" || !strings.Contains(message.Data, test.wantMessage) {
 				t.Fatalf("message = %#v", message)
 			}
 		})

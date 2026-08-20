@@ -34,17 +34,17 @@ const shouldRefreshForClusterSwitch = (query: {
 export const ClusterProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
-  const [clusters, setClusters] = useState<Cluster[]>([])
   const [currentCluster, setCurrentClusterState] = useState<string | null>(
     getCurrentCluster()
   )
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<Error | null>(null)
   const [isSwitching, setIsSwitching] = useState(false)
   const queryClient = useQueryClient()
-  const { refetch: refetchClusters } = useCurrentClusterList({
-    enabled: false,
-  })
+  const {
+    data: clusters = [],
+    isLoading,
+    error: queryError,
+  } = useCurrentClusterList()
+  const error = queryError instanceof Error ? queryError : null
 
   useEffect(() => {
     if (currentCluster) {
@@ -53,33 +53,6 @@ export const ClusterProvider: React.FC<{ children: React.ReactNode }> = ({
     }
     clearCurrentCluster()
   }, [currentCluster])
-
-  useEffect(() => {
-    let cancelled = false
-
-    const bootstrap = async () => {
-      setIsLoading(true)
-      const result = await refetchClusters()
-      if (cancelled) {
-        return
-      }
-
-      if (result.data) {
-        setClusters(result.data)
-        setError(null)
-      } else {
-        setClusters([])
-        setError(result.error instanceof Error ? result.error : null)
-      }
-      setIsLoading(false)
-    }
-
-    void bootstrap()
-
-    return () => {
-      cancelled = true
-    }
-  }, [refetchClusters])
 
   useEffect(() => {
     if (clusters.length === 0) {

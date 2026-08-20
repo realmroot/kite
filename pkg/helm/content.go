@@ -32,7 +32,7 @@ func (h *HelmChartHandler) ListCharts(c *gin.Context) {
 
 	items := []helmChart{}
 	for _, repository := range repositories {
-		indexFile, err := h.loadRepositoryIndex(repository)
+		indexFile, err := h.loadRepositoryIndex(c.Request.Context(), repository)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -64,7 +64,7 @@ func (h *HelmChartHandler) GetChart(c *gin.Context) {
 		return
 	}
 
-	indexFile, err := h.loadRepositoryIndex(repository)
+	indexFile, err := h.loadRepositoryIndex(c.Request.Context(), repository)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -76,7 +76,7 @@ func (h *HelmChartHandler) GetChart(c *gin.Context) {
 		return
 	}
 
-	content, err := h.loadChartContent(repository, entry)
+	content, err := h.loadChartContent(c.Request.Context(), repository, entry)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -116,7 +116,7 @@ func (h *HelmChartHandler) GetChartContent(c *gin.Context) {
 		return
 	}
 
-	indexFile, err := h.loadRepositoryIndex(repository)
+	indexFile, err := h.loadRepositoryIndex(c.Request.Context(), repository)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -128,7 +128,7 @@ func (h *HelmChartHandler) GetChartContent(c *gin.Context) {
 		return
 	}
 
-	content, err := h.loadChartContent(repository, entry)
+	content, err := h.loadChartContent(c.Request.Context(), repository, entry)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

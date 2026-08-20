@@ -4,7 +4,7 @@ WORKDIR /app/ui
 
 COPY ui/package.json ui/pnpm-lock.yaml ./
 
-RUN npm install -g pnpm && \
+RUN npm install -g pnpm@10.30.2 && \
     pnpm install --frozen-lockfile
 
 COPY ui/ ./
@@ -24,11 +24,13 @@ COPY . .
 COPY --from=frontend-builder /app/static ./static
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o kite .
 
-FROM gcr.io/distroless/static
+FROM gcr.io/distroless/static-debian12:nonroot
 
 WORKDIR /app
 
 COPY --from=backend-builder /app/kite .
+
+USER nonroot:nonroot
 
 EXPOSE 8080
 

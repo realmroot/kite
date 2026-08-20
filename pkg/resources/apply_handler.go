@@ -124,28 +124,33 @@ func (h *ResourceApplyHandler) ApplyResource(c *gin.Context) {
 		if err != nil {
 			errMessage = err.Error()
 		}
-		model.DB.Create(&model.ResourceHistory{
+		resourceYAML := docYAML
+		previousResourceYAML := string(previousYAML)
+		if resource == string(common.Secrets) {
+			resourceYAML = ""
+			previousResourceYAML = ""
+			if errMessage != "" {
+				errMessage = "Kubernetes Secret operation failed; details omitted"
+			}
+		}
+		if historyErr := model.DB.Create(&model.ResourceHistory{
+			ClusterID:     cs.ClusterID,
 			ClusterName:   cs.Name,
 			ResourceType:  resource,
 			ResourceName:  obj.GetName(),
 			Namespace:     obj.GetNamespace(),
 			OperationType: "apply",
-			ResourceYAML:  docYAML,
-			PreviousYAML:  string(previousYAML),
+			ResourceYAML:  resourceYAML,
+			PreviousYAML:  previousResourceYAML,
 			OperatorID:    user.ID,
 			Success:       err == nil,
 			ErrorMessage:  errMessage,
-		})
+		}).Error; historyErr != nil {
+			klog.Errorf("Failed to create resource history: %v", historyErr)
+		}
 
 		if err != nil {
-			switch operation {
-			case "create":
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create resource: " + err.Error()})
-			case "update":
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update resource: " + err.Error()})
-			default:
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get resource: " + err.Error()})
-			}
+			writeKubernetesError(c, err, "Failed to "+operation+" resource")
 			return
 		}
 

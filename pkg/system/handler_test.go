@@ -8,7 +8,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/zxh326/kite/pkg/cluster"
-	"github.com/zxh326/kite/pkg/common"
 	"github.com/zxh326/kite/pkg/kube"
 	"github.com/zxh326/kite/pkg/model"
 	corev1 "k8s.io/api/core/v1"
@@ -113,10 +112,7 @@ func TestGetOverviewAggregatesClusterResources(t *testing.T) {
 		Name:      "prod",
 		K8sClient: &kube.K8sClient{Client: client},
 	}
-	user := model.User{Username: "alice", Roles: []common.Role{{
-		Name:     "prod-viewer",
-		Clusters: []string{"prod"},
-	}}}
+	user := model.User{Username: "alice"}
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
 	ctx.Request = httptest.NewRequest(http.MethodGet, "/overview", nil)

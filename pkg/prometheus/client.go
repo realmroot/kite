@@ -2,8 +2,10 @@ package prometheus
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -115,9 +117,9 @@ func (c *Client) GetResourceUsageHistory(ctx context.Context, instance string, d
 		`resource="memory"`,
 	}
 	if instance != "" {
-		conditions = append(conditions, fmt.Sprintf(`%s="%s"`, nodeLabel, instance))
-		cpuConditions = append(cpuConditions, fmt.Sprintf(`node="%s"`, instance))
-		memoryConditions = append(memoryConditions, fmt.Sprintf(`node="%s"`, instance))
+		conditions = append(conditions, exactLabelMatcher(nodeLabel, instance))
+		cpuConditions = append(cpuConditions, exactLabelMatcher("node", instance))
+		memoryConditions = append(memoryConditions, exactLabelMatcher("node", instance))
 	}
 
 	// Query CPU usage percentage - using container CPU usage
@@ -136,7 +138,7 @@ func (c *Client) GetResourceUsageHistory(ctx context.Context, instance string, d
 
 	conditions = []string{}
 	if instance != "" {
-		conditions = append(conditions, fmt.Sprintf(`%s="%s"`, nodeLabel, instance))
+		conditions = append(conditions, exactLabelMatcher(nodeLabel, instance))
 	}
 
 	// Query Network incoming bytes rate (bytes per second)
@@ -183,11 +185,13 @@ func (c *Client) queryRange(ctx context.Context, query string, start, end time.T
 
 	result, warnings, err := c.client.QueryRange(ctx, query, r)
 	if err != nil {
-		klog.Error("queryRange", "error", err)
+		if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+			klog.Errorf("Prometheus range query failed: %v", err)
+		}
 		return nil, err
 	}
 	if len(warnings) > 0 {
-		fmt.Printf("Warnings: %v\n", warnings)
+		klog.V(2).Infof("Prometheus range query warnings: %v", warnings)
 	}
 
 	dataPoints := []UsageDataPoint{}
@@ -233,13 +237,13 @@ func (c *Client) GetCPUUsage(ctx context.Context, namespace, podNamePrefix, cont
 		`container!=""`,    // Exclude empty containers
 	}
 	if podNamePrefix != "" {
-		conditions = append(conditions, fmt.Sprintf(`pod=~"%s.*"`, podNamePrefix))
+		conditions = append(conditions, exactLabelMatcher("pod", podNamePrefix))
 	}
 	if container != "" {
-		conditions = append(conditions, fmt.Sprintf(`container="%s"`, container))
+		conditions = append(conditions, exactLabelMatcher("container", container))
 	}
 	if namespace != "" {
-		conditions = append(conditions, fmt.Sprintf(`namespace="%s"`, namespace))
+		conditions = append(conditions, exactLabelMatcher("namespace", namespace))
 	}
 	query := fmt.Sprintf(`sum(rate(container_cpu_usage_seconds_total{%s}[1m]))`, strings.Join(conditions, ","))
 	return c.queryRange(ctx, query, start, end, step)
@@ -252,13 +256,13 @@ func (c *Client) GetMemoryUsage(ctx context.Context, namespace, podNamePrefix, c
 		`container!=""`,    // Exclude empty containers
 	}
 	if podNamePrefix != "" {
-		conditions = append(conditions, fmt.Sprintf(`pod=~"%s.*"`, podNamePrefix))
+		conditions = append(conditions, exactLabelMatcher("pod", podNamePrefix))
 	}
 	if container != "" {
-		conditions = append(conditions, fmt.Sprintf(`container="%s"`, container))
+		conditions = append(conditions, exactLabelMatcher("container", container))
 	}
 	if namespace != "" {
-		conditions = append(conditions, fmt.Sprintf(`namespace="%s"`, namespace))
+		conditions = append(conditions, exactLabelMatcher("namespace", namespace))
 	}
 	query := fmt.Sprintf(`sum(container_memory_working_set_bytes{%s}) / 1024 / 1024`, strings.Join(conditions, ","))
 	return c.queryRange(ctx, query, start, end, step)
@@ -267,13 +271,13 @@ func (c *Client) GetMemoryUsage(ctx context.Context, namespace, podNamePrefix, c
 func (c *Client) GetNetworkInUsage(ctx context.Context, namespace, podNamePrefix, container string, start, end time.Time, step time.Duration) ([]UsageDataPoint, error) {
 	conditions := []string{}
 	if podNamePrefix != "" {
-		conditions = append(conditions, fmt.Sprintf(`pod=~"%s.*"`, podNamePrefix))
+		conditions = append(conditions, exactLabelMatcher("pod", podNamePrefix))
 	}
 	if container != "" {
-		conditions = append(conditions, fmt.Sprintf(`container="%s"`, container))
+		conditions = append(conditions, exactLabelMatcher("container", container))
 	}
 	if namespace != "" {
-		conditions = append(conditions, fmt.Sprintf(`namespace="%s"`, namespace))
+		conditions = append(conditions, exactLabelMatcher("namespace", namespace))
 	}
 	query := fmt.Sprintf(`sum(rate(container_network_receive_bytes_total{%s}[1m]))`, strings.Join(conditions, ","))
 	return c.queryRange(ctx, query, start, end, step)
@@ -282,13 +286,13 @@ func (c *Client) GetNetworkInUsage(ctx context.Context, namespace, podNamePrefix
 func (c *Client) GetNetworkOutUsage(ctx context.Context, namespace, podNamePrefix, container string, start, end time.Time, step time.Duration) ([]UsageDataPoint, error) {
 	conditions := []string{}
 	if podNamePrefix != "" {
-		conditions = append(conditions, fmt.Sprintf(`pod=~"%s.*"`, podNamePrefix))
+		conditions = append(conditions, exactLabelMatcher("pod", podNamePrefix))
 	}
 	if container != "" {
-		conditions = append(conditions, fmt.Sprintf(`container="%s"`, container))
+		conditions = append(conditions, exactLabelMatcher("container", container))
 	}
 	if namespace != "" {
-		conditions = append(conditions, fmt.Sprintf(`namespace="%s"`, namespace))
+		conditions = append(conditions, exactLabelMatcher("namespace", namespace))
 	}
 	query := fmt.Sprintf(`sum(rate(container_network_transmit_bytes_total{%s}[1m]))`, strings.Join(conditions, ","))
 	return c.queryRange(ctx, query, start, end, step)
@@ -300,13 +304,13 @@ func (c *Client) GetDiskReadUsage(ctx context.Context, namespace, podNamePrefix,
 		`container!=""`,    // Exclude empty containers
 	}
 	if podNamePrefix != "" {
-		conditions = append(conditions, fmt.Sprintf(`pod=~"%s.*"`, podNamePrefix))
+		conditions = append(conditions, exactLabelMatcher("pod", podNamePrefix))
 	}
 	if container != "" {
-		conditions = append(conditions, fmt.Sprintf(`container="%s"`, container))
+		conditions = append(conditions, exactLabelMatcher("container", container))
 	}
 	if namespace != "" {
-		conditions = append(conditions, fmt.Sprintf(`namespace="%s"`, namespace))
+		conditions = append(conditions, exactLabelMatcher("namespace", namespace))
 	}
 	query := fmt.Sprintf(`sum(rate(container_fs_reads_bytes_total{%s}[1m]))`, strings.Join(conditions, ","))
 	return c.queryRange(ctx, query, start, end, step)
@@ -318,16 +322,20 @@ func (c *Client) GetDiskWriteUsage(ctx context.Context, namespace, podNamePrefix
 		`container!=""`,    // Exclude empty containers
 	}
 	if podNamePrefix != "" {
-		conditions = append(conditions, fmt.Sprintf(`pod=~"%s.*"`, podNamePrefix))
+		conditions = append(conditions, exactLabelMatcher("pod", podNamePrefix))
 	}
 	if container != "" {
-		conditions = append(conditions, fmt.Sprintf(`container="%s"`, container))
+		conditions = append(conditions, exactLabelMatcher("container", container))
 	}
 	if namespace != "" {
-		conditions = append(conditions, fmt.Sprintf(`namespace="%s"`, namespace))
+		conditions = append(conditions, exactLabelMatcher("namespace", namespace))
 	}
 	query := fmt.Sprintf(`sum(rate(container_fs_writes_bytes_total{%s}[1m]))`, strings.Join(conditions, ","))
 	return c.queryRange(ctx, query, start, end, step)
+}
+
+func exactLabelMatcher(label, value string) string {
+	return label + "=" + strconv.Quote(value)
 }
 
 func FillMissingDataPoints(startTime time.Time, step time.Duration, existing []UsageDataPoint) []UsageDataPoint {

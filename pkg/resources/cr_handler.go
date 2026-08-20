@@ -4,7 +4,6 @@ import (
 	"context"
 	"math"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -106,6 +105,7 @@ func (h *CRHandler) recordHistory(c *gin.Context, crd *apiextensionsv1.CustomRes
 	}
 
 	history := model.ResourceHistory{
+		ClusterID:     cs.ClusterID,
 		ClusterName:   cs.Name,
 		ResourceType:  crd.Name,
 		ResourceName:  resourceName,
@@ -449,21 +449,21 @@ func (h *CRHandler) ListHistory(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "namespace is required for namespaced custom resources"})
 		return
 	}
-
-	pageSize, err := strconv.Atoi(c.DefaultQuery("pageSize", "10"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid pageSize parameter"})
+	authorizationNamespace := namespace
+	if crd.Spec.Scope == apiextensionsv1.ClusterScoped {
+		authorizationNamespace = ""
+	}
+	if !authorizeResourceHistoryRead(c, cs, crd.Spec.Group, crd.Spec.Names.Plural, authorizationNamespace, resourceName) {
 		return
 	}
-	page, err := strconv.Atoi(c.DefaultQuery("page", "1"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid page parameter"})
+	page, pageSize, ok := parseHistoryPagination(c)
+	if !ok {
 		return
 	}
 
 	baseQuery := func() *gorm.DB {
-		query := model.DB.Model(&model.ResourceHistory{}).
-			Where("cluster_name = ? AND resource_type = ? AND resource_name = ?", cs.Name, crd.Name, resourceName)
+		query := scopeResourceHistoryCluster(model.DB.Model(&model.ResourceHistory{}), cs).
+			Where("resource_type = ? AND resource_name = ?", crd.Name, resourceName)
 		if crd.Spec.Scope == apiextensionsv1.NamespaceScoped {
 			return query.Where("namespace = ?", namespace)
 		}
@@ -478,7 +478,7 @@ func (h *CRHandler) ListHistory(c *gin.Context) {
 
 	history := []model.ResourceHistory{}
 	if err := baseQuery().Preload("Operator", func(db *gorm.DB) *gorm.DB {
-		return db.Select("id", "username", "provider")
+		return db.Select("id", "issuer", "sub", "username", "name", "avatar_url")
 	}).Order("created_at DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&history).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

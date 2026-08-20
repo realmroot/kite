@@ -31,12 +31,6 @@ type ResourceMetric struct {
 	Mem Resource `json:"memory,omitempty"`
 }
 
-type PasswordLoginRequest struct {
-	Username string `json:"username" binding:"required"`
-	Password string `json:"password" binding:"required"`
-	MFACode  string `json:"mfa_code"`
-}
-
 type ClusterInfo struct {
 	Name      string `json:"name"`
 	Version   string `json:"version"`

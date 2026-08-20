@@ -59,7 +59,7 @@ describe('getFavorites', () => {
   })
 
   it('returns an empty list for invalid JSON', () => {
-    localStorage.setItem('cluster-a-kite-favorites', '{')
+    localStorage.setItem('cluster-a-kite-favorites:local', '{')
 
     expect(getFavorites()).toEqual([])
   })
@@ -69,10 +69,19 @@ describe('favorites storage helpers', () => {
   it('saves and reads favorites for the current cluster', () => {
     saveFavorites([resource])
 
-    expect(localStorage.getItem('cluster-a-kite-favorites')).toBe(
+    expect(localStorage.getItem('cluster-a-kite-favorites:local')).toBe(
       JSON.stringify([resource])
     )
     expect(getFavorites()).toEqual([resource])
+  })
+
+  it('isolates favorites by OIDC principal', () => {
+    addToFavorites(resource, 'https://issuer.example\u0000alice')
+
+    expect(getFavorites('https://issuer.example\u0000alice')).toEqual([
+      resource,
+    ])
+    expect(getFavorites('https://issuer.example\u0000bob')).toEqual([])
   })
 
   it('adds resources once and removes them by id', () => {

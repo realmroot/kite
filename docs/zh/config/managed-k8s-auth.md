@@ -1,113 +1,27 @@
----
-title: 托管 Kubernetes 集群配置
----
+# 托管 Kubernetes 认证
 
-# 托管 Kubernetes 集群配置
+Kite 不导入 `kubectl` 使用的云厂商 CLI kubeconfig。只有当托管集群 API Server
+能够认证 Kite 使用的同一外部 OIDC issuer 与 audience 时，该集群才兼容。
 
-## 问题说明
+## 兼容性检查
 
-像 AKS (Azure Kubernetes Service)、EKS (Amazon Elastic Kubernetes Service) 等托管 Kubernetes 集群,默认的 kubeconfig 通常使用 `exec` 插件动态获取认证凭证。例如:
+确认托管服务允许：
 
-- **AKS** 使用 `kubelogin` 命令
-- **EKS** 使用 `aws` CLI
-- **GKE** 使用 `gcloud` 命令
+1. 信任外部 OIDC issuer 及其签名密钥；
+2. 接受 Kite OIDC Client ID 作为 token audience；
+3. 配置或明确 username/groups claim；
+4. 为这些身份创建原生 RoleBinding/ClusterRoleBinding；以及
+5. 提供 Kite 可直接访问或通过 transport-only 隧道访问的 HTTPS API 地址。
 
-这种认证方式在本地客户端环境中运行良好,但在 Kite 这样的服务端环境中会失败,因为:
+添加集群时只填写 API URL、CA Bundle、可选 TLS Server Name 和连接模式。
 
-1. 服务器上可能没有安装这些 CLI 工具
-2. 即使安装了,服务器环境也可能没有相应的身份认证配置
-3. 多租户场景下难以管理不同用户的凭证
+基于短时 `exec` 插件的云 IAM Authenticator 与直接 OIDC 不是同一协议。Kite
+不会执行云 CLI、保存其 token、创建高权限 ServiceAccount，或通过用户模拟弥合
+差异。
 
-### 使用 Service Account Tok
+如果服务无法信任此外部 issuer，它目前不兼容用户 token 直传。未来任何厂商
+桥接都需要独立评审的 Workload Identity 与 Token Exchange 设计；不要通过给
+Kite `cluster-admin` 解决。
 
-为 Kite 创建一个专用的 Service Account,并使用其 token 进行认证。
-
-kite 提供了一个辅助创建的脚本
-
-```sh
-wget https://raw.githubusercontent.com/kite-org/kite/refs/heads/main/scripts/generate-kite-kubeconfig.sh -O generate-kite-kubeconfig.sh
-chmod +x generate-kite-kubeconfig.sh
-./generate-kite-kubeconfig.sh
-```
-
-#### 步骤:
-
-1. 创建 Service Account 和必要的 RBAC 权限:
-
-```yaml
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: kite-admin
-  namespace: kube-system
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: kite-admin
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: cluster-admin
-subjects:
-  - kind: ServiceAccount
-    name: kite-admin
-    namespace: kube-system
-```
-
-2. 创建 Long-lived Token Secret (Kubernetes 1.24+):
-
-```yaml
-apiVersion: v1
-kind: Secret
-metadata:
-  name: kite-admin-token
-  namespace: kube-system
-  annotations:
-    kubernetes.io/service-account.name: kite-admin
-type: kubernetes.io/service-account-token
-```
-
-3. 获取 token 和集群信息:
-
-```bash
-# 获取 token
-TOKEN=$(kubectl get secret kite-admin-token -n kube-system -o jsonpath='{.data.token}' | base64 -d)
-
-# 获取 CA 证书
-CA_CERT=$(kubectl get secret kite-admin-token -n kube-system -o jsonpath='{.data.ca\.crt}')
-
-# 获取 API Server 地址
-API_SERVER=$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')
-```
-
-4. 生成 kubeconfig:
-
-```bash
-cat > kite-kubeconfig.yaml <<EOF
-apiVersion: v1
-kind: Config
-clusters:
-- cluster:
-    certificate-authority-data: ${CA_CERT}
-    server: ${API_SERVER}
-  name: kite-cluster
-contexts:
-- context:
-    cluster: kite-cluster
-    user: kite-admin
-  name: kite-context
-current-context: kite-context
-users:
-- name: kite-admin
-  user:
-    token: ${TOKEN}
-EOF
-```
-
-## 相关文档
-
-- [Kubernetes Service Account Tokens](https://kubernetes.io/docs/reference/access-authn-authz/service-accounts-admin/)
-- [AKS Authentication](https://learn.microsoft.com/en-us/azure/aks/control-kubeconfig-access)
-- [EKS Authentication](https://docs.aws.amazon.com/eks/latest/userguide/cluster-auth.html)
-- [GKE Authentication](https://cloud.google.com/kubernetes-engine/docs/how-to/api-server-authentication)
+Kubernetes 返回 401 通常表示 issuer/audience/签名/claim 认证未对齐；返回 403
+表示认证成功，但该精确用户或 group 缺少合适的 Kubernetes RBAC Binding。

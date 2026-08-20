@@ -291,7 +291,7 @@ func (h *NodeHandler) List(c *gin.Context) {
 	}
 	var nodes corev1.NodeList
 	if err := cs.K8sClient.List(c.Request.Context(), &nodes, listOpts...); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list nodes: " + err.Error()})
+		writeKubernetesError(c, err, "Failed to list nodes")
 		return
 	}
 

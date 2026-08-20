@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { IconAlertCircle, IconEye } from '@tabler/icons-react'
+import { IconAlertCircle } from '@tabler/icons-react'
 import {
   ColumnDef,
   getCoreRowModel,
@@ -8,8 +8,8 @@ import {
 } from '@tanstack/react-table'
 import { useTranslation } from 'react-i18next'
 
-import { ResourceHistory } from '@/types/api'
-import { useAuditLogs, useClusterList, useUserList } from '@/lib/api'
+import { AuditLogEntry } from '@/types/api'
+import { useAuditLogs, useClusterList } from '@/lib/api'
 import { formatDate } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -29,7 +29,6 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { ResourceTableView } from '@/components/resource-table-view'
-import { YamlDiffViewer } from '@/components/yaml-diff-viewer'
 
 export function AuditLog() {
   const { t } = useTranslation()
@@ -37,16 +36,15 @@ export function AuditLog() {
     pageIndex: 0,
     pageSize: 20,
   })
-  const [operatorId, setOperatorId] = useState<number | undefined>(undefined)
+  const [operatorFilter, setOperatorFilter] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [operationFilter, setOperationFilter] = useState('')
   const [clusterFilter, setClusterFilter] = useState('')
-  const [selectedHistory, setSelectedHistory] =
-    useState<ResourceHistory | null>(null)
-  const [isDiffOpen, setIsDiffOpen] = useState(false)
+  const [selectedHistory, setSelectedHistory] = useState<AuditLogEntry | null>(
+    null
+  )
   const [isErrorDialogOpen, setIsErrorDialogOpen] = useState(false)
 
-  const { data: usersData } = useUserList(1, 200)
   const { data: clusters = [] } = useClusterList()
   const showCluster = clusters.length > 1
   const {
@@ -56,7 +54,7 @@ export function AuditLog() {
   } = useAuditLogs(
     pagination.pageIndex + 1,
     pagination.pageSize,
-    operatorId,
+    operatorFilter || undefined,
     searchQuery,
     operationFilter || undefined,
     showCluster ? clusterFilter || undefined : undefined
@@ -68,14 +66,9 @@ export function AuditLog() {
     }
   }, [clusterFilter, showCluster])
 
-  const handleUserFilterChange = useCallback((value: string) => {
+  const handleOperatorChange = useCallback((value: string) => {
     setPagination((prev) => ({ ...prev, pageIndex: 0 }))
-    if (value === 'all') {
-      setOperatorId(undefined)
-      return
-    }
-    const parsed = Number(value)
-    setOperatorId(Number.isNaN(parsed) ? undefined : parsed)
+    setOperatorFilter(value)
   }, [])
 
   const handleSearchChange = useCallback((value: string) => {
@@ -126,7 +119,7 @@ export function AuditLog() {
     [t]
   )
 
-  const columns = useMemo<ColumnDef<ResourceHistory>[]>(
+  const columns = useMemo<ColumnDef<AuditLogEntry>[]>(
     () => [
       {
         id: 'time',
@@ -143,16 +136,6 @@ export function AuditLog() {
         cell: ({ row }) => (
           <div className="font-medium">
             {row.original.operator?.username || '-'}
-            {row.original.operator?.provider === 'api_key' && (
-              <span className="ml-2 text-xs text-muted-foreground italic">
-                apikey
-              </span>
-            )}
-            {row.original.operationSource === 'ai' && (
-              <span className="ml-2 text-xs text-muted-foreground italic">
-                AI
-              </span>
-            )}
           </div>
         ),
       },
@@ -188,7 +171,7 @@ export function AuditLog() {
             {
               id: 'cluster',
               header: t('common.fields.cluster', 'Cluster'),
-              cell: ({ row }: { row: { original: ResourceHistory } }) => (
+              cell: ({ row }: { row: { original: AuditLogEntry } }) => (
                 <span className="text-sm text-muted-foreground">
                   {row.original.clusterName || '-'}
                 </span>
@@ -228,20 +211,7 @@ export function AuditLog() {
               </Button>
             )
           }
-          return (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setSelectedHistory(item)
-                setIsDiffOpen(true)
-              }}
-              disabled={!item.resourceYaml && !item.previousYaml}
-            >
-              <IconEye className="w-4 h-4 mr-1" />
-              {t('common.actions.viewDiff', 'View Diff')}
-            </Button>
-          )
+          return <span className="text-muted-foreground">-</span>
         },
       },
     ],
@@ -373,26 +343,15 @@ export function AuditLog() {
                 </SelectContent>
               </Select>
             )}
-            <Select
-              value={operatorId ? String(operatorId) : 'all'}
-              onValueChange={handleUserFilterChange}
-            >
-              <SelectTrigger className="w-56">
-                <SelectValue
-                  placeholder={t('common.values.allUsers', 'All users')}
-                />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">
-                  {t('common.values.allUsers', 'All users')}
-                </SelectItem>
-                {(usersData?.users ?? []).map((user) => (
-                  <SelectItem key={user.id} value={String(user.id)}>
-                    {user.username}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Input
+              placeholder={t(
+                'common.placeholders.searchOperator',
+                'Search actor identity...'
+              )}
+              value={operatorFilter}
+              onChange={(event) => handleOperatorChange(event.target.value)}
+              className="w-56"
+            />
           </div>
         </div>
       </CardHeader>
@@ -405,7 +364,7 @@ export function AuditLog() {
           allPageSize={totalRowCount}
           emptyState={emptyState}
           hasActiveFilters={
-            Boolean(operatorId) ||
+            Boolean(operatorFilter) ||
             Boolean(searchQuery) ||
             Boolean(operationFilter) ||
             (showCluster && Boolean(clusterFilter))
@@ -418,22 +377,6 @@ export function AuditLog() {
           maxBodyHeightClassName="max-h-[600px]"
         />
       </CardContent>
-
-      {selectedHistory && (
-        <YamlDiffViewer
-          open={isDiffOpen}
-          onOpenChange={(open) => {
-            setIsDiffOpen(open)
-            if (!open) {
-              setSelectedHistory(null)
-            }
-          }}
-          original={selectedHistory.previousYaml || ''}
-          modified={selectedHistory.resourceYaml || ''}
-          title={t('common.fields.yamlDiff', 'YAML Diff')}
-          height={560}
-        />
-      )}
 
       <Dialog
         open={isErrorDialogOpen}

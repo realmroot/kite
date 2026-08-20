@@ -13,7 +13,6 @@ import (
 
 	semver "github.com/blang/semver/v4"
 	"github.com/zxh326/kite/pkg/model"
-	"helm.sh/helm/v4/pkg/getter"
 	repo "helm.sh/helm/v4/pkg/repo/v1"
 )
 
@@ -22,6 +21,8 @@ const (
 	ChartSourceArtifactHub = "artifacthub"
 
 	artifactHubHelmPackageAPIURL = "https://artifacthub.io/api/v1/packages/helm/"
+	maxArtifactHubPackageBytes   = 1 << 20
+	maxRepositoryIndexBytes      = 20 << 20
 )
 
 type ChartPackage struct {
@@ -35,84 +36,95 @@ type artifactHubPackage struct {
 	ContentURL string `json:"content_url"`
 }
 
-func ResolveChartRepository(repositoryName, source string) (*model.HelmRepository, error) {
-	if repositoryName == "" || source == ChartSourceArtifactHub {
-		return nil, nil
-	}
-	var repository model.HelmRepository
-	if err := model.DB.Where("name = ?", repositoryName).First(&repository).Error; err != nil {
-		return nil, err
-	}
-	return &repository, nil
+func LatestChartPackage(ctx context.Context, source, repositoryName, chartName string) (ChartPackage, error) {
+	return ResolveChartPackage(ctx, source, repositoryName, chartName, "")
 }
 
-func LatestChartPackage(ctx context.Context, source, repositoryName, chartName string) (ChartPackage, error) {
+// ResolveChartPackage resolves a chart package from a server-known catalog
+// identity. Callers never need to trust a client-supplied download URL.
+func ResolveChartPackage(ctx context.Context, source, repositoryName, chartName, version string) (ChartPackage, error) {
 	switch source {
 	case "", ChartSourceRepository:
-		return latestRepositoryChartPackage(repositoryName, chartName)
+		return repositoryChartPackage(ctx, repositoryName, chartName, version)
 	case ChartSourceArtifactHub:
-		return latestArtifactHubChartPackage(ctx, repositoryName, chartName)
+		return artifactHubChartPackage(ctx, repositoryName, chartName, version)
 	default:
 		return ChartPackage{}, fmt.Errorf("unsupported chart source")
 	}
 }
 
-func latestRepositoryChartPackage(repositoryName, chartName string) (ChartPackage, error) {
+func repositoryChartPackage(ctx context.Context, repositoryName, chartName, version string) (ChartPackage, error) {
 	var repository model.HelmRepository
 	if err := model.DB.Where("name = ?", repositoryName).First(&repository).Error; err != nil {
 		return ChartPackage{}, err
 	}
-	indexFile, err := LoadRepositoryIndex(repository)
+	indexFile, err := LoadRepositoryIndexContext(ctx, repository)
 	if err != nil {
 		return ChartPackage{}, err
 	}
-	versions := indexFile.Entries[chartName]
-	if len(versions) == 0 {
-		return ChartPackage{}, fmt.Errorf("chart not found")
+	selected, err := indexFile.Get(chartName, version)
+	if err != nil {
+		return ChartPackage{}, fmt.Errorf("chart not found: %w", err)
 	}
-	latest := versions[0]
-	for _, version := range versions[1:] {
-		if CompareChartVersions(version.Version, latest.Version) > 0 {
-			latest = version
+	if version == "" {
+		versions := indexFile.Entries[chartName]
+		for _, candidate := range versions {
+			if CompareChartVersions(candidate.Version, selected.Version) > 0 {
+				selected = candidate
+			}
 		}
 	}
-	if len(latest.URLs) == 0 {
+	if len(selected.URLs) == 0 {
 		return ChartPackage{}, fmt.Errorf("chart package URL is missing")
 	}
 	return ChartPackage{
-		Version:    latest.Version,
-		URL:        ResolveURL(repository.URL, latest.URLs[0]),
+		Version:    selected.Version,
+		URL:        ResolveURL(repository.URL, selected.URLs[0]),
 		Repository: &repository,
 	}, nil
 }
 
 func LoadRepositoryIndex(repository model.HelmRepository) (*repo.IndexFile, error) {
-	entry := &repo.Entry{
-		Name:     repository.Name,
-		URL:      repository.URL,
-		Username: repository.Username,
-		Password: string(repository.Password),
-	}
-	chartRepository, err := repo.NewChartRepository(entry, getter.Getters())
-	if err != nil {
-		return nil, err
-	}
-	cacheDir, err := os.MkdirTemp("", "kite-helm-repo-*")
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = os.RemoveAll(cacheDir) }()
-	chartRepository.CachePath = cacheDir
+	return LoadRepositoryIndexContext(context.Background(), repository)
+}
 
-	indexPath, err := chartRepository.DownloadIndexFile()
+func LoadRepositoryIndexContext(ctx context.Context, repository model.HelmRepository) (*repo.IndexFile, error) {
+	indexURL, err := repo.ResolveReferenceURL(repository.URL, "index.yaml")
 	if err != nil {
+		return nil, err
+	}
+	data, err := downloadHTTPResource(
+		ctx,
+		indexURL,
+		&repository,
+		maxRepositoryIndexBytes,
+		"application/x-yaml,text/yaml,text/plain",
+		"repository index",
+	)
+	if err != nil {
+		return nil, err
+	}
+	indexFile, err := os.CreateTemp("", "kite-helm-index-*.yaml")
+	if err != nil {
+		return nil, err
+	}
+	indexPath := indexFile.Name()
+	defer func() { _ = os.Remove(indexPath) }()
+	if _, err := indexFile.Write(data); err != nil {
+		_ = indexFile.Close()
+		return nil, err
+	}
+	if err := indexFile.Close(); err != nil {
 		return nil, err
 	}
 	return repo.LoadIndexFile(indexPath)
 }
 
-func latestArtifactHubChartPackage(ctx context.Context, repositoryName, chartName string) (ChartPackage, error) {
+func artifactHubChartPackage(ctx context.Context, repositoryName, chartName, version string) (ChartPackage, error) {
 	packageURL := artifactHubHelmPackageAPIURL + url.PathEscape(repositoryName) + "/" + url.PathEscape(chartName)
+	if version != "" {
+		packageURL += "/" + url.PathEscape(version)
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, packageURL, nil)
 	if err != nil {
 		return ChartPackage{}, err
@@ -128,9 +140,12 @@ func latestArtifactHubChartPackage(ctx context.Context, repositoryName, chartNam
 	if resp.StatusCode != http.StatusOK {
 		return ChartPackage{}, fmt.Errorf("artifact hub request failed: %s", resp.Status)
 	}
-	data, err := io.ReadAll(resp.Body)
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxArtifactHubPackageBytes+1))
 	if err != nil {
 		return ChartPackage{}, err
+	}
+	if len(data) > maxArtifactHubPackageBytes {
+		return ChartPackage{}, fmt.Errorf("artifact hub package response exceeds %d bytes", maxArtifactHubPackageBytes)
 	}
 	var pkg artifactHubPackage
 	if err := json.Unmarshal(data, &pkg); err != nil {

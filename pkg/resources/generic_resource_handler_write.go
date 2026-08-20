@@ -43,7 +43,7 @@ func (h *GenericResourceHandler[T, V]) Create(c *gin.Context) {
 
 	if err := cs.K8sClient.Create(ctx, resource); err != nil {
 		success, errMsg = false, err.Error()
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		writeKubernetesError(c, err, "")
 		return
 	}
 
@@ -67,7 +67,7 @@ func (h *GenericResourceHandler[T, V]) Update(c *gin.Context) {
 		namespacedName = types.NamespacedName{Name: name}
 	}
 	if err := cs.K8sClient.Get(c.Request.Context(), namespacedName, oldObj); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		writeKubernetesError(c, err, "")
 		return
 	}
 
@@ -88,7 +88,7 @@ func (h *GenericResourceHandler[T, V]) Update(c *gin.Context) {
 	ctx := c.Request.Context()
 	if err := cs.K8sClient.Update(ctx, resource); err != nil {
 		errMsg = err.Error()
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		writeKubernetesError(c, err, "")
 		return
 	}
 
@@ -127,7 +127,7 @@ func (h *GenericResourceHandler[T, V]) Patch(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		writeKubernetesError(c, err, "")
 		return
 	}
 
@@ -142,7 +142,7 @@ func (h *GenericResourceHandler[T, V]) Patch(c *gin.Context) {
 	patch := client.RawPatch(patchType, patchBytes)
 	if err := cs.K8sClient.Patch(ctx, oldObj, patch); err != nil {
 		errMsg = err.Error()
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		writeKubernetesError(c, err, "")
 		return
 	}
 
@@ -169,7 +169,7 @@ func (h *GenericResourceHandler[T, V]) Delete(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		writeKubernetesError(c, err, "")
 		return
 	}
 
@@ -199,7 +199,7 @@ func (h *GenericResourceHandler[T, V]) Delete(c *gin.Context) {
 	}
 	if err := cs.K8sClient.Delete(ctx, resource, deleteOptions); err != nil {
 		errMsg = err.Error()
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		writeKubernetesError(c, err, "")
 		return
 	}
 

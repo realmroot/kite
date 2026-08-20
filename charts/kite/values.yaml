@@ -7,7 +7,9 @@ replicaCount: 1
 
 # This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
 image:
-  repository: ghcr.io/kite-org/kite
+  # Release packages set this to their own immutable image repository. When
+  # rendering the chart directly from source, set it explicitly.
+  repository: ""
   # This sets the pull policy for images.
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
@@ -20,13 +22,39 @@ image:
 # Using "RollingUpdate" will cause pod conflicts during upgrades because multiple
 # pods cannot mount the same RWO volume simultaneously.
 deploymentStrategy:
-  type: RollingUpdate
+  type: Recreate
   # rollingUpdate:
   #   maxSurge: 25%
   #   maxUnavailable: 25%
 
 # This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
 imagePullSecrets: []
+
+# Images used by the optional browser terminal workflows. Versioned defaults
+# avoid silently changing the binaries that receive a user's delegated token.
+terminalImages:
+  kubectl: alpine/kubectl:1.36.3
+  node: busybox:1.37.0
+
+# Defaults to this release's own Kite image. Set explicitly only when the
+# transport-only Cluster Agent is published at a different location.
+clusterAgentImage: ""
+
+# Optional GitHub-compatible latest-release API. Version checks make no
+# outbound request when this is empty.
+releaseAPIURL: ""
+
+# Comma-separated additional registry host[:port] values that the optional
+# image-tag lookup endpoint may contact. Common public registries are built in;
+# private or self-hosted registries must be explicitly enabled here.
+imageRegistryHosts: ""
+
+# Optional, operator-owned Umami-compatible analytics endpoint. No analytics
+# script is loaded unless both values are configured and analytics is enabled.
+analytics:
+  enabled: false
+  scriptURL: ""
+  websiteID: ""
 # This is to override the chart name.
 nameOverride: ""
 fullnameOverride: ""
@@ -35,8 +63,8 @@ debug: false
 
 # External Host for the application
 # Used in generate OAuth redirect URLs
-# Leave empty to obtain from request headers
-# Example: https://kite.zzde.me
+# Required. Use the public HTTPS origin without a path.
+# Example: https://kite.example.com
 host: ""
 
 # Base path for the application
@@ -64,9 +92,29 @@ oidc:
   groupsClaim: "groups"
   nameClaim: "name"
   pictureClaim: "picture"
+  ca:
+    # Optional Secret containing the CA certificate used to verify a private
+    # OIDC issuer. The certificate is mounted read-only and never stored in the
+    # Kite database.
+    existingSecret: ""
+    key: ca.crt
+    mountPath: /etc/kite/oidc
 
-# Comma-separated OIDC groups allowed to manage the shared cluster catalog.
+# OIDC groups allowed to manage shared metadata. Comma-separated values are
+# supported; use a JSON string array when a claim value contains separators.
 platformAdminGroups: ""
+# Exact OIDC subject (`sub`) values with the same platform permission. The same
+# legacy-list or JSON string-array syntax is accepted. Configure either or both.
+platformAdminSubjects: ""
+
+resourceServer:
+  # Enable standards-based Agent/tool access. The URL is the exact protected
+  # resource identifier and must be reachable over HTTPS for discovery.
+  enabled: false
+  url: ""
+  issuer: ""
+  authorizedClientIds: ""
+  jwtAlgorithms: "RS256"
 
 # Secret handling
 # By default the chart will create a Kubernetes Secret containing sensitive values.
@@ -79,9 +127,7 @@ secret:
   #  KITE_ENCRYPT_KEY
   #  OIDC_CLIENT_ID
   #  OIDC_CLIENT_SECRET
-  #  DB_TYPE supported values: sqlite, postgres, mysql (defaults to sqlite if not set)
-  #  DB_DSN (not required for sqlite)
-  # if set, the db.dsn and db.type values from the chart will be ignored.
+  #  DB_DSN (required when db.type is postgres or mysql)
   existingSecret: ""
 
 # Database configuration
@@ -104,7 +150,7 @@ db:
     # Set to false to use ephemeral storage (not recommended for production).
     persistence:
       pvc:
-        enabled: false
+        enabled: true
         existingClaim: ""
         # StorageClass to request for the PVC (optional)
         storageClass: ""
@@ -122,8 +168,8 @@ db:
       # sqlite filename inside the mountPath
       filename: kite.db
     # Additional sqlite database connection options
-    # Example: "_journal_mode=WAL&_busy_timeout=5000"
-    options: ""
+    # Example: "_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)"
+    options: "_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)"
 extraEnvs:
   # - name: "EXAMPLE_ENV"
   #   value: "example_value"
@@ -147,9 +193,8 @@ config:
   #     apiServerUrl: "https://api.production.example:6443"
   #     caBundle: "<PEM or base64-encoded PEM>"
   #     tlsServerName: "api.production.example"
-  #     prometheusURL: "http://prometheus:9090"
+  #     prometheusURL: "http://prometheus.monitoring.svc:9090"
   #     default: true
-  #       oidcGroups: ["admins"]
 
 # This section builds out the service account more information can be found here: https://kubernetes.io/docs/concepts/security/service-accounts/
 serviceAccount:
@@ -171,17 +216,19 @@ podAnnotations: {}
 podLabels: {}
 
 podSecurityContext:
-  {}
-  # fsGroup: 2000
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
 
 securityContext:
-  {}
-  # capabilities:
-  #   drop:
-  #   - ALL
-  # readOnlyRootFilesystem: true
-  # runAsNonRoot: true
-  # runAsUser: 1000
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
 
 # This is for setting up a service more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/
 service:
@@ -196,13 +243,13 @@ ingress:
   className: "nginx"
   annotations: {}
   hosts:
-    - host: kite.zzde.me
+    - host: kite.example.com
       paths:
         - path: /
           pathType: ImplementationSpecific
   # tls:
   #  - hosts:
-  #      - kite.zzde.me
+  #      - kite.example.com
 
 # Gateway API resources for exposing Kite
 # Requires Gateway API CRDs to be installed in the cluster
@@ -293,10 +340,16 @@ livenessProbe:
   periodSeconds: 10
 readinessProbe:
   httpGet:
-    path: /healthz
+    path: /readyz
     port: http
   initialDelaySeconds: 10
   periodSeconds: 10
+startupProbe:
+  httpGet:
+    path: /readyz
+    port: http
+  periodSeconds: 2
+  failureThreshold: 30
 # Additional volumes on the output Deployment definition.
 volumes: []
 # - name: foo

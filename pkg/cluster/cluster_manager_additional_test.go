@@ -14,6 +14,7 @@ import (
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
+	"github.com/zxh326/kite/pkg/clusteragent"
 	"github.com/zxh326/kite/pkg/kube"
 )
 
@@ -26,6 +27,45 @@ func (fn roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error)
 func init() {
 	if err := os.Setenv("MOCKEY_CHECK_GCFLAGS", "false"); err != nil {
 		panic(err)
+	}
+}
+
+func TestValidateKubernetesAPIServerURL(t *testing.T) {
+	tests := []struct {
+		value string
+		valid bool
+	}{
+		{value: "https://api.example.test:6443", valid: true},
+		{value: "https://gateway.example.test/kubernetes", valid: true},
+		{value: "http://api.example.test", valid: false},
+		{value: "https://admin:secret@api.example.test", valid: false},
+		{value: "https://api.example.test?token=secret", valid: false},
+		{value: "https://api.example.test#credential", valid: false},
+	}
+	for _, test := range tests {
+		err := validateKubernetesAPIServerURL(test.value)
+		if (err == nil) != test.valid {
+			t.Errorf("validateKubernetesAPIServerURL(%q) error = %v, valid=%t", test.value, err, test.valid)
+		}
+	}
+}
+
+func TestInvalidateCatalogRuntimesClosesAndDropsCachedTransports(t *testing.T) {
+	transport := &closeTrackingTransport{}
+	manager := &ClusterManager{
+		clusterAgentManager: clusteragent.NewManager(func() {}),
+		runtimes: map[uint]*clusterRuntime{
+			7: {transport: transport},
+		},
+	}
+
+	manager.InvalidateCatalogRuntimes()
+
+	if !transport.closed.Load() {
+		t.Fatal("cached transport was not closed")
+	}
+	if len(manager.runtimes) != 0 {
+		t.Fatalf("runtime cache contains %d item(s), want 0", len(manager.runtimes))
 	}
 }
 
@@ -50,6 +90,21 @@ func TestIsClusterLocalURL(t *testing.T) {
 			url:  "https://prometheus.example.com",
 			want: false,
 		},
+		{
+			name: "lookalike suffix",
+			url:  "https://prometheus.monitoring.svc.attacker.example",
+			want: false,
+		},
+		{
+			name: "credentials are forbidden",
+			url:  "https://user:password@prometheus.monitoring.svc:9090",
+			want: false,
+		},
+		{
+			name: "service path is forbidden",
+			url:  "http://prometheus.monitoring.svc:9090/prometheus",
+			want: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -58,6 +113,19 @@ func TestIsClusterLocalURL(t *testing.T) {
 				t.Fatalf("isClusterLocalURL(%q) = %v, want %v", tt.url, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestCreateK8sProxyTransportRejectsNonServiceTargets(t *testing.T) {
+	config := &rest.Config{Host: "https://apiserver.example.com"}
+	for _, target := range []string{
+		"https://prometheus.example.com",
+		"file://prometheus.monitoring.svc",
+		"http://prometheus.monitoring.svc.attacker.example",
+	} {
+		if _, err := createK8sProxyTransport(config, http.DefaultTransport, target); err == nil {
+			t.Fatalf("createK8sProxyTransport(%q) succeeded, want error", target)
+		}
 	}
 }
 
@@ -102,15 +170,18 @@ func TestNewUserClientSetOnlyEnablesKubernetesAuthorizedPrometheus(t *testing.T)
 		return nil, errors.New("unexpected request")
 	})}
 
-	external, err := newUserClientSet("prod", config, httpClient, "https://prometheus.example.test")
+	external, err := newUserClientSet("prod", config, httpClient, "https://prometheus.example.test", "user-id-token")
 	if err != nil {
 		t.Fatalf("external Prometheus metadata should not break Kubernetes access: %v", err)
 	}
 	if external.PromClient != nil {
 		t.Fatal("external Prometheus must not bypass Kubernetes authorization")
 	}
+	if external.K8sClient.Configuration.BearerToken != "user-id-token" || config.BearerToken != "" {
+		t.Fatal("request-scoped Helm config must preserve the user token without mutating shared cluster metadata")
+	}
 
-	inCluster, err := newUserClientSet("prod", config, httpClient, "http://prometheus.monitoring.svc.cluster.local:9090")
+	inCluster, err := newUserClientSet("prod", config, httpClient, "http://prometheus.monitoring.svc.cluster.local:9090", "")
 	if err != nil {
 		t.Fatalf("create Kubernetes-authorized Prometheus client: %v", err)
 	}

@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/zxh326/kite/pkg/kube"
 	"github.com/zxh326/kite/pkg/version"
 	"golang.org/x/crypto/nacl/box"
 	"k8s.io/client-go/rest"
@@ -38,6 +39,17 @@ type registeredCluster struct {
 type encryptedClusterAgentRegistration struct {
 	Version    int    `json:"version"`
 	Ciphertext string `json:"ciphertext"`
+}
+
+func validKubernetesAPIServerURL(value string) bool {
+	apiURL, err := url.Parse(strings.TrimSpace(value))
+	return err == nil &&
+		apiURL.Scheme == "https" &&
+		apiURL.Host != "" &&
+		apiURL.User == nil &&
+		apiURL.RawQuery == "" &&
+		!apiURL.ForceQuery &&
+		apiURL.Fragment == ""
 }
 
 func NewRegistrationKeyPair() (string, string, error) {
@@ -142,13 +154,20 @@ func (m *Manager) Register(rw http.ResponseWriter, req *http.Request) {
 		http.Error(rw, "invalid encrypted cluster agent registration", http.StatusBadRequest)
 		return
 	}
-	apiURL, err := url.Parse(registration.APIServer)
-	if err != nil || apiURL.Host == "" || (apiURL.Scheme != "http" && apiURL.Scheme != "https") {
+	if !validKubernetesAPIServerURL(registration.APIServer) {
 		http.Error(rw, "invalid Kubernetes API server URL", http.StatusBadRequest)
 		return
 	}
 	if registration.Insecure {
 		http.Error(rw, "insecure Kubernetes TLS is not supported", http.StatusBadRequest)
+		return
+	}
+	if err := kube.ValidateCAData(registration.CAData); err != nil {
+		http.Error(rw, "invalid Kubernetes CA data", http.StatusBadRequest)
+		return
+	}
+	if err := kube.ValidateTLSServerName(registration.ServerName); err != nil {
+		http.Error(rw, "invalid Kubernetes TLS server name", http.StatusBadRequest)
 		return
 	}
 	clientKey := strconv.FormatUint(uint64(cluster.ID), 10)

@@ -6,6 +6,7 @@ import { Outlet, useSearchParams } from 'react-router-dom'
 
 import { AppSidebar } from './components/app-sidebar'
 import { ErrorBoundary } from './components/error-boundary'
+import { FloatingTerminal } from './components/floating-terminal'
 import { GlobalSearch } from './components/global-search'
 import {
   GlobalSearchProvider,
@@ -15,6 +16,7 @@ import { SiteHeader } from './components/site-header'
 import { SidebarInset, SidebarProvider } from './components/ui/sidebar'
 import { Toaster } from './components/ui/sonner'
 import { ClusterProvider } from './contexts/cluster-context'
+import { TerminalProvider } from './contexts/terminal-context'
 import { useCluster } from './hooks/use-cluster'
 
 function ClusterGate({ children }: { children: ReactNode }) {
@@ -82,7 +84,12 @@ function AppContent() {
 function AppProviders({ children }: { children: ReactNode }) {
   return (
     <ClusterProvider>
-      <GlobalSearchProvider>{children}</GlobalSearchProvider>
+      <GlobalSearchProvider>
+        <TerminalProvider>
+          {children}
+          <FloatingTerminal />
+        </TerminalProvider>
+      </GlobalSearchProvider>
     </ClusterProvider>
   )
 }

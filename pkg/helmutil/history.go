@@ -7,7 +7,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-func RecordReleaseHistory(clusterName string, operatorID uint, source, opType, name, namespace string, prev, curr *release.Release, success bool, err error) {
+func RecordReleaseHistory(clusterID uint, clusterName string, operatorID uint, source, opType, name, namespace string, prev, curr *release.Release, success bool, err error) {
 	if curr != nil {
 		name = curr.Name
 		namespace = curr.Namespace
@@ -25,6 +25,7 @@ func RecordReleaseHistory(clusterName string, operatorID uint, source, opType, n
 		resourceYAML = ""
 	}
 	history := model.ResourceHistory{
+		ClusterID:       clusterID,
 		ClusterName:     clusterName,
 		ResourceType:    string(common.HelmReleases),
 		ResourceName:    name,

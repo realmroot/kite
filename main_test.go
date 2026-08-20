@@ -1,16 +1,40 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/zxh326/kite/pkg/common"
 	"github.com/zxh326/kite/pkg/version"
 )
+
+func TestStartPprofServerIsDisabledByDefault(t *testing.T) {
+	server, err := startPprofServer("")
+	if err != nil {
+		t.Fatalf("startPprofServer() error = %v", err)
+	}
+	if server != nil {
+		t.Fatal("startPprofServer() returned a server for an empty address")
+	}
+}
+
+func TestStartPprofServerUsesExplicitAddress(t *testing.T) {
+	server, err := startPprofServer("127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("startPprofServer() error = %v", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := server.Shutdown(ctx); err != nil {
+		t.Fatalf("Shutdown() error = %v", err)
+	}
+}
 
 func TestRegisterBaseRoutes(t *testing.T) {
 	gin.SetMode(gin.TestMode)
@@ -32,7 +56,7 @@ func TestRegisterBaseRoutes(t *testing.T) {
 	common.EnableVersionCheck = false
 
 	r := gin.New()
-	registerBaseRoutes(&r.RouterGroup)
+	registerBaseRoutes(&r.RouterGroup, &application{})
 
 	t.Run("healthz", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
@@ -122,13 +146,19 @@ func TestSetupStatic(t *testing.T) {
 
 	oldBase := common.Base
 	oldEnableAnalytics := common.EnableAnalytics
+	oldAnalyticsScriptURL := common.AnalyticsScriptURL
+	oldAnalyticsWebsiteID := common.AnalyticsWebsiteID
 	defer func() {
 		common.Base = oldBase
 		common.EnableAnalytics = oldEnableAnalytics
+		common.AnalyticsScriptURL = oldAnalyticsScriptURL
+		common.AnalyticsWebsiteID = oldAnalyticsWebsiteID
 	}()
 
 	common.Base = "/kite"
 	common.EnableAnalytics = true
+	common.AnalyticsScriptURL = "https://analytics.example.com/script.js"
+	common.AnalyticsWebsiteID = "kite-test"
 
 	r := gin.New()
 	setupStatic(r)
@@ -158,7 +188,7 @@ func TestSetupStatic(t *testing.T) {
 		if !strings.Contains(body, `window.__dynamic_base__="/kite"`) {
 			t.Fatalf("body missing dynamic base injection")
 		}
-		if !strings.Contains(body, "cloud.umami.is/script.js") {
+		if !strings.Contains(body, "analytics.example.com/script.js") || !strings.Contains(body, `data-website-id="kite-test"`) {
 			t.Fatalf("body missing analytics injection")
 		}
 	})

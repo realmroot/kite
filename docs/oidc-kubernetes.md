@@ -22,9 +22,12 @@ not a Kubernetes identity provider or authorization proxy.
 catalog, templates, and audit view. It does not grant access to Kubernetes
 resources. Kubernetes RoleBindings and ClusterRoleBindings remain authoritative.
 
-The node terminal, browser kubectl console, AI execution routes, local password
-and passkey login, LDAP, local OAuth-provider management, Kite RBAC, API keys,
-and kubeconfig import are intentionally unavailable in this fork.
+Embedded AI/Agent execution, local password and passkey login, LDAP, local
+OAuth-provider management, Kite RBAC, API keys, and credential-bearing
+kubeconfig import are intentionally unavailable in this fork. Browser kubectl,
+node terminal, and other inherited Kubernetes operations remain available while
+they undergo explicit product and security review; they must use the current
+user's Kubernetes identity and do not receive a shared ServiceAccount.
 
 Ordinary Kubernetes API calls are also available through the transparent
 [Kubernetes API gateway](kubernetes-api-gateway.md). Compatibility endpoints
@@ -118,6 +121,14 @@ reaches that service through the Kubernetes service proxy using the current
 user token, so the API server must authorize `services/proxy`. Direct anonymous
 or shared-credential access to an external Prometheus endpoint is deliberately
 disabled because it cannot preserve Kubernetes RBAC boundaries.
+
+Browser kubectl sessions require the user to create, get, and delete Pods and
+Secrets in `kube-system`, and to use `pods/exec`. Their generated kubeconfig
+contains only the current OIDC token and is deleted with the session. Node
+terminal sessions require Node read access plus permission to create, get,
+delete, and exec into a privileged Pod in `kube-system`. Admission policy may
+deny that Pod. Node terminal is host-root access by design; grant these
+permissions only to a dedicated operator group.
 
 ## Helm installation
 

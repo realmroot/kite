@@ -1050,9 +1050,6 @@ function UpgradeHelmReleaseDialog({
     }
     return [{ version: activeVersion }, ...versionOptions]
   }, [activeVersion, versionOptions])
-  const chartUrl = canUseCurrentChart
-    ? undefined
-    : selectedChartQuery.data?.chartUrl
   const isVersionLoading = !!activeChart && latestChartQuery.isLoading
   const isChartPackageLoading =
     !!activeChart && !canUseCurrentChart && selectedChartQuery.isLoading
@@ -1076,7 +1073,7 @@ function UpgradeHelmReleaseDialog({
   const buildUpgradeRequest = (): HelmReleaseUpgradeRequest | null => {
     setError('')
 
-    if (!chartUrl && !canUseCurrentChart) {
+    if (!activeChart && !canUseCurrentChart) {
       setError(t('helmCharts.messages.noChartUrl'))
       return null
     }
@@ -1097,11 +1094,12 @@ function UpgradeHelmReleaseDialog({
     }
 
     return {
-      ...(chartUrl
+      ...(activeChart && !canUseCurrentChart
         ? {
-            chartUrl,
             repositoryName: activeChart?.repositoryName,
             source: activeChart?.source,
+            chartName: activeChart.name,
+            chartVersion: activeVersion,
           }
         : {}),
       values,
@@ -1442,7 +1440,7 @@ function UpgradeHelmReleaseDialog({
                   isDryRunning ||
                   !activeVersion ||
                   isChartPackageLoading ||
-                  (!chartUrl && !canUseCurrentChart)
+                  (!activeChart && !canUseCurrentChart)
                 }
               >
                 {isDryRunning ? (
@@ -1459,7 +1457,7 @@ function UpgradeHelmReleaseDialog({
                 isDryRunning ||
                 !activeVersion ||
                 isChartPackageLoading ||
-                (!chartUrl && !canUseCurrentChart)
+                (!activeChart && !canUseCurrentChart)
               }
             >
               {isUpgrading ? <Loader2 className="size-4 animate-spin" /> : null}

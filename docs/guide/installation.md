@@ -14,23 +14,22 @@ This guide provides detailed instructions for installing Kite in a Kubernetes en
 
 Using Helm provides flexibility for configuration and upgrades:
 
-Install from OCI registry:
+Install the versioned OCI chart published by your fork (replace `<owner>` and
+`<version>`):
 
 ```bash
-helm install kite oci://ghcr.io/kite-org/charts/kite -n kite-system --create-namespace
+helm install kite oci://ghcr.io/<owner>/charts/kite \
+  --version <version> -n kite-system --create-namespace -f values.yaml
 ```
 
-Or install from Helm repository:
+If the repository enables its optional GitHub Pages Helm index, you may instead
+install that same version from the index:
 
 ```bash
-# Add Kite repository
-helm repo add kite https://kite-org.github.io/kite/
-
-# Update repository information
+helm repo add kite https://<owner>.github.io/kite/
 helm repo update
-
-# Install with default configuration
-helm install kite kite/kite -n kite-system --create-namespace
+helm install kite kite/kite --version <version> \
+  -n kite-system --create-namespace -f values.yaml
 ```
 
 #### Custom Installation
@@ -42,27 +41,28 @@ For complete configuration, refer to [Chart Values](../config/chart-values).
 Install with custom values:
 
 ```bash
-helm install kite oci://ghcr.io/kite-org/charts/kite -n kite-system -f values.yaml
+helm upgrade --install kite oci://ghcr.io/<owner>/charts/kite \
+  --version <version> -n kite-system --create-namespace -f values.yaml
 
 # Or use the Helm repository
-helm install kite kite/kite -n kite-system -f values.yaml
+helm upgrade --install kite kite/kite --version <version> \
+  -n kite-system --create-namespace -f values.yaml
 ```
 
 ### Method 2: YAML Manifest
 
-For quick deployment, you can directly apply the official installation YAML:
-
-::: warning
-This method is not suitable for production environments, as it does not include any configuration related to persistence. You need to manually mount the persistence volume and set the environment variable `DB_DSN=/data/db.sqlite` to ensure that data is not lost. Alternatively, you can use an external database.
-
-see [Persistence Issues](../faq#persistence-issues) for more details.
-:::
+Each release includes a versioned `install.yaml` with persistent SQLite storage
+and a non-root security context. Download it, replace the OIDC/secret/host
+placeholders, review it, and then apply it:
 
 ```bash
-kubectl apply -f https://raw.githubusercontent.com/kite-org/kite/main/deploy/install.yaml
+curl -fLO https://github.com/<owner>/kite/releases/download/vX.Y.Z/install.yaml
+$EDITOR install.yaml
+kubectl apply -f install.yaml
 ```
 
-This method will install Kite with default configuration. For advanced customization, it's recommended to use the Helm Chart.
+For external databases, private issuer CAs, ingress, or other advanced
+configuration, use the Helm Chart.
 
 ## Accessing Kite
 
@@ -137,7 +137,9 @@ basePath: "/kite"
 - Or with Helm CLI:
 
 ```fish
-helm install kite oci://ghcr.io/kite-org/charts/kite -n kite-system --create-namespace --set basePath="/kite"
+helm upgrade --install kite oci://ghcr.io/<owner>/charts/kite \
+  --version <version> -n kite-system --create-namespace \
+  -f values.yaml --set basePath="/kite"
 ```
 
 Important notes:
@@ -154,32 +156,27 @@ ingress:
           pathType: Prefix
 ```
 
-- OAuth / redirects: if you enable OAuth (or any external redirect flows), update the redirect URLs in your OAuth provider to include the base path, e.g. `https://kite.example.com/kite/oauth/callback`.
+- OIDC callback: register the base path when used, for example
+  `https://kite.example.com/kite/api/auth/callback`.
 - Environment overrides: if you provide environment variables via `extraEnvs` or an existing secret, ensure `KITE_BASE` is set consistently with the `basePath` value (otherwise behavior may differ).
 
 ## Verifying Installation
 
-After installation, you can access the dashboard to verify that Kite is deployed successfully. The expected interface is as follows:
+After installation, open Kite and sign in through the configured OIDC provider.
+The Overview page should load after the provider redirects back to Kite.
 
 ::: tip
 If you need to configure Kite through environment variables, please refer to [Environment Variables](../config/env).
 :::
 
-![setup](../screenshots/setup.png)
+### Add the first cluster
 
-![setup](../screenshots/setup2.png)
-
-You can complete cluster setup according to the page prompts.
-
-### Quick Setup with In-Cluster Mode
-
-For the simplest setup, select **`in-cluster`** as the cluster type. This option automatically uses the service account credentials that Kite is running with inside the cluster, requiring no additional configuration:
-
-- **No kubeconfig needed**: Kite will use its own service account to access the Kubernetes API
-- **Automatic authentication**: Works out of the box with the default RBAC permissions
-- **Ideal for single-cluster deployments**: Perfect when Kite is managing the same cluster it's running in
-
-This is the recommended option for getting started quickly, especially in development or when Kite only needs to manage its own cluster.
+An operator in `PLATFORM_ADMIN_GROUPS` can open **Settings > Clusters** and add
+a direct cluster using only its API server URL, CA bundle, and optional TLS
+server name, or deploy the credential-free tunnel agent for a private API
+server. Kite does not use its Pod ServiceAccount as a cluster credential. The
+cluster API server must trust the same OIDC issuer, and Kubernetes RBAC must
+bind the signed-in users or groups.
 
 ## Uninstalling Kite
 
@@ -192,7 +189,7 @@ helm uninstall kite -n kite-system
 ### YAML Uninstall
 
 ```bash
-kubectl delete -f https://raw.githubusercontent.com/kite-org/kite/main/deploy/install.yaml
+kubectl delete -f install.yaml
 ```
 
 ## Next Steps

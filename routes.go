@@ -16,6 +16,7 @@ import (
 	"github.com/zxh326/kite/pkg/proxy"
 	"github.com/zxh326/kite/pkg/resources"
 	"github.com/zxh326/kite/pkg/search"
+	"github.com/zxh326/kite/pkg/settings"
 	"github.com/zxh326/kite/pkg/system"
 	"github.com/zxh326/kite/pkg/templates"
 	"github.com/zxh326/kite/pkg/terminal"
@@ -24,11 +25,12 @@ import (
 	ctrlmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
-func setupAPIRouter(r *gin.RouterGroup, cm *cluster.ClusterManager) {
-	authHandler := auth.NewAuthHandler()
+func setupAPIRouter(r *gin.RouterGroup, app *application) {
+	cm := app.clusters
+	authHandler := app.auth
 	helmChartsHandler := helm.NewHelmChartHandler()
 
-	registerBaseRoutes(r)
+	registerBaseRoutes(r, app)
 	r.GET("/api/v1/bootstrap", authHandler.Bootstrap)
 	r.GET("/api/v1/cluster-agent/connect", cm.ConnectClusterAgent)
 	r.POST("/api/v1/cluster-agent/register", cm.RegisterClusterAgent)
@@ -39,7 +41,7 @@ func setupAPIRouter(r *gin.RouterGroup, cm *cluster.ClusterManager) {
 	registerProtectedRoutes(r, authHandler, cm, helmChartsHandler)
 }
 
-func registerBaseRoutes(r *gin.RouterGroup) {
+func registerBaseRoutes(r *gin.RouterGroup, app *application) {
 	r.GET("/metrics", gin.WrapH(promhttp.HandlerFor(promclient.Gatherers{
 		promclient.DefaultGatherer,
 		ctrlmetrics.Registry,
@@ -47,6 +49,7 @@ func registerBaseRoutes(r *gin.RouterGroup) {
 	r.GET("/healthz", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
+	r.GET("/readyz", app.readiness)
 	r.GET("/api/v1/version", version.GetVersion)
 }
 
@@ -69,6 +72,8 @@ func registerAdminRoutes(r *gin.RouterGroup, authHandler *auth.AuthHandler, cm *
 	adminAPI.Use(authHandler.RequireAuth(), authHandler.RequireAdmin())
 
 	adminAPI.GET("/audit-logs", audit.ListAuditLogs)
+	adminAPI.GET("/general-setting/", settings.HandleGetGeneralSetting)
+	adminAPI.PUT("/general-setting/", settings.HandleUpdateGeneralSetting)
 
 	clusterAPI := adminAPI.Group("/clusters")
 	clusterAPI.GET("/", cm.GetClusterList)
@@ -88,21 +93,27 @@ func registerAdminRoutes(r *gin.RouterGroup, authHandler *auth.AuthHandler, cm *
 }
 
 func registerProtectedRoutes(r *gin.RouterGroup, authHandler *auth.AuthHandler, cm *cluster.ClusterManager, helmChartsHandler *helm.HelmChartHandler) {
+	metricsHandler := metrics.NewHandler()
+	searchHandler := search.NewSearchHandler(resources.SearchFuncs())
 	api := r.Group("/api/v1")
 	api.GET("/clusters", authHandler.RequireAuth(), cm.GetClusters)
 	defaultAPI := api.Group("")
 	defaultAPI.Use(authHandler.RequireAuth(), middleware.ClusterMiddleware(cm))
-	registerClusterProtectedRoutes(defaultAPI, helmChartsHandler)
+	registerClusterProtectedRoutes(defaultAPI, helmChartsHandler, metricsHandler, searchHandler)
 
 	clusterAPI := api.Group("/_clusters/:cluster")
 	clusterAPI.Use(authHandler.RequireAuth(), middleware.ClusterMiddleware(cm))
-	registerClusterProtectedRoutes(clusterAPI, helmChartsHandler)
+	registerClusterProtectedRoutes(clusterAPI, helmChartsHandler, metricsHandler, searchHandler)
 }
 
-func registerClusterProtectedRoutes(api *gin.RouterGroup, helmChartsHandler *helm.HelmChartHandler) {
+func registerClusterProtectedRoutes(
+	api *gin.RouterGroup,
+	helmChartsHandler *helm.HelmChartHandler,
+	metricsHandler *metrics.Handler,
+	searchHandler *search.SearchHandler,
+) {
 	api.GET("/overview", system.GetOverview)
 
-	metricsHandler := metrics.NewHandler()
 	api.GET("/prometheus/resource-usage-history", metricsHandler.GetResourceUsageHistory)
 	api.GET("/prometheus/pods/:namespace/:podName/metrics", metricsHandler.GetPodMetrics)
 
@@ -111,8 +122,11 @@ func registerClusterProtectedRoutes(api *gin.RouterGroup, helmChartsHandler *hel
 
 	terminalHandler := terminal.NewTerminalHandler()
 	api.GET("/terminal/:namespace/:podName/ws", terminalHandler.HandleTerminalWebSocket)
+	nodeTerminalHandler := terminal.NewNodeTerminalHandler()
+	api.GET("/node-terminal/:nodeName/ws", nodeTerminalHandler.HandleNodeTerminalWebSocket)
+	kubectlTerminalHandler := terminal.NewKubectlTerminalHandler()
+	api.GET("/kubectl-terminal/ws", kubectlTerminalHandler.HandleKubectlTerminalWebSocket)
 
-	searchHandler := search.NewSearchHandler(resources.SearchFuncs())
 	api.GET("/search", searchHandler.GlobalSearch)
 
 	resourceApplyHandler := resources.NewResourceApplyHandler()

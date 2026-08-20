@@ -77,7 +77,7 @@ func (h *GenericResourceHandler[T, V]) list(c *gin.Context) (V, error) {
 			_ = meta.SetList(objectList, []runtime.Object{})
 			return objectList, nil
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		writeKubernetesError(c, err, "")
 		return zero, err
 	}
 
@@ -145,7 +145,9 @@ func (h *GenericResourceHandler[T, V]) Search(c *gin.Context, q string, limit in
 		listOpts = append(listOpts, client.MatchingLabels{labelKey: labelValue})
 	}
 	if err := cs.K8sClient.List(ctx, objectList, listOpts...); err != nil {
-		klog.Errorf("failed to list %s: %v", h.name, err)
+		if ctx.Err() == nil {
+			klog.Errorf("failed to list %s: %v", h.name, err)
+		}
 		return nil, err
 	}
 	isLabelSearch := strings.Contains(q, ":") || strings.Contains(q, "=")

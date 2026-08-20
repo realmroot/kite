@@ -60,11 +60,13 @@ func TestGetVersionWithoutVersionCheck(t *testing.T) {
 	origBuildDate := BuildDate
 	origCommitID := CommitID
 	origEnableVersionCheck := common.EnableVersionCheck
+	origReleaseAPIURL := common.ReleaseAPIURL
 	t.Cleanup(func() {
 		Version = origVersion
 		BuildDate = origBuildDate
 		CommitID = origCommitID
 		common.EnableVersionCheck = origEnableVersionCheck
+		common.ReleaseAPIURL = origReleaseAPIURL
 	})
 
 	Version = "1.2.3"
@@ -102,6 +104,7 @@ func TestGetVersionWithCachedUpdateResult(t *testing.T) {
 	origBuildDate := BuildDate
 	origCommitID := CommitID
 	origEnableVersionCheck := common.EnableVersionCheck
+	origReleaseAPIURL := common.ReleaseAPIURL
 	origCachedUpdateResult := cachedUpdateResult
 	origLastUpdateFetch := lastUpdateFetch
 	t.Cleanup(func() {
@@ -109,6 +112,7 @@ func TestGetVersionWithCachedUpdateResult(t *testing.T) {
 		BuildDate = origBuildDate
 		CommitID = origCommitID
 		common.EnableVersionCheck = origEnableVersionCheck
+		common.ReleaseAPIURL = origReleaseAPIURL
 		cachedUpdateResult = origCachedUpdateResult
 		lastUpdateFetch = origLastUpdateFetch
 	})
@@ -117,6 +121,7 @@ func TestGetVersionWithCachedUpdateResult(t *testing.T) {
 	BuildDate = "2026-03-27"
 	CommitID = "abc123"
 	common.EnableVersionCheck = true
+	common.ReleaseAPIURL = "https://code.example.test/releases/latest"
 	cachedUpdateResult = updateCheckResult{
 		hasNew:     true,
 		releaseURL: "https://example.com/releases/v1.2.4",
@@ -144,12 +149,15 @@ func TestGetVersionWithCachedUpdateResult(t *testing.T) {
 }
 
 func TestCheckForUpdateShortCircuitsWithoutNetwork(t *testing.T) {
+	origReleaseAPIURL := common.ReleaseAPIURL
 	origCachedUpdateResult := cachedUpdateResult
 	origLastUpdateFetch := lastUpdateFetch
 	t.Cleanup(func() {
+		common.ReleaseAPIURL = origReleaseAPIURL
 		cachedUpdateResult = origCachedUpdateResult
 		lastUpdateFetch = origLastUpdateFetch
 	})
+	common.ReleaseAPIURL = "https://code.example.test/releases/latest"
 
 	cachedUpdateResult = updateCheckResult{
 		hasNew:     true,
@@ -164,6 +172,9 @@ func TestCheckForUpdateShortCircuitsWithoutNetwork(t *testing.T) {
 }
 
 func TestCheckForUpdateSkipsBlankAndDevVersions(t *testing.T) {
+	original := common.ReleaseAPIURL
+	common.ReleaseAPIURL = "https://code.example.test/releases/latest"
+	t.Cleanup(func() { common.ReleaseAPIURL = original })
 	if got := checkForUpdate(context.Background(), "   "); got != (updateCheckResult{}) {
 		t.Fatalf("blank version result = %#v, want zero value", got)
 	}
@@ -172,15 +183,18 @@ func TestCheckForUpdateSkipsBlankAndDevVersions(t *testing.T) {
 	}
 }
 
-func TestCheckForUpdateFromGitHub(t *testing.T) {
+func TestCheckForUpdateFromConfiguredReleaseAPI(t *testing.T) {
 	origClient := http.DefaultClient
+	origReleaseAPIURL := common.ReleaseAPIURL
 	origCachedUpdateResult := cachedUpdateResult
 	origLastUpdateFetch := lastUpdateFetch
 	t.Cleanup(func() {
 		http.DefaultClient = origClient
+		common.ReleaseAPIURL = origReleaseAPIURL
 		cachedUpdateResult = origCachedUpdateResult
 		lastUpdateFetch = origLastUpdateFetch
 	})
+	common.ReleaseAPIURL = "https://code.example.test/api/releases/latest"
 
 	tests := []struct {
 		name           string
@@ -248,7 +262,7 @@ func TestCheckForUpdateFromGitHub(t *testing.T) {
 				if tt.requestErr != nil {
 					return nil, tt.requestErr
 				}
-				if req.Method != http.MethodGet || req.URL.String() != githubLatestReleaseAPI {
+				if req.Method != http.MethodGet || req.URL.String() != common.ReleaseAPIURL {
 					t.Fatalf("unexpected request: %s %s", req.Method, req.URL)
 				}
 				if got := req.Header.Get("User-Agent"); got != "kite-version-checker/"+tt.currentVersion {

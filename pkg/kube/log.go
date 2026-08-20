@@ -8,6 +8,7 @@ import (
 	"io"
 	"sync"
 
+	"github.com/gorilla/websocket"
 	"github.com/zxh326/kite/pkg/wsutil"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"
@@ -143,9 +144,15 @@ func (l *BatchLogHandler) heartbeat(ctx context.Context) {
 		default:
 			_, _, err := l.conn.ReadMessage()
 			if err != nil {
-				if !errors.Is(err, io.EOF) {
+				if !errors.Is(err, io.EOF) && !websocket.IsCloseError(
+					err,
+					websocket.CloseNormalClosure,
+					websocket.CloseGoingAway,
+					websocket.CloseNoStatusReceived,
+				) {
 					klog.Errorf("WebSocket connection error in heartbeat, cancelling internal context: %v", err)
 				}
+				_ = l.conn.Close()
 				l.cancel() // Cancel internal context when connection is lost
 				return
 			}

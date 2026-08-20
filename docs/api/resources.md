@@ -6,13 +6,13 @@ Kite exposes generic CRUD-style APIs for built-in Kubernetes resources under `/a
 
 Resource endpoints require:
 
-- an authenticated user or API key
+- an authenticated OIDC browser session
 - a target cluster, usually passed through `x-cluster-name`
 
 Example:
 
 ```bash
--H "Authorization: kite12-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \
+-H "Cookie: kite_session=<opaque-session-cookie>" \
 -H "x-cluster-name: demo-cluster"
 ```
 
@@ -63,7 +63,7 @@ This example creates a ConfigMap in the `default` namespace.
 ```bash
 curl \
   -X POST \
-  -H "Authorization: kite12-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \
+  -H "Cookie: kite_session=<opaque-session-cookie>" \
   -H "x-cluster-name: demo-cluster" \
   -H "Content-Type: application/json" \
   -d '{
@@ -90,7 +90,7 @@ This example replaces the ConfigMap content.
 ```bash
 curl \
   -X PUT \
-  -H "Authorization: kite12-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \
+  -H "Cookie: kite_session=<opaque-session-cookie>" \
   -H "x-cluster-name: demo-cluster" \
   -H "Content-Type: application/json" \
   -d '{
@@ -122,7 +122,7 @@ This example uses JSON merge patch to update one field without sending the full 
 ```bash
 curl \
   -X PATCH \
-  -H "Authorization: kite12-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \
+  -H "Cookie: kite_session=<opaque-session-cookie>" \
   -H "x-cluster-name: demo-cluster" \
   -H "Content-Type: application/json" \
   -d '{
@@ -138,7 +138,7 @@ To restart a Deployment with `PATCH`, update an annotation under `spec.template.
 ```bash
 curl \
   -X PATCH \
-  -H "Authorization: kite12-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \
+  -H "Cookie: kite_session=<opaque-session-cookie>" \
   -H "x-cluster-name: demo-cluster" \
   -H "Content-Type: application/json" \
   -d '{
@@ -162,7 +162,7 @@ This example deletes the ConfigMap.
 ```bash
 curl \
   -X DELETE \
-  -H "Authorization: kite12-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \
+  -H "Cookie: kite_session=<opaque-session-cookie>" \
   -H "x-cluster-name: demo-cluster" \
   https://kite.example.com/api/v1/configmaps/default/example-config
 ```
@@ -178,7 +178,7 @@ Example:
 ```bash
 curl \
   -X DELETE \
-  -H "Authorization: kite12-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \
+  -H "Cookie: kite_session=<opaque-session-cookie>" \
   -H "x-cluster-name: demo-cluster" \
   "https://kite.example.com/api/v1/deployments/default/example-app?force=true&wait=false"
 ```
@@ -192,7 +192,7 @@ This example patches a Namespace label:
 ```bash
 curl \
   -X PATCH \
-  -H "Authorization: kite12-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \
+  -H "Cookie: kite_session=<opaque-session-cookie>" \
   -H "x-cluster-name: demo-cluster" \
   -H "Content-Type: application/json" \
   -d '{
@@ -219,3 +219,22 @@ As of the current server routes:
 - custom resources expose list and get routes
 - custom resources expose update and delete routes
 - custom resource create and patch are not documented here because the generic built-in resource routes are the stable CRUD surface currently registered for normal resource operations
+
+## Resource history
+
+Built-in and custom-resource detail routes expose a paginated history collection
+at `/<resource>/<namespace>/<name>/history` (use `_all` for a cluster-scoped
+resource). Before reading Kite's history database, the backend submits a
+Kubernetes `SelfSubjectAccessReview` for `get` on that exact resource group,
+plural, namespace, and name with the current user's token. A denied review
+returns `403`; a platform-management role does not bypass this check.
+
+History pages accept one-based `page` and `pageSize` values. `pageSize` is
+limited to 100. Kubernetes Secret operations retain attribution and success or
+failure metadata, but Kite does not persist Secret YAML bodies or raw Secret
+error details. A rollback from resource history is a new apply operation and is
+authorized again by Kubernetes.
+
+History is internally bound to the immutable catalog cluster ID rather than
+only its display name. Renaming a cluster preserves its history, while deleting
+and later recreating the same name cannot attach old YAML to the new cluster.

@@ -1,39 +1,25 @@
 package cluster
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
-	"net/url"
 	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 	"github.com/zxh326/kite/pkg/clusteragent"
 	"github.com/zxh326/kite/pkg/common"
 	"github.com/zxh326/kite/pkg/model"
 	"gorm.io/gorm"
 )
 
-// clusterAgentServerURL derives the Kite server URL from the request context,
-// using common.Host / X-Forwarded-Host / request host and common.Base.
-func clusterAgentServerURL(c *gin.Context) string {
-	scheme := "http"
-	if c.Request.TLS != nil || strings.EqualFold(c.GetHeader("X-Forwarded-Proto"), "https") {
-		scheme = "https"
-	}
-	host := strings.TrimSpace(common.Host)
-	if host == "" {
-		host = strings.TrimSpace(c.GetHeader("X-Forwarded-Host"))
-		if host == "" {
-			host = c.Request.Host
-		}
-	}
-	if !strings.HasPrefix(host, "http://") && !strings.HasPrefix(host, "https://") {
-		host = scheme + "://" + host
-	}
-	return fmt.Sprintf("%s%s", strings.TrimRight(host, "/"), common.Base)
+func clusterAgentServerURL() string {
+	return fmt.Sprintf("%s%s", strings.TrimRight(common.Host, "/"), common.Base)
 }
 
 func (cm *ClusterManager) GetClusters(c *gin.Context) {
@@ -81,7 +67,6 @@ func (cm *ClusterManager) GetClusterList(c *gin.Context) {
 			"connected":      cluster.ClusterAgent && cm.clusterAgentManager.Connected(cluster.ID),
 			"isDefault":      cluster.IsDefault,
 			"prometheusURL":  cluster.PrometheusURL,
-			"config":         "",
 		}
 		if cluster.ClusterAgent {
 			clusterInfo["clusterAgentVersion"] = cm.clusterAgentManager.Version(cluster.ID)
@@ -108,22 +93,30 @@ func (cm *ClusterManager) CreateCluster(c *gin.Context) {
 		ConnectionMode string `json:"connectionMode" binding:"required"`
 		PrometheusURL  string `json:"prometheusURL"`
 		IsDefault      bool   `json:"isDefault"`
+		Enabled        *bool  `json:"enabled"`
 	}
 
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := bindClusterJSON(c, &req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	req.Name = strings.TrimSpace(req.Name)
 	req.APIServerURL = strings.TrimSpace(req.APIServerURL)
+	req.CABundle = strings.TrimSpace(req.CABundle)
+	req.TLSServerName = strings.TrimSpace(req.TLSServerName)
+	req.PrometheusURL = strings.TrimSpace(req.PrometheusURL)
 	if req.ConnectionMode != "direct" && req.ConnectionMode != "tunnel" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "connectionMode must be direct or tunnel"})
 		return
 	}
 	if req.ConnectionMode == "direct" {
-		apiURL, err := url.Parse(req.APIServerURL)
-		if err != nil || apiURL.Scheme != "https" || apiURL.Host == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "apiServerUrl must be a valid HTTPS URL"})
+		if err := ValidateDirectClusterMetadata(req.APIServerURL, req.CABundle, req.TLSServerName, req.PrometheusURL); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+	} else if req.PrometheusURL != "" {
+		if _, err := parseClusterLocalPrometheusURL(req.PrometheusURL); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 	}
@@ -134,13 +127,6 @@ func (cm *ClusterManager) CreateCluster(c *gin.Context) {
 	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
-	}
-
-	if req.IsDefault {
-		if err := model.ClearDefaultCluster(); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
 	}
 
 	var clusterAgentToken string
@@ -167,6 +153,10 @@ func (cm *ClusterManager) CreateCluster(c *gin.Context) {
 		}
 	}
 
+	enabled := true
+	if req.Enabled != nil {
+		enabled = *req.Enabled
+	}
 	cluster := &model.Cluster{
 		Name:                   req.Name,
 		Description:            req.Description,
@@ -180,7 +170,7 @@ func (cm *ClusterManager) CreateCluster(c *gin.Context) {
 		ClusterAgentPublicKey:  clusterAgentPublicKey,
 		ClusterAgentPrivateKey: model.SecretString(clusterAgentPrivateKey),
 		IsDefault:              req.IsDefault,
-		Enable:                 true,
+		Enable:                 enabled,
 	}
 
 	if err := model.AddCluster(cluster); err != nil {
@@ -193,7 +183,7 @@ func (cm *ClusterManager) CreateCluster(c *gin.Context) {
 		"message": "cluster created successfully",
 	}
 	if req.ConnectionMode == "tunnel" {
-		serverURL := clusterAgentServerURL(c)
+		serverURL := clusterAgentServerURL()
 		result["clusterAgentServer"] = serverURL
 		result["clusterAgentToken"] = clusterAgentToken
 		result["clusterAgentPublicKey"] = clusterAgentPublicKey
@@ -226,9 +216,16 @@ func (cm *ClusterManager) UpdateCluster(c *gin.Context) {
 		Enabled       bool   `json:"enabled"`
 	}
 
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := bindClusterJSON(c, &req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+	req.PrometheusURL = strings.TrimSpace(req.PrometheusURL)
+	if req.PrometheusURL != "" {
+		if _, err := parseClusterLocalPrometheusURL(req.PrometheusURL); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
 	}
 
 	cluster, err := model.GetClusterByID(uint(id))
@@ -240,13 +237,28 @@ func (cm *ClusterManager) UpdateCluster(c *gin.Context) {
 		}
 		return
 	}
-
-	if req.IsDefault && !cluster.IsDefault {
-		if err := model.ClearDefaultCluster(); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	req.Name = strings.TrimSpace(req.Name)
+	req.APIServerURL = strings.TrimSpace(req.APIServerURL)
+	req.CABundle = strings.TrimSpace(req.CABundle)
+	req.TLSServerName = strings.TrimSpace(req.TLSServerName)
+	if cluster.ConnectionMode == "direct" {
+		if err := ValidateDirectClusterMetadata(req.APIServerURL, req.CABundle, req.TLSServerName, req.PrometheusURL); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 	}
+	if req.Name != "" && req.Name != cluster.Name {
+		existing, lookupErr := model.GetClusterByName(req.Name)
+		if lookupErr == nil && existing.ID != cluster.ID {
+			c.JSON(http.StatusConflict, gin.H{"error": "cluster already exists"})
+			return
+		}
+		if lookupErr != nil && !errors.Is(lookupErr, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": lookupErr.Error()})
+			return
+		}
+	}
+
 	updates := map[string]interface{}{
 		"description":     req.Description,
 		"api_server_url":  req.APIServerURL,
@@ -268,6 +280,21 @@ func (cm *ClusterManager) UpdateCluster(c *gin.Context) {
 	cm.invalidateRuntime(cluster.ID)
 
 	c.JSON(http.StatusOK, gin.H{"message": "cluster updated successfully"})
+}
+
+func bindClusterJSON(c *gin.Context, target any) error {
+	decoder := json.NewDecoder(c.Request.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(target); err != nil {
+		return err
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return errors.New("request body must contain one JSON object")
+		}
+		return err
+	}
+	return binding.Validator.ValidateStruct(target)
 }
 
 func (cm *ClusterManager) DeleteCluster(c *gin.Context) {
@@ -342,10 +369,14 @@ func (cm *ClusterManager) GetClusterAgentManifest(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired manifest grant"})
 		return
 	}
-	serverURL := clusterAgentServerURL(c)
+	serverURL := clusterAgentServerURL()
 	image := model.DefaultGeneralClusterAgentImageValue()
 	if setting, err := model.GetGeneralSetting(); err == nil && setting != nil && setting.ClusterAgentImage != "" {
 		image = setting.ClusterAgentImage
+	}
+	if strings.TrimSpace(image) == "" {
+		c.JSON(http.StatusConflict, gin.H{"error": "cluster agent image is not configured"})
+		return
 	}
 	manifest := clusteragent.GenerateManifest(serverURL, token, publicKey, image)
 	c.Header("Cache-Control", "no-store")

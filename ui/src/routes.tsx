@@ -1,7 +1,6 @@
 import { createBrowserRouter } from 'react-router-dom'
 
 import App from './App'
-import { InitCheckRoute } from './components/init-check-route'
 import { ProtectedRoute } from './components/protected-route'
 import { getSubPath } from './lib/subpath'
 import { CRListPage } from './pages/cr-list-page'
@@ -19,20 +18,14 @@ export const router = createBrowserRouter(
   [
     {
       path: '/login',
-      element: (
-        <InitCheckRoute allowIncompleteSetup>
-          <LoginPage />
-        </InitCheckRoute>
-      ),
+      element: <LoginPage />,
     },
     {
       path: '/',
       element: (
-        <InitCheckRoute>
-          <ProtectedRoute>
-            <App />
-          </ProtectedRoute>
-        </InitCheckRoute>
+        <ProtectedRoute>
+          <App />
+        </ProtectedRoute>
       ),
       children: [
         {

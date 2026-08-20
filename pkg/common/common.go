@@ -1,6 +1,7 @@
 package common
 
 import (
+	"encoding/json"
 	"os"
 	"strings"
 	"sync"
@@ -25,38 +26,47 @@ const (
 )
 
 var (
-	Port            = "8080"
-	JwtSecret       = DefaultJWTSecret
-	EnableAnalytics = false
-	Host            = ""
-	Base            = ""
+	Port               = "8080"
+	PprofAddress       = ""
+	JwtSecret          = DefaultJWTSecret
+	EnableAnalytics    = false
+	AnalyticsScriptURL = ""
+	AnalyticsWebsiteID = ""
+	Host               = ""
+	Base               = ""
 
-	NodeTerminalImage    = "busybox:latest"
-	KubectlTerminalImage = "zzde/kubectl:latest"
-	ClusterAgentImage    = "ghcr.io/kite-org/kite:latest"
-	OIDCIssuer           = ""
-	OIDCClientID         = ""
-	OIDCClientSecret     = ""
-	OIDCProviderName     = "OpenID Connect"
-	OIDCScopes           = []string{"openid", "profile", "email", "offline_access"}
-	OIDCUsernameClaim    = "email"
-	OIDCGroupsClaim      = "groups"
-	OIDCNameClaim        = "name"
-	OIDCPictureClaim     = "picture"
-	PlatformAdminGroups  []string
-	DBType               = "sqlite"
-	DBDSN                = "dev.db"
+	NodeTerminalImage     = "busybox:1.37.0"
+	KubectlTerminalImage  = "alpine/kubectl:1.36.3"
+	ClusterAgentImage     = ""
+	OIDCIssuer            = ""
+	OIDCCAFile            = ""
+	OIDCClientID          = ""
+	OIDCClientSecret      = ""
+	OIDCProviderName      = "OpenID Connect"
+	OIDCScopes            = []string{"openid", "profile", "email", "offline_access"}
+	OIDCUsernameClaim     = "email"
+	OIDCGroupsClaim       = "groups"
+	OIDCNameClaim         = "name"
+	OIDCPictureClaim      = "picture"
+	PlatformAdminGroups   []string
+	PlatformAdminSubjects []string
+	ResourceServerURL     = ""
+	ResourceServerIssuer  = ""
+	ResourceServerClients []string
+	ResourceServerJWTAlgs = []string{"RS256"}
+	DBType                = "sqlite"
+	DBDSN                 = "dev.db?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)"
 
 	KiteEncryptKey = "kite-default-encryption-key-change-in-production"
 
 	AllNamespaces = "_all"
 
-	AnonymousUserEnabled = false
-
 	CookieExpirationSeconds = 2 * JWTExpirationSeconds // double jwt
 
-	DisableGZIP        = true
-	EnableVersionCheck = true
+	DisableGZIP               = true
+	EnableVersionCheck        = true
+	VersionCheckDisabledByEnv = false
+	ReleaseAPIURL             = ""
 
 	// CORSAllowedOrigins is empty by default (no CORS in production).
 	// Developers can set CORS_ALLOWED_ORIGINS=http://localhost:5173 for
@@ -75,15 +85,13 @@ var (
 		"fc00::/7",
 	}
 
-	APIKeyProvider = "api_key"
-
 	AgentPodNamespace = "kube-system"
 
 	// ConfigFilePath is the path to the external config file (set via KITE_CONFIG_FILE env)
 	ConfigFilePath = ""
 
 	// ManagedSections tracks which configuration sections are managed by the config file.
-	// Keys: "clusters", "oauth", "ldap", "rbac", "superUser"
+	// Currently only the "clusters" section can be file-managed.
 	ManagedSections = map[string]bool{}
 	managedMu       sync.RWMutex
 )
@@ -116,10 +124,11 @@ func LoadEnvs() {
 	if port := os.Getenv("PORT"); port != "" {
 		Port = port
 	}
+	PprofAddress = strings.TrimSpace(os.Getenv("PPROF_ADDRESS"))
 
-	if analytics := os.Getenv("ENABLE_ANALYTICS"); analytics == "true" {
-		EnableAnalytics = true
-	}
+	EnableAnalytics = os.Getenv("ENABLE_ANALYTICS") == "true"
+	AnalyticsScriptURL = strings.TrimSpace(os.Getenv("ANALYTICS_SCRIPT_URL"))
+	AnalyticsWebsiteID = strings.TrimSpace(os.Getenv("ANALYTICS_WEBSITE_ID"))
 	if ns := os.Getenv("NAMESPACE"); ns != "" {
 		AgentPodNamespace = ns
 	}
@@ -132,10 +141,9 @@ func LoadEnvs() {
 		KubectlTerminalImage = kubectlTerminalImage
 	}
 
-	if clusterAgentImage := os.Getenv("CLUSTER_AGENT_IMAGE"); clusterAgentImage != "" {
-		ClusterAgentImage = clusterAgentImage
-	}
+	ClusterAgentImage = strings.TrimSpace(os.Getenv("CLUSTER_AGENT_IMAGE"))
 	loadOIDCEnvs()
+	loadResourceServerEnvs()
 	loadDatabaseEnvs()
 
 	if key := os.Getenv("KITE_ENCRYPT_KEY"); key != "" {
@@ -144,10 +152,6 @@ func LoadEnvs() {
 		klog.Warningf("KITE_ENCRYPT_KEY is not set, using default key, this is not secure for production!")
 	}
 
-	if v := os.Getenv("ANONYMOUS_USER_ENABLED"); v == "true" {
-		AnonymousUserEnabled = true
-		klog.Warningf("Anonymous user is enabled, this is not secure for production!")
-	}
 	if v := os.Getenv("HOST"); v != "" {
 		Host = v
 	}
@@ -155,7 +159,9 @@ func LoadEnvs() {
 		DisableGZIP = v == "true"
 	}
 
-	if v := os.Getenv("DISABLE_VERSION_CHECK"); v == "true" {
+	VersionCheckDisabledByEnv = os.Getenv("DISABLE_VERSION_CHECK") == "true"
+	ReleaseAPIURL = strings.TrimSpace(os.Getenv("RELEASE_API_URL"))
+	if VersionCheckDisabledByEnv {
 		EnableVersionCheck = false
 	}
 
@@ -197,6 +203,24 @@ func LoadEnvs() {
 	klog.Infof("Trusted proxies configured: %v", TrustedProxies)
 }
 
+func loadResourceServerEnvs() {
+	ResourceServerURL = strings.TrimRight(strings.TrimSpace(os.Getenv("RESOURCE_SERVER_URL")), "/")
+	ResourceServerIssuer = strings.TrimRight(strings.TrimSpace(os.Getenv("RESOURCE_SERVER_ISSUER")), "/")
+	ResourceServerClients = splitConfigList(os.Getenv("RESOURCE_SERVER_AUTHORIZED_CLIENT_IDS"))
+	ResourceServerJWTAlgs = []string{"RS256"}
+	if algorithms := splitConfigList(os.Getenv("RESOURCE_SERVER_JWT_ALGORITHMS")); len(algorithms) != 0 {
+		ResourceServerJWTAlgs = algorithms
+	}
+}
+
+func ResourceServerEnabled() bool {
+	return ResourceServerURL != ""
+}
+
+func AnalyticsConfigured() bool {
+	return AnalyticsScriptURL != "" && AnalyticsWebsiteID != ""
+}
+
 func loadOIDCEnvs() {
 	OIDCProviderName = "OpenID Connect"
 	OIDCScopes = []string{"openid", "profile", "email", "offline_access"}
@@ -205,6 +229,7 @@ func loadOIDCEnvs() {
 	OIDCNameClaim = "name"
 	OIDCPictureClaim = "picture"
 	OIDCIssuer = strings.TrimRight(strings.TrimSpace(os.Getenv("OIDC_ISSUER")), "/")
+	OIDCCAFile = strings.TrimSpace(os.Getenv("OIDC_CA_FILE"))
 	OIDCClientID = strings.TrimSpace(os.Getenv("OIDC_CLIENT_ID"))
 	OIDCClientSecret = os.Getenv("OIDC_CLIENT_SECRET")
 	if name := strings.TrimSpace(os.Getenv("OIDC_PROVIDER_NAME")); name != "" {
@@ -226,11 +251,28 @@ func loadOIDCEnvs() {
 		OIDCPictureClaim = claim
 	}
 	PlatformAdminGroups = nil
-	for _, group := range splitConfigList(os.Getenv("PLATFORM_ADMIN_GROUPS")) {
+	for _, group := range splitPrincipalList(os.Getenv("PLATFORM_ADMIN_GROUPS")) {
 		if group = strings.TrimSpace(group); group != "" {
 			PlatformAdminGroups = append(PlatformAdminGroups, group)
 		}
 	}
+	PlatformAdminSubjects = nil
+	for _, subject := range splitPrincipalList(os.Getenv("PLATFORM_ADMIN_SUBJECTS")) {
+		if subject = strings.TrimSpace(subject); subject != "" {
+			PlatformAdminSubjects = append(PlatformAdminSubjects, subject)
+		}
+	}
+}
+
+func splitPrincipalList(value string) []string {
+	trimmed := strings.TrimSpace(value)
+	if strings.HasPrefix(trimmed, "[") {
+		var values []string
+		if json.Unmarshal([]byte(trimmed), &values) == nil {
+			return values
+		}
+	}
+	return splitConfigList(value)
 }
 
 func splitConfigList(value string) []string {

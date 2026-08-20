@@ -1,49 +1,62 @@
-# OAuth Setup Guide
+# OpenID Connect setup
 
-This guide explains how to configure OAuth authentication for Kite, supporting multiple authentication providers.
+Kite is a confidential browser application using OpenID Connect Authorization
+Code with PKCE. Configure one issuer per deployment; there is no provider CRUD
+in the dashboard.
 
-## Creating OAuth Applications at Providers
+## Register the client
 
-1. Log in to your OAuth provider account (such as GitHub, Google, etc.).
-2. Create a new OAuth application and fill in the necessary information.
-3. In the redirect URI, fill in `https://${HOST}/api/auth/callback`, replacing `${HOST}` with your Kite deployment address.
-   1. For example, if your Kite is deployed at `kite.example.com`, the redirect URI should be `https://kite.example.com/api/auth/callback`.
-   2. Kite uses the backend Host and protocol from the request to generate the redirect Host by default.
-   3. If kite is deployed behind a proxy, it will read the `X-Forwarded-Host` and `X-Forwarded-Proto` headers by default.
-   4. If the above information is not available, you can configure the `HOST` environment variable to specify explicitly.
-4. Record the generated Client ID and Client Secret.
+Create a confidential web client at any standards-compliant provider and
+register this exact redirect URI:
 
-## Configuration
+```text
+https://kite.example.com/api/auth/callback
+```
 
-In the user interface with the **admin** role, the settings entry will be displayed in the upper right corner of the page.
+Set `HOST=https://kite.example.com` so callback and secure-cookie behavior do
+not depend on forwarded headers.
 
-Follow the instructions on the page to fill in the basic information to use OAuth login.
-![OAuth](../screenshots/oauth.png)
+## Configure Kite
 
-### Advanced Settings
+```text
+OIDC_ISSUER=https://identity.example.com
+OIDC_CLIENT_ID=kite
+OIDC_CLIENT_SECRET=<secret>
+OIDC_PROVIDER_NAME=Corporate Identity
+OIDC_SCOPES=openid profile email groups offline_access
+OIDC_USERNAME_CLAIM=email
+OIDC_GROUPS_CLAIM=groups
+OIDC_NAME_CLAIM=name
+OIDC_PICTURE_CLAIM=picture
+PLATFORM_ADMIN_GROUPS=kite-platform-admins
+HOST=https://kite.example.com
+KITE_ENCRYPT_KEY=<independent random secret>
+JWT_SECRET=<independent random secret>
+```
 
-Kite supports overriding default OIDC claims and restricting access based on user groups. These options can be configured in the **Advanced Settings** section when adding or editing an OAuth Provider:
+The issuer must expose standard discovery metadata. `OIDC_SCOPES` must include
+`openid` and `offline_access`; scheduled Helm operations require the user's
+refresh grant. `HOST` is a required HTTPS origin and is never inferred from
+forwarded request headers. The configured claim names are ordinary top-level
+ID-token claims; Kite contains no provider-specific claim logic.
 
-- **Username Claim**: Overrides the default claim used to extract the user's username (e.g., `preferred_username`, `upn`, or `nickname`). If left empty, Kite uses standard claims like `email` or `name`.
-- **Groups Claim**: Overrides the default claim used to extract the user's groups (e.g., `groups`, `memberOf`, or `roles`). If left empty, Kite defaults to standard group representations.
-- **Allowed Groups**: Restricts login to users who belong to specific groups. Enter a comma-separated list of group names (e.g., `admin, developers`). If configured, users must belong to at least one of these groups to log in. Users without a matching group are denied access.
+`PLATFORM_ADMIN_GROUPS` controls only Kite-owned shared metadata. Login is not
+restricted to those groups, and membership does not grant Kubernetes access.
 
-## Common Issues
+## Align Kubernetes
 
-### User shows no permissions after login
+Configure each API server to trust the same issuer and audience, then align its
+username and groups claim settings with the provider. Create Kubernetes
+RoleBindings or ClusterRoleBindings for exact users or groups.
 
-By default, even after successful login, Kite will not grant any permissions to the user. You need to manually configure RBAC rules to grant access.
+Kite forwards the original ID token. It cannot compensate for a managed
+Kubernetes service that does not accept the external issuer or audience.
 
-See the [RBAC Configuration Guide](./rbac-config) for details.
+## Troubleshooting
 
-### How to map OAuth users to RBAC roles?
-
-You can configure the mapping relationship between OAuth users and RBAC roles in the settings. For specific steps, please refer to the [RBAC Configuration Guide](./rbac-config).
-
-### Login failure
-
-Generally, these are configuration issues. You can check the following points:
-
-1. Ensure the OAuth application's Client ID and Client Secret are configured correctly.
-2. Check if the redirect URI matches what is configured in the OAuth application.
-3. View Kite logs for more error information.
+- Discovery failure: verify the issuer's `/.well-known/openid-configuration`.
+- Callback rejection: verify the exact HTTPS callback and `HOST`.
+- Login succeeds but Kubernetes returns 401: align issuer, audience, signing
+  keys, and API-server OIDC flags.
+- Kubernetes returns 403: the identity authenticated successfully but lacks the
+  required native RBAC binding.

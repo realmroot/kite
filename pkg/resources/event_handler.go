@@ -29,7 +29,7 @@ func (h *EventHandler) ListResourceEvents(c *gin.Context) {
 	target, err := GetResource(c, resource, namespace, name)
 
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Failed to get resource: " + err.Error()})
+		writeKubernetesError(c, err, "Failed to get resource")
 		return
 	}
 
@@ -46,7 +46,7 @@ func (h *EventHandler) ListResourceEvents(c *gin.Context) {
 	})
 
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list events: " + err.Error()})
+		writeKubernetesError(c, err, "Failed to list events")
 		return
 	}
 

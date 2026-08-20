@@ -63,15 +63,18 @@ func TestInjectKiteBase(t *testing.T) {
 func TestInjectAnalytics(t *testing.T) {
 	html := `<html><head><title>kite</title></head><body></body></html>`
 
-	got := InjectAnalytics(html)
-	if !strings.Contains(got, `https://cloud.umami.is/script.js`) {
+	got := InjectAnalytics(html, `https://analytics.example.com/script.js?a="unsafe`, `site"><unsafe`)
+	if !strings.Contains(got, `https://analytics.example.com/script.js?a=&#34;unsafe`) {
 		t.Fatalf("expected analytics script to be injected: %s", got)
 	}
-	if strings.Index(got, `https://cloud.umami.is/script.js`) > strings.Index(got, `</head>`) {
+	if !strings.Contains(got, `data-website-id="site&#34;&gt;&lt;unsafe"`) {
+		t.Fatalf("expected analytics attributes to be escaped: %s", got)
+	}
+	if strings.Index(got, `analytics.example.com/script.js`) > strings.Index(got, `</head>`) {
 		t.Fatalf("expected analytics script before </head>: %s", got)
 	}
 
-	if unchanged := InjectAnalytics("<html><body></body></html>"); unchanged != "<html><body></body></html>" {
+	if unchanged := InjectAnalytics("<html><body></body></html>", "https://analytics.example.com/script.js", "site"); unchanged != "<html><body></body></html>" {
 		t.Fatalf("InjectAnalytics() = %q, want unchanged input", unchanged)
 	}
 }

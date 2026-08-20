@@ -9,10 +9,11 @@ import (
 )
 
 const (
-	ClusterNameHeader = "x-cluster-name"
-	ClusterNameKey    = "cluster-name"
-	K8sClientKey      = "k8s-client"
-	PromClientKey     = "prom-client"
+	ClusterNameHeader        = "x-cluster-name"
+	ClusterNameKey           = "cluster-name"
+	K8sClientKey             = "k8s-client"
+	PromClientKey            = "prom-client"
+	KubernetesBearerTokenKey = "kubernetes-bearer-token"
 )
 
 type clusterClientSetProvider interface {
@@ -35,13 +36,16 @@ func ClusterMiddleware(cm clusterClientSetProvider) gin.HandlerFunc {
 				}
 			}
 		}
-		idToken := c.GetString("oidc-id-token")
-		if idToken == "" {
+		credential := c.GetString(KubernetesBearerTokenKey)
+		if credential == "" {
+			credential = c.GetString("oidc-id-token")
+		}
+		if credential == "" {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "OIDC ID token is missing"})
 			c.Abort()
 			return
 		}
-		cluster, err := cm.GetClientSet(clusterName, idToken)
+		cluster, err := cm.GetClientSet(clusterName, credential)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 			c.Abort()

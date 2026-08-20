@@ -11,15 +11,9 @@ import (
 	"k8s.io/klog/v2"
 )
 
-const DefaultGeneralAIModel = "gpt-4o-mini"
-const DefaultGeneralAnthropicModel = "claude-sonnet-4-5"
-const DefaultGeneralKubectlImage = "zzde/kubectl:latest"
-const DefaultGeneralNodeTerminalImage = "busybox:latest"
-const DefaultGeneralClusterAgentImage = "ghcr.io/kite-org/kite:latest"
-
-const GeneralAIProviderOpenAI = "openai"
-const GeneralAIProviderAnthropic = "anthropic"
-const DefaultGeneralAIProvider = GeneralAIProviderOpenAI
+const DefaultGeneralKubectlImage = "alpine/kubectl:1.36.3"
+const DefaultGeneralNodeTerminalImage = "busybox:1.37.0"
+const DefaultGeneralClusterAgentImage = ""
 
 func DefaultGeneralNodeTerminalImageValue() string {
 	image := strings.TrimSpace(common.NodeTerminalImage)
@@ -47,47 +41,15 @@ func DefaultGeneralClusterAgentImageValue() string {
 
 type GeneralSetting struct {
 	Model
-	AIAgentEnabled          bool         `json:"aiAgentEnabled" gorm:"column:ai_agent_enabled;type:boolean;not null;default:false"`
-	AIProvider              string       `json:"aiProvider" gorm:"column:ai_provider;type:varchar(50);not null;default:'openai'"`
-	AIModel                 string       `json:"aiModel" gorm:"column:ai_model;type:varchar(255);not null;default:'gpt-4o-mini'"`
-	AIAPIKey                SecretString `json:"aiApiKey" gorm:"column:ai_api_key;type:text"`
-	AIBaseURL               string       `json:"aiBaseUrl" gorm:"column:ai_base_url;type:varchar(500)"`
-	AIMaxTokens             int          `json:"aiMaxTokens" gorm:"column:ai_max_tokens;type:integer;default:16384"`
 	KubectlEnabled          bool         `json:"kubectlEnabled" gorm:"column:kubectl_enabled;type:boolean;not null;default:true"`
-	KubectlImage            string       `json:"kubectlImage" gorm:"column:kubectl_image;type:varchar(255);not null;default:'zzde/kubectl:latest'"`
-	NodeTerminalImage       string       `json:"nodeTerminalImage" gorm:"column:node_terminal_image;type:varchar(255);not null;default:'busybox:latest'"`
-	ClusterAgentImage       string       `json:"clusterAgentImage" gorm:"column:cluster_agent_image;type:varchar(255);not null;default:'ghcr.io/kite-org/kite:latest'"`
+	KubectlImage            string       `json:"kubectlImage" gorm:"column:kubectl_image;type:varchar(255);not null;default:'alpine/kubectl:1.36.3'"`
+	NodeTerminalImage       string       `json:"nodeTerminalImage" gorm:"column:node_terminal_image;type:varchar(255);not null;default:'busybox:1.37.0'"`
+	ClusterAgentImage       string       `json:"clusterAgentImage" gorm:"column:cluster_agent_image;type:varchar(255);not null;default:''"`
 	EnableAnalytics         bool         `json:"enableAnalytics" gorm:"column:enable_analytics;type:boolean;not null;default:false"`
 	EnableVersionCheck      bool         `json:"enableVersionCheck" gorm:"column:enable_version_check;type:boolean;not null;default:true"`
-	PasswordLoginDisabled   bool         `json:"passwordLoginDisabled" gorm:"column:password_login_disabled;type:boolean;not null;default:false"`
-	EnableMFA               bool         `json:"enableMFA" gorm:"column:enable_mfa;type:boolean;not null;default:true"`
-	EnablePasskeyLogin      bool         `json:"enablePasskeyLogin" gorm:"column:enable_passkey_login;type:boolean;not null;default:true"`
 	LoginPrompt             string       `json:"loginPrompt" gorm:"column:login_prompt;type:text"`
 	JWTSecret               SecretString `json:"-" gorm:"column:jwt_secret;type:text"`
 	GlobalSidebarPreference string       `json:"-" gorm:"column:global_sidebar_preference;type:text"`
-}
-
-func NormalizeGeneralAIProvider(provider string) string {
-	switch strings.ToLower(strings.TrimSpace(provider)) {
-	case GeneralAIProviderAnthropic:
-		return GeneralAIProviderAnthropic
-	default:
-		return GeneralAIProviderOpenAI
-	}
-}
-
-func IsGeneralAIProviderSupported(provider string) bool {
-	normalized := strings.ToLower(strings.TrimSpace(provider))
-	return normalized == GeneralAIProviderOpenAI || normalized == GeneralAIProviderAnthropic
-}
-
-func DefaultGeneralAIModelByProvider(provider string) string {
-	switch NormalizeGeneralAIProvider(provider) {
-	case GeneralAIProviderAnthropic:
-		return DefaultGeneralAnthropicModel
-	default:
-		return DefaultGeneralAIModel
-	}
 }
 
 func GetGeneralSetting() (*GeneralSetting, error) {
@@ -95,20 +57,6 @@ func GetGeneralSetting() (*GeneralSetting, error) {
 	err := DB.First(&setting, 1).Error
 	if err == nil {
 		updates := map[string]interface{}{}
-		if setting.AIProvider == "" {
-			setting.AIProvider = DefaultGeneralAIProvider
-			updates["ai_provider"] = DefaultGeneralAIProvider
-		} else {
-			normalizedProvider := NormalizeGeneralAIProvider(setting.AIProvider)
-			if setting.AIProvider != normalizedProvider {
-				setting.AIProvider = normalizedProvider
-				updates["ai_provider"] = normalizedProvider
-			}
-		}
-		if setting.AIModel == "" {
-			setting.AIModel = DefaultGeneralAIModelByProvider(setting.AIProvider)
-			updates["ai_model"] = setting.AIModel
-		}
 		if setting.KubectlImage == "" {
 			setting.KubectlImage = DefaultGeneralKubectlImageValue()
 			updates["kubectl_image"] = setting.KubectlImage
@@ -138,18 +86,12 @@ func GetGeneralSetting() (*GeneralSetting, error) {
 
 	setting = GeneralSetting{
 		Model:              Model{ID: 1},
-		AIAgentEnabled:     false,
-		AIProvider:         DefaultGeneralAIProvider,
-		AIModel:            DefaultGeneralAIModel,
-		AIMaxTokens:        16384,
 		KubectlEnabled:     true,
 		KubectlImage:       DefaultGeneralKubectlImageValue(),
 		NodeTerminalImage:  DefaultGeneralNodeTerminalImageValue(),
 		ClusterAgentImage:  DefaultGeneralClusterAgentImageValue(),
 		EnableAnalytics:    common.EnableAnalytics,
 		EnableVersionCheck: common.EnableVersionCheck,
-		EnableMFA:          true,
-		EnablePasskeyLogin: true,
 	}
 	if err := ensureJWTSecret(&setting, nil); err != nil {
 		return nil, err
@@ -181,7 +123,7 @@ func applyRuntimeGeneralSetting(setting *GeneralSetting) {
 		return
 	}
 	common.EnableAnalytics = setting.EnableAnalytics
-	common.EnableVersionCheck = setting.EnableVersionCheck
+	common.EnableVersionCheck = setting.EnableVersionCheck && !common.VersionCheckDisabledByEnv
 }
 
 func ensureJWTSecret(setting *GeneralSetting, updates map[string]interface{}) error {

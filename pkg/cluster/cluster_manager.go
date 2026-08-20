@@ -2,7 +2,6 @@ package cluster
 
 import (
 	"crypto/sha256"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"net/http"
@@ -14,11 +13,13 @@ import (
 	"github.com/zxh326/kite/pkg/kube"
 	"github.com/zxh326/kite/pkg/model"
 	"github.com/zxh326/kite/pkg/prometheus"
+	utilvalidation "k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/client-go/rest"
 	kubetransport "k8s.io/client-go/transport"
 )
 
 type ClientSet struct {
+	ClusterID  uint
 	Name       string
 	Version    string // Kubernetes version
 	K8sClient  *kube.K8sClient
@@ -41,20 +42,67 @@ type clusterRuntime struct {
 	transport http.RoundTripper
 }
 
+func validateKubernetesAPIServerURL(value string) error {
+	apiURL, err := url.Parse(strings.TrimSpace(value))
+	if err != nil || apiURL.Scheme != "https" || apiURL.Host == "" {
+		return errors.New("API server URL must be an absolute HTTPS URL")
+	}
+	if apiURL.User != nil || apiURL.RawQuery != "" || apiURL.ForceQuery || apiURL.Fragment != "" {
+		return errors.New("API server URL must not contain credentials, query, or fragment")
+	}
+	return nil
+}
+
+func ValidateDirectClusterMetadata(apiServerURL, caBundle, tlsServerName, prometheusURL string) error {
+	if err := validateKubernetesAPIServerURL(apiServerURL); err != nil {
+		return err
+	}
+	if _, err := kube.NormalizeCABundle(caBundle); err != nil {
+		return err
+	}
+	if err := kube.ValidateTLSServerName(tlsServerName); err != nil {
+		return err
+	}
+	if strings.TrimSpace(prometheusURL) != "" {
+		if _, err := parseClusterLocalPrometheusURL(strings.TrimSpace(prometheusURL)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func parseClusterLocalPrometheusURL(urlStr string) (*url.URL, error) {
+	parsedURL, err := url.Parse(urlStr)
+	if err != nil {
+		return nil, fmt.Errorf("parse prometheus URL: %w", err)
+	}
+	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+		return nil, errors.New("prometheus URL scheme must be http or https")
+	}
+	if parsedURL.User != nil || parsedURL.Path != "" || parsedURL.RawQuery != "" || parsedURL.Fragment != "" {
+		return nil, errors.New("prometheus URL must be a service base URL without credentials, path, query, or fragment")
+	}
+	parts := strings.Split(parsedURL.Hostname(), ".")
+	validSuffix := len(parts) == 3 && parts[2] == "svc"
+	validFQDN := len(parts) == 5 && parts[2] == "svc" && parts[3] == "cluster" && parts[4] == "local"
+	if (!validSuffix && !validFQDN) || len(utilvalidation.IsDNS1123Label(parts[0])) > 0 || len(utilvalidation.IsDNS1123Label(parts[1])) > 0 {
+		return nil, errors.New("prometheus URL must target <service>.<namespace>.svc or <service>.<namespace>.svc.cluster.local")
+	}
+	return parsedURL, nil
+}
+
 func isClusterLocalURL(urlStr string) bool {
-	return strings.Contains(urlStr, ".svc.cluster.local") || strings.Contains(urlStr, ".svc:")
+	_, err := parseClusterLocalPrometheusURL(urlStr)
+	return err == nil
 }
 
 func createK8sProxyTransport(k8sConfig *rest.Config, transport http.RoundTripper, prometheusURL string) (*k8sProxyTransport, error) {
-	parsedURL, err := url.Parse(prometheusURL)
+	parsedURL, err := parseClusterLocalPrometheusURL(prometheusURL)
 	if err != nil {
 		return nil, err
 	}
 
-	parts := strings.Split(parsedURL.Host, ".")
-	if len(parts) < 2 {
-		return nil, fmt.Errorf("invalid cluster local URL format")
-	}
+	parts := strings.Split(parsedURL.Hostname(), ".")
 	svcName := parts[0]
 	namespace := parts[1]
 
@@ -136,7 +184,12 @@ func (cm *ClusterManager) GetClientSet(clusterName, idToken string) (*ClientSet,
 	httpClient := &http.Client{
 		Transport: kubetransport.NewBearerAuthRoundTripper(idToken, runtime.transport),
 	}
-	return newUserClientSet(cluster.Name, runtime.config, httpClient, cluster.PrometheusURL)
+	clientSet, err := newUserClientSet(cluster.Name, runtime.config, httpClient, cluster.PrometheusURL, idToken)
+	if err != nil {
+		return nil, err
+	}
+	clientSet.ClusterID = cluster.ID
+	return clientSet, nil
 }
 
 func (cm *ClusterManager) runtimeForCluster(cluster *model.Cluster) (*clusterRuntime, error) {
@@ -185,16 +238,15 @@ func (cm *ClusterManager) baseRESTConfig(cluster *model.Cluster) (*rest.Config, 
 			return nil, 0, err
 		}
 	} else {
-		if cluster.APIServerURL == "" {
-			return nil, 0, errors.New("cluster API server URL is missing")
+		if err := validateKubernetesAPIServerURL(cluster.APIServerURL); err != nil {
+			return nil, 0, fmt.Errorf("invalid cluster API server URL: %w", err)
 		}
-		caData := []byte(cluster.CABundle)
-		if cluster.CABundle != "" && !strings.Contains(cluster.CABundle, "BEGIN CERTIFICATE") {
-			decoded, err := base64.StdEncoding.DecodeString(cluster.CABundle)
-			if err != nil {
-				return nil, 0, errors.New("cluster CA bundle must be PEM or base64-encoded PEM")
-			}
-			caData = decoded
+		caData, err := kube.NormalizeCABundle(cluster.CABundle)
+		if err != nil {
+			return nil, 0, fmt.Errorf("invalid cluster CA bundle: %w", err)
+		}
+		if err := kube.ValidateTLSServerName(cluster.TLSServerName); err != nil {
+			return nil, 0, err
 		}
 		config = &rest.Config{
 			Host: cluster.APIServerURL,
@@ -246,11 +298,28 @@ func (cm *ClusterManager) invalidateRuntime(clusterID uint) {
 	closeIdleConnections(runtime.transport)
 }
 
-func newUserClientSet(name string, config *rest.Config, httpClient *http.Client, prometheusURL string) (*ClientSet, error) {
+func (cm *ClusterManager) InvalidateCatalogRuntimes() {
+	cm.runtimeMu.Lock()
+	for clusterID, runtime := range cm.runtimes {
+		delete(cm.runtimes, clusterID)
+		closeIdleConnections(runtime.transport)
+	}
+	cm.runtimeMu.Unlock()
+
+	// Declarative catalog entries are direct-only. A successful reload therefore
+	// removes any tunnel entries that may have existed before the catalog became
+	// managed, so their established transports must be closed as well.
+	cm.clusterAgentManager.DisconnectAll()
+}
+
+func newUserClientSet(name string, config *rest.Config, httpClient *http.Client, prometheusURL, idToken string) (*ClientSet, error) {
 	k8sClient, err := kube.NewDirectClient(config, httpClient)
 	if err != nil {
 		return nil, err
 	}
+	// Helm constructs additional clients from this request-scoped config. Keep
+	// the user's token here without ever placing it in the shared cluster runtime.
+	k8sClient.Configuration.BearerToken = idToken
 	clientSet := &ClientSet{Name: name, K8sClient: k8sClient, prometheusURL: prometheusURL}
 	if prometheusURL != "" && isClusterLocalURL(prometheusURL) {
 		proxyTransport, err := createK8sProxyTransport(config, httpClient.Transport, prometheusURL)

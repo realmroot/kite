@@ -23,73 +23,16 @@ func TestDefaultGeneralNodeTerminalImageValue(t *testing.T) {
 	}
 }
 
-func TestNormalizeGeneralAIProvider(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		expected string
-	}{
-		{"anthropic", " Anthropic ", GeneralAIProviderAnthropic},
-		{"openai", "OPENAI", GeneralAIProviderOpenAI},
-		{"unknown", "something-else", GeneralAIProviderOpenAI},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := NormalizeGeneralAIProvider(tt.input); got != tt.expected {
-				t.Fatalf("NormalizeGeneralAIProvider() = %q, want %q", got, tt.expected)
-			}
-		})
-	}
-}
-
-func TestIsGeneralAIProviderSupported(t *testing.T) {
-	tests := []struct {
-		name  string
-		input string
-		want  bool
-	}{
-		{"openai", "openai", true},
-		{"anthropic", " Anthropic ", true},
-		{"unknown", "gemini", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := IsGeneralAIProviderSupported(tt.input); got != tt.want {
-				t.Fatalf("IsGeneralAIProviderSupported() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestDefaultGeneralAIModelByProvider(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		expected string
-	}{
-		{"anthropic", GeneralAIProviderAnthropic, DefaultGeneralAnthropicModel},
-		{"openai", GeneralAIProviderOpenAI, DefaultGeneralAIModel},
-		{"unknown", "anything else", DefaultGeneralAIModel},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := DefaultGeneralAIModelByProvider(tt.input); got != tt.expected {
-				t.Fatalf("DefaultGeneralAIModelByProvider() = %q, want %q", got, tt.expected)
-			}
-		})
-	}
-}
-
 func TestApplyRuntimeGeneralSetting(t *testing.T) {
 	originalAnalytics := common.EnableAnalytics
 	originalVersionCheck := common.EnableVersionCheck
+	originalVersionCheckDisabled := common.VersionCheckDisabledByEnv
 	t.Cleanup(func() {
 		common.EnableAnalytics = originalAnalytics
 		common.EnableVersionCheck = originalVersionCheck
+		common.VersionCheckDisabledByEnv = originalVersionCheckDisabled
 	})
+	common.VersionCheckDisabledByEnv = false
 
 	applyRuntimeGeneralSetting(&GeneralSetting{
 		EnableAnalytics:    true,
@@ -109,6 +52,23 @@ func TestApplyRuntimeGeneralSetting(t *testing.T) {
 	}
 	if common.EnableVersionCheck {
 		t.Fatalf("nil setting changed EnableVersionCheck")
+	}
+}
+
+func TestApplyRuntimeGeneralSettingHonorsOperatorVersionCheckDisable(t *testing.T) {
+	originalVersionCheck := common.EnableVersionCheck
+	originalVersionCheckDisabled := common.VersionCheckDisabledByEnv
+	t.Cleanup(func() {
+		common.EnableVersionCheck = originalVersionCheck
+		common.VersionCheckDisabledByEnv = originalVersionCheckDisabled
+	})
+	common.VersionCheckDisabledByEnv = true
+	common.EnableVersionCheck = false
+
+	applyRuntimeGeneralSetting(&GeneralSetting{EnableVersionCheck: true})
+
+	if common.EnableVersionCheck {
+		t.Fatal("database setting overrode DISABLE_VERSION_CHECK")
 	}
 }
 

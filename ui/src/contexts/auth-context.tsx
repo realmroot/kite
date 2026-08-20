@@ -8,10 +8,9 @@ import {
   useMemo,
 } from 'react'
 
-import type { BootstrapCapabilities, CredentialProvider } from '@/lib/api'
+import type { BootstrapCapabilities } from '@/lib/api'
 import {
-  loginWithCredentials as authenticateWithCredentials,
-  initiateOAuthLogin,
+  initiateOIDCLogin,
   logout as logoutUser,
   refreshAuthToken,
   useBootstrap,
@@ -21,7 +20,6 @@ import { withSubPath } from '@/lib/subpath'
 
 interface User extends AuthUser {
   isAdmin(): boolean
-
   Key(): string
 }
 
@@ -30,59 +28,35 @@ interface AuthContextType {
   isLoading: boolean
   hasGlobalSidebarPreference: boolean
   globalSidebarPreference: string
-  credentialProviders: CredentialProvider[]
-  oauthProviders: string[]
+  providerName: string
   loginPrompt: string
-  mfaEnabled: boolean
-  passkeyLoginEnabled: boolean
   capabilities: BootstrapCapabilities
-  login: (provider?: string) => Promise<void>
-  loginWithCredentials: (
-    provider: CredentialProvider,
-    username: string,
-    password: string,
-    mfaCode?: string
-  ) => Promise<void>
+  login: () => Promise<void>
   logout: () => Promise<void>
   checkAuth: () => Promise<void>
   refreshToken: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
-
-const defaultCapabilities: BootstrapCapabilities = {
-  aiEnabled: false,
-  kubectlEnabled: false,
-}
+const defaultCapabilities: BootstrapCapabilities = { kubectlEnabled: false }
 
 export function useAuth() {
   const context = useContext(AuthContext)
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider')
-  }
+  if (!context) throw new Error('useAuth must be used within an AuthProvider')
   return context
 }
 
-interface AuthProviderProps {
-  children: ReactNode
-}
-
-function normalizeUser(user: AuthUser): User {
+function normalizeUser(user: AuthUser, platformAdmin: boolean): User {
   return {
     ...user,
-    isAdmin() {
-      return (
-        this.roles?.some((role: { name: string }) => role.name === 'admin') ||
-        false
-      )
-    },
+    isAdmin: () => platformAdmin,
     Key() {
-      return this.username || this.id
+      return this.username || this.sub || this.id
     },
   }
 }
 
-export function AuthProvider({ children }: AuthProviderProps) {
+export function AuthProvider({ children }: { children: ReactNode }) {
   const {
     data: bootstrap,
     isLoading,
@@ -93,23 +67,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
     await refetchBootstrap()
   }, [refetchBootstrap])
 
-  const login = useCallback(async (provider: string = 'oidc') => {
-    const { auth_url } = await initiateOAuthLogin(provider)
+  const login = useCallback(async () => {
+    const { auth_url } = await initiateOIDCLogin()
     window.location.href = auth_url
   }, [])
-
-  const loginWithCredentials = useCallback(
-    async (
-      provider: CredentialProvider,
-      username: string,
-      password: string,
-      mfaCode?: string
-    ) => {
-      await authenticateWithCredentials(provider, username, password, mfaCode)
-      await checkAuth()
-    },
-    [checkAuth]
-  )
 
   const logout = useCallback(async () => {
     await logoutUser()
@@ -120,89 +81,53 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const refreshToken = useCallback(async () => {
     try {
       await refreshAuthToken()
-    } catch (error) {
-      console.error('Token refresh failed:', error)
+    } catch {
       await refetchBootstrap()
       window.location.href = withSubPath('/login')
     }
   }, [refetchBootstrap])
 
   const user = useMemo(
-    () => (bootstrap?.user ? normalizeUser(bootstrap.user) : null),
-    [bootstrap?.user]
+    () =>
+      bootstrap?.user
+        ? normalizeUser(bootstrap.user, bootstrap.platformAdmin)
+        : null,
+    [bootstrap?.platformAdmin, bootstrap?.user]
   )
 
   useEffect(() => {
     if (!user) return
-    const refreshKey = 'lastRefreshTokenAt'
-    const lastRefreshAt = localStorage.getItem(refreshKey)
-    const now = Date.now()
+    const interval = window.setInterval(refreshToken, 30 * 60 * 1000)
+    return () => window.clearInterval(interval)
+  }, [refreshToken, user])
 
-    if (!lastRefreshAt || now - Number(lastRefreshAt) > 30 * 60 * 1000) {
-      refreshToken()
-      localStorage.setItem(refreshKey, String(now))
-    }
-
-    const refreshInterval = setInterval(
-      () => {
-        refreshToken()
-        localStorage.setItem(refreshKey, String(Date.now()))
-      },
-      30 * 60 * 1000
-    )
-
-    return () => clearInterval(refreshInterval)
-  }, [user, refreshToken])
-
-  const globalSidebarPreference = String(
-    bootstrap?.globalSidebarPreference || ''
-  )
-  const hasGlobalSidebarPreference =
-    bootstrap?.hasGlobalSidebarPreference ??
-    globalSidebarPreference.trim() !== ''
-  const loginPrompt = bootstrap?.auth.loginPrompt || ''
-  const mfaEnabled = bootstrap?.auth.mfaEnabled ?? true
-  const passkeyLoginEnabled = bootstrap?.auth.passkeyLoginEnabled ?? false
-  const capabilities = bootstrap?.capabilities ?? defaultCapabilities
-
-  const value = useMemo(() => {
-    const credentialProviders = bootstrap?.auth.credentialProviders ?? []
-    const oauthProviders = bootstrap?.auth.oauthProviders ?? []
-
-    return {
+  const globalSidebarPreference = bootstrap?.globalSidebarPreference ?? ''
+  const value = useMemo<AuthContextType>(
+    () => ({
       user,
       isLoading,
-      hasGlobalSidebarPreference,
+      hasGlobalSidebarPreference:
+        bootstrap?.hasGlobalSidebarPreference ?? false,
       globalSidebarPreference,
-      credentialProviders,
-      oauthProviders,
-      loginPrompt,
-      mfaEnabled,
-      passkeyLoginEnabled,
-      capabilities,
+      providerName: bootstrap?.auth.providerName ?? 'OpenID Connect',
+      loginPrompt: bootstrap?.auth.loginPrompt ?? '',
+      capabilities: bootstrap?.capabilities ?? defaultCapabilities,
       login,
-      loginWithCredentials,
       logout,
       checkAuth,
       refreshToken,
-    }
-  }, [
-    user,
-    isLoading,
-    hasGlobalSidebarPreference,
-    globalSidebarPreference,
-    bootstrap?.auth.credentialProviders,
-    bootstrap?.auth.oauthProviders,
-    loginPrompt,
-    mfaEnabled,
-    passkeyLoginEnabled,
-    capabilities,
-    login,
-    loginWithCredentials,
-    logout,
-    checkAuth,
-    refreshToken,
-  ])
+    }),
+    [
+      bootstrap,
+      checkAuth,
+      globalSidebarPreference,
+      isLoading,
+      login,
+      logout,
+      refreshToken,
+      user,
+    ]
+  )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

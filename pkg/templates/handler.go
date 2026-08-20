@@ -5,6 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/zxh326/kite/pkg/model"
+	"gorm.io/gorm"
 )
 
 type CreateTemplateRequest struct {
@@ -82,11 +83,13 @@ func DeleteTemplate(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Template deleted"})
 }
 
-func InitTemplates() {
+func InitTemplates() error {
 	var count int64
-	model.DB.Model(&model.ResourceTemplate{}).Count(&count)
+	if err := model.DB.Model(&model.ResourceTemplate{}).Count(&count).Error; err != nil {
+		return err
+	}
 	if count > 0 {
-		return
+		return nil
 	}
 
 	templates := []model.ResourceTemplate{
@@ -365,7 +368,12 @@ metadata:
 		},
 	}
 
-	for _, t := range templates {
-		model.DB.Create(&t)
-	}
+	return model.DB.Transaction(func(tx *gorm.DB) error {
+		for i := range templates {
+			if err := tx.Create(&templates[i]).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }

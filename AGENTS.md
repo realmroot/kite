@@ -6,10 +6,10 @@ Guidance for AI coding agents working in this repository.
 
 Kite is a single-binary Kubernetes web console with a Go backend and a React
 frontend. The backend serves API routes, embeds the built frontend from
-`static/`, manages users/RBAC/settings through GORM, and talks to Kubernetes
-clusters through controller-runtime/client-go clients. The frontend is a Vite
-React app that renders resource lists, detail pages, settings, terminals, Helm
-views, metrics, global search, and the AI chat UI.
+`static/`, keeps product metadata through GORM, and talks to Kubernetes clusters
+through controller-runtime/client-go clients. The frontend is a Vite React app
+that renders resource lists, detail pages, settings, terminals, Helm views,
+metrics, and global search. Kite must not embed an AI or Agent runtime.
 
 Keep changes narrow. Do not add tests, refactors, helpers, feature flags, broad
 validation, compatibility shims, comments, or docs unless the current task
@@ -62,13 +62,13 @@ result as the commit gate.
 
 Process startup is split across the root Go files:
 
-- `main.go` handles flags, pprof on localhost, HTTP server startup, shutdown,
+- `main.go` handles flags, opt-in pprof, HTTP server startup, shutdown,
   and build-version logging.
-- `app.go` loads environment settings, initializes DB, RBAC, templates, config
-  file/env input, the cluster manager, config watcher, scheduler, and Gin
+- `app.go` validates OIDC and secret settings, initializes the DB, templates,
+  credential-free catalog input, cluster manager, config watcher, and Gin
   middleware.
 - `routes.go` registers public, auth, admin, protected, resource, Helm,
-  terminal, metrics, proxy, and AI routes.
+  terminal, metrics, and proxy routes.
 - `static.go` embeds `static/`, serves hashed assets with cache middleware, and
   falls back to `static/index.html` for frontend routes.
 
@@ -85,15 +85,13 @@ The backend package layout is feature-oriented:
   `versionedResourceHandler`; CRDs use `CRHandler`.
 - `pkg/common/resource.go` is the backend resource registry for kinds, aliases,
   scope, searchability, and related-resource support.
-- `pkg/rbac` checks Kite RBAC roles before resource access.
-- `pkg/auth`, `pkg/users`, and `pkg/apikeys` own login, OAuth/LDAP/password
-  users, cookies, API keys, and admin gates.
+- `pkg/auth` owns the standard OIDC Authorization Code + PKCE flow, encrypted
+  server-side sessions, and request identity. `pkg/users` owns presentation
+  preferences only. Kubernetes is the resource authorizer.
 - `pkg/helm` and `pkg/helmutil` own chart repositories, chart content, and Helm
   release actions.
 - `pkg/terminal`, `pkg/kube`, and `pkg/resources/logs_handler.go` own websocket
   terminals, exec, and log streaming.
-- `pkg/ai` owns provider configuration, chat handling, tool definitions,
-  interaction pauses, Kubernetes tool execution, and tool authorization.
 
 ## Request flow
 
@@ -101,8 +99,11 @@ Most protected API calls go through:
 
 1. `authHandler.RequireAuth()`
 2. `middleware.ClusterMiddleware(cm)`
-3. feature-specific handlers
-4. `middleware.RBACMiddleware()` before registered Kubernetes resource routes
+3. feature-specific handlers, using the per-request client carrying the
+   current user's OIDC ID token
+
+The selected Kubernetes API server performs native authentication and RBAC.
+Kite does not evaluate a parallel resource permission model.
 
 The current cluster is passed as `x-cluster-name`. The frontend writes it to
 localStorage and a cookie in `ui/src/lib/current-cluster.ts`, and the API client
@@ -115,8 +116,8 @@ non-fetch flows.
 Frontend entry points:
 
 - `ui/src/main.tsx` wires top-level providers.
-- `ui/src/App.tsx` owns the app shell, cluster gate, search, terminal, and AI
-  chat surfaces.
+- `ui/src/App.tsx` owns the app shell, cluster gate, search, and terminal
+  surfaces.
 - `ui/src/routes.tsx` owns routing.
 - `ui/src/lib/api/` owns API functions, re-exported by `ui/src/lib/api.ts`.
 
@@ -142,15 +143,16 @@ indentation, sorted imports. Let the configured formatter handle import order.
 ## Configuration and deployment
 
 Runtime settings are loaded in `pkg/common/common.go` from environment variables
-such as `PORT`, `JWT_SECRET`, `KITE_ENCRYPT_KEY`, `DB_TYPE`, `DB_DSN`,
-`KITE_BASE`, `KITE_CONFIG_FILE`, and CORS settings.
+such as the `OIDC_*` claim/client settings, `PLATFORM_ADMIN_GROUPS`, `HOST`,
+`PORT`, `JWT_SECRET`, `KITE_ENCRYPT_KEY`, `DB_TYPE`, `DB_DSN`, `KITE_BASE`,
+`KITE_CONFIG_FILE`, and CORS settings.
 
-External config files are parsed in `internal/config.go`. File-managed sections
-(`clusters`, `oauth`, `ldap`, `rbac`, `superUser`) become read-only in the UI.
-The config watcher reloads managed sections at runtime.
+External config files are parsed in `internal/config.go`. Only the
+credential-free `clusters` section is accepted and becomes read-only in the UI.
+The config watcher reloads it at runtime.
 
 The Helm chart lives under `charts/kite`. Chart templates wire environment,
-secrets, sqlite persistence, config file mounts, service account/RBAC, ingress,
+secrets, sqlite persistence, config file mounts, an unprivileged ServiceAccount, ingress,
 gateway, probes, and deployment strategy. If changing runtime env behavior,
 check both `pkg/common/common.go` and the chart template/value path that sets
 the same variable.
@@ -172,7 +174,8 @@ dependency changes require it.
 - Follow existing Gin response, klog, and request-context patterns.
 - For Kubernetes resources, use the existing registry, handlers, and clients;
   preserve cluster scope, namespace scope, and `_all` behavior.
-- Do not bypass auth, cluster, RBAC, or AI tool authorization paths.
+- Do not bypass authentication, cluster selection, or Kubernetes authorization
+  paths.
 - Store sensitive persisted values with `model.SecretString`; never log secrets.
 - For user-visible frontend text, use i18n keys and keep `en.json` and `zh.json`
   in sync.

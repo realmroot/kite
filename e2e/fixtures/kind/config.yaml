@@ -1,0 +1,22 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+networking:
+  apiServerAddress: 127.0.0.1
+nodes:
+  - role: control-plane
+    extraMounts:
+      - hostPath: __OIDC_CA_FILE__
+        containerPath: /etc/kubernetes/pki/kite-e2e-oidc-ca.crt
+        readOnly: true
+    kubeadmConfigPatches:
+      - |
+        kind: ClusterConfiguration
+        apiServer:
+          extraArgs:
+            oidc-issuer-url: https://localhost:5556
+            oidc-ca-file: /etc/kubernetes/pki/kite-e2e-oidc-ca.crt
+            oidc-client-id: kite-e2e
+            oidc-username-claim: email
+            oidc-username-prefix: "-"
+            oidc-groups-claim: groups
+            oidc-groups-prefix: "-"

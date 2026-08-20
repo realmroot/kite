@@ -42,15 +42,6 @@ export function ServiceDetail(props: { name: string; namespace?: string }) {
     labelSelector,
     enabled: !!namespace && !!labelSelector,
   })
-  const {
-    data: endpoints,
-    isLoading: isEndpointsLoading,
-    refetch: refetchEndpoints,
-  } = useResource('endpoints', name, namespace)
-  const serviceEndpoints = useMemo(
-    () => (endpoints ? [endpoints] : []),
-    [endpoints]
-  )
   const endpointSlicesQuery = useResources('endpointslices', namespace, {
     labelSelector: `kubernetes.io/service-name=${name}`,
   })
@@ -58,12 +49,7 @@ export function ServiceDetail(props: { name: string; namespace?: string }) {
     useResourcesEvents('services', name, namespace)
 
   const handleRefresh = async () => {
-    await Promise.all([
-      refetch(),
-      refetchPods(),
-      refetchEndpoints(),
-      endpointSlicesQuery.refetch(),
-    ])
+    await Promise.all([refetch(), refetchPods(), endpointSlicesQuery.refetch()])
   }
 
   const handleSaveYaml = async (content: Service) => {
@@ -127,8 +113,6 @@ export function ServiceDetail(props: { name: string; namespace?: string }) {
             name={name}
             pods={relatedPods}
             isPodsLoading={isLoadingPods}
-            endpoints={serviceEndpoints}
-            isEndpointsLoading={isEndpointsLoading}
             endpointSlices={endpointSlicesQuery.data}
             isEndpointSlicesLoading={endpointSlicesQuery.isLoading}
             events={serviceEvents}

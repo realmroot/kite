@@ -83,15 +83,6 @@ export function HelmInstallDialog({
   } | null => {
     setError('')
 
-    if (!chart.chartUrl) {
-      setError(
-        t('helmCharts.messages.noChartUrl', {
-          defaultValue: 'Chart package URL is missing.',
-        })
-      )
-      return null
-    }
-
     let values: Record<string, unknown> = {}
     if (valuesYaml.trim()) {
       try {
@@ -115,9 +106,10 @@ export function HelmInstallDialog({
     const request = {
       releaseName: releaseName.trim(),
       namespace: targetNamespace,
-      chartUrl: chart.chartUrl,
       repositoryName: chart.repositoryName,
       source: chart.source,
+      chartName: chart.name,
+      chartVersion: chart.version,
       createNamespace: isNamespaceManual && createNamespace,
       values,
     }

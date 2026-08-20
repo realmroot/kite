@@ -60,26 +60,47 @@ func (g *restClientGetter) ToRESTMapper() (meta.RESTMapper, error) {
 }
 
 func (g *restClientGetter) ToRawKubeConfigLoader() clientcmd.ClientConfig {
+	return &restClientConfig{config: g.config, namespace: g.namespace}
+}
+
+type restClientConfig struct {
+	config    *rest.Config
+	namespace string
+}
+
+func (c *restClientConfig) RawConfig() (clientcmdapi.Config, error) {
 	config := clientcmdapi.Config{
 		Clusters: map[string]*clientcmdapi.Cluster{
-			"kite": {Server: g.config.Host},
+			"kite": {
+				Server:                   c.config.Host,
+				CertificateAuthorityData: append([]byte(nil), c.config.CAData...),
+				InsecureSkipTLSVerify:    c.config.Insecure,
+				TLSServerName:            c.config.ServerName,
+			},
 		},
 		AuthInfos: map[string]*clientcmdapi.AuthInfo{
-			"kite": {},
+			"kite": {Token: c.config.BearerToken},
 		},
 		Contexts: map[string]*clientcmdapi.Context{
 			"kite": {
 				Cluster:   "kite",
 				AuthInfo:  "kite",
-				Namespace: g.namespace,
+				Namespace: c.namespace,
 			},
 		},
 		CurrentContext: "kite",
 	}
-	return clientcmd.NewDefaultClientConfig(config, &clientcmd.ConfigOverrides{
-		CurrentContext: "kite",
-		Context: clientcmdapi.Context{
-			Namespace: g.namespace,
-		},
-	})
+	return config, nil
+}
+
+func (c *restClientConfig) ClientConfig() (*rest.Config, error) {
+	return rest.CopyConfig(c.config), nil
+}
+
+func (c *restClientConfig) Namespace() (string, bool, error) {
+	return c.namespace, true, nil
+}
+
+func (c *restClientConfig) ConfigAccess() clientcmd.ConfigAccess {
+	return nil
 }

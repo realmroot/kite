@@ -19,9 +19,17 @@ When using the Artifact Hub source, Kite may request Artifact Hub to fetch chart
 Kite only displays chart information and is not responsible for the chart content. Review chart details, templates, and values carefully before installing or upgrading.
 :::
 
-Users with the **admin** role can add or remove Helm repositories. Removing a repository only removes it from Kite and does not uninstall existing releases.
+OIDC principals configured as platform administrators can add or remove Helm
+repositories. Removing a repository only removes it from Kite and does not
+uninstall existing releases.
 
 Open a chart to view its README, values, templates, and versions. If the chart package is available, you can install it directly from Kite.
+
+Install and upgrade requests identify a package by source, repository, chart
+name, and version. Kite resolves the download URL again from the configured
+repository index or Artifact Hub; it never treats a browser-supplied URL as an
+outbound fetch target. Catalog, content, and archive caches have global entry
+limits and expiration, and oversized chart archives are rejected.
 
 ## Helm Releases
 
@@ -31,12 +39,31 @@ The release detail page shows release status, chart version, values, resources, 
 
 Kite supports dry-run previews before install and upgrade. You can upgrade a release from the detail page, roll back from the history tab, or delete a release to uninstall it from the cluster.
 
+## Automatic Upgrades
+
+Automatic upgrade is retained and follows the same identity boundary as an
+interactive Helm operation. Saving its configuration explicitly binds the task
+to the current OIDC session. At run time Kite refreshes that session, presents
+the resulting user token to Kubernetes, and lets Kubernetes RBAC authorize the
+release Secrets and rendered resources. Kite never substitutes a platform or
+cluster service-account credential.
+
+Reading or changing automatic-upgrade configuration first requires access to
+the corresponding Helm release under the current Kubernetes identity. Saving
+the configuration transfers future task attribution to the user and session
+that performed that save. A task whose stored actor and session no longer match
+is disabled instead of running under ambiguous attribution.
+
+If the identity provider revokes the refresh grant, the user logs out that
+session, or the provider stops issuing a refreshed ID token, the task is
+disabled with an error. Re-enable it while signed in to authorize it again.
+
 ## Permissions
 
-Repository management requires the **admin** role. Release operations are controlled by Kite RBAC through the `helmrelease` resource (`get`, `create`, `update`, `delete`).
+Repository metadata is Kite-owned shared data and requires platform-management
+access from `PLATFORM_ADMIN_GROUPS`. Helm release operations run against the
+selected cluster with the current user's OIDC identity; Kubernetes RBAC on the
+release Secrets and managed resources is authoritative.
 
-::: warning
-Grant `helmrelease` permissions carefully. Helm actions are executed by Kite with the cluster credentials configured in Kite, so users with `helmrelease` `create`, `update`, or `delete` permissions may create, update, or delete chart-rendered resources even if their own Kubernetes RBAC permissions would not allow those direct operations.
-
-The cluster credentials configured in Kite also need enough Kubernetes permissions for the resources rendered by the chart.
-:::
+Kubernetes must grant the current user every operation Helm needs, including
+access to Helm release Secrets and the resources rendered by the chart.

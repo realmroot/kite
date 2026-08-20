@@ -1,191 +1,30 @@
-# 用户管理
+# 当前用户偏好 API
 
-用户管理接口位于 `/api/v1/admin/users/`。
+用户生命周期和账户安全由配置的 OIDC 提供方负责。Kite 不创建、停用、删除、
+重置用户，也不为用户分配角色。OIDC 登录验证通过后，Kite 只会按
+`issuer + sub` 创建或更新本地展示资料。
 
-除特别说明外，这些接口要求调用方已经是管理员用户，或者使用一个拥有 `admin` 角色的 API 密钥。
+Kite 仅保存展示信息、最后登录时间、用于展示/平台策略判断的提供方 group，
+以及 Dashboard 偏好。
 
-## 初始化第一个超级管理员
+## 侧边栏偏好
 
-这个接口用于首次初始化，在还没有建立管理员认证之前即可调用。
-
-```http
-POST /api/v1/admin/users/create_super_user
-Content-Type: application/json
+```text
+POST /api/users/sidebar_preference
 ```
-
-请求体：
 
 ```json
 {
-  "username": "admin",
-  "password": "change-me",
-  "name": "Administrator"
+  "sidebar_preference": "<序列化后的偏好>"
 }
 ```
 
-它只会在系统里还没有任何用户时成功。
+平台管理员可以管理共享默认值：
 
-## 获取用户列表
-
-```http
-GET /api/v1/admin/users/
+```text
+POST   /api/v1/admin/sidebar_preference/global
+DELETE /api/v1/admin/sidebar_preference/global
 ```
 
-支持的查询参数：
-
-- `page`
-- `size`
-- `search`
-- `role`
-- `sortBy`
-- `sortOrder`
-
-示例：
-
-```bash
-curl \
-  -H "Authorization: kite1-adminsecret" \
-  "https://kite.example.com/api/v1/admin/users/?page=1&size=20&search=alice&sortOrder=desc"
-```
-
-响应示例：
-
-```json
-{
-  "users": [
-    {
-      "id": 12,
-      "username": "alice",
-      "provider": "password",
-      "name": "Alice",
-      "enabled": true,
-      "lastLoginAt": "2026-04-20T08:30:00Z",
-      "roles": [
-        {
-          "id": 2,
-          "name": "viewer"
-        }
-      ]
-    }
-  ],
-  "total": 1,
-  "page": 1,
-  "size": 20
-}
-```
-
-## 创建密码用户
-
-```http
-POST /api/v1/admin/users/
-Content-Type: application/json
-```
-
-请求体：
-
-```json
-{
-  "username": "alice",
-  "password": "change-me",
-  "name": "Alice"
-}
-```
-
-示例：
-
-```bash
-curl \
-  -X POST \
-  -H "Authorization: kite1-adminsecret" \
-  -H "Content-Type: application/json" \
-  -d '{"username":"alice","password":"change-me","name":"Alice"}' \
-  https://kite.example.com/api/v1/admin/users/
-```
-
-## 更新用户
-
-```http
-PUT /api/v1/admin/users/:id
-Content-Type: application/json
-```
-
-请求体：
-
-```json
-{
-  "name": "Alice Zhang",
-  "avatar_url": "https://example.com/avatar.png"
-}
-```
-
-示例：
-
-```bash
-curl \
-  -X PUT \
-  -H "Authorization: kite1-adminsecret" \
-  -H "Content-Type: application/json" \
-  -d '{"name":"Alice Zhang"}' \
-  https://kite.example.com/api/v1/admin/users/12
-```
-
-## 删除用户
-
-```http
-DELETE /api/v1/admin/users/:id
-```
-
-示例：
-
-```bash
-curl \
-  -X DELETE \
-  -H "Authorization: kite1-adminsecret" \
-  https://kite.example.com/api/v1/admin/users/12
-```
-
-响应示例：
-
-```json
-{
-  "success": true
-}
-```
-
-## 重置用户密码
-
-```http
-POST /api/v1/admin/users/:id/reset_password
-Content-Type: application/json
-```
-
-请求体：
-
-```json
-{
-  "password": "new-password"
-}
-```
-
-## 启用或禁用用户
-
-```http
-POST /api/v1/admin/users/:id/enable
-Content-Type: application/json
-```
-
-请求体：
-
-```json
-{
-  "enabled": false
-}
-```
-
-响应示例：
-
-```json
-{
-  "success": true
-}
-```
+全局更新使用相同的请求体。这些接口只影响 Dashboard 展示，不影响任何
+Kubernetes 权限。

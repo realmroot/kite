@@ -9,30 +9,20 @@ import (
 	"github.com/zxh326/kite/pkg/model"
 )
 
-type bootstrapSetupState struct {
-	Initialized bool `json:"initialized"`
-	Step        int  `json:"step"`
-}
-
 type bootstrapAuthOptions struct {
-	Providers           []string `json:"providers"`
-	CredentialProviders []string `json:"credentialProviders"`
-	OAuthProviders      []string `json:"oauthProviders"`
-	LoginPrompt         string   `json:"loginPrompt"`
-	MFAEnabled          bool     `json:"mfaEnabled"`
-	PasskeyLoginEnabled bool     `json:"passkeyLoginEnabled"`
+	ProviderName string `json:"providerName"`
+	LoginPrompt  string `json:"loginPrompt"`
 }
 
 type bootstrapCapabilities struct {
-	AIEnabled      bool `json:"aiEnabled"`
 	KubectlEnabled bool `json:"kubectlEnabled"`
 }
 
 type bootstrapResponse struct {
-	Setup                      bootstrapSetupState   `json:"setup"`
 	Auth                       bootstrapAuthOptions  `json:"auth"`
 	Capabilities               bootstrapCapabilities `json:"capabilities"`
 	User                       *model.User           `json:"user"`
+	PlatformAdmin              bool                  `json:"platformAdmin"`
 	HasGlobalSidebarPreference bool                  `json:"hasGlobalSidebarPreference"`
 	GlobalSidebarPreference    string                `json:"globalSidebarPreference"`
 }
@@ -44,13 +34,7 @@ func (h *AuthHandler) Bootstrap(c *gin.Context) {
 		return
 	}
 
-	setup := currentBootstrapSetup()
-	var user *model.User
-	if setup.Step == 0 && !setup.Initialized {
-		c.SetCookie("auth_token", "", -1, "/", "", false, true)
-	} else {
-		user = h.bootstrapUser(c, setting)
-	}
+	user := h.bootstrapUser(c, setting)
 
 	globalSidebarPreference := strings.TrimSpace(setting.GlobalSidebarPreference)
 	if user == nil {
@@ -58,44 +42,31 @@ func (h *AuthHandler) Bootstrap(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, bootstrapResponse{
-		Setup: setup,
-		Auth:  h.bootstrapAuth(),
+		Auth: h.bootstrapAuth(),
 		Capabilities: bootstrapCapabilities{
-			AIEnabled:      false,
-			KubectlEnabled: false,
+			KubectlEnabled: setting.KubectlEnabled,
 		},
 		User:                       user,
+		PlatformAdmin:              user != nil && platformAdmin(*user),
 		HasGlobalSidebarPreference: globalSidebarPreference != "",
 		GlobalSidebarPreference:    globalSidebarPreference,
 	})
 }
 
-func currentBootstrapSetup() bootstrapSetupState {
-	// The configured identity provider owns provisioning; clusters are managed after login.
-	return bootstrapSetupState{Initialized: true, Step: 2}
-}
-
 func (h *AuthHandler) bootstrapAuth() bootstrapAuthOptions {
 	return bootstrapAuthOptions{
-		Providers:           []string{"oidc"},
-		CredentialProviders: []string{},
-		OAuthProviders:      []string{common.OIDCProviderName},
-		LoginPrompt:         "Kubernetes permissions come directly from your identity provider claims.",
-		MFAEnabled:          false,
-		PasskeyLoginEnabled: false,
+		ProviderName: common.OIDCProviderName,
+		LoginPrompt:  "Kubernetes permissions come directly from your identity provider claims.",
 	}
 }
 
 func (h *AuthHandler) bootstrapUser(c *gin.Context, setting *model.GeneralSetting) *model.User {
-	user, _, err := h.oidc.authenticatedSession(c)
+	user, _, _, err := h.oidc.authenticatedSession(c)
 	if err != nil {
 		return nil
 	}
 
 	currentUser := *user
-	if platformAdmin(currentUser) {
-		currentUser.Roles = []common.Role{platformAdminRole()}
-	}
 	applyBootstrapSidebarPreference(&currentUser, setting)
 
 	return &currentUser

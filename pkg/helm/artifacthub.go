@@ -20,6 +20,7 @@ const (
 	artifactHubValuesAPIURL  = "https://artifacthub.io/api/v1/packages/"
 	artifactHubImageURL      = "https://artifacthub.io/image/"
 	artifactHubPackageURL    = "https://artifacthub.io/packages/helm/"
+	maxArtifactHubResponse   = 10 << 20
 )
 
 func (h *HelmChartHandler) ListArtifactHubCharts(c *gin.Context) {
@@ -262,13 +263,18 @@ func fetchArtifactHubWithHeaders(c *gin.Context, targetURL string) ([]byte, http
 	if resp.StatusCode != http.StatusOK {
 		return nil, nil, fmt.Errorf("artifact hub request failed: %s", resp.Status)
 	}
-	data, err := io.ReadAll(resp.Body)
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxArtifactHubResponse+1))
 	if err != nil {
 		return nil, nil, err
+	}
+	if len(data) > maxArtifactHubResponse {
+		return nil, nil, fmt.Errorf("artifact hub response exceeds %d bytes", maxArtifactHubResponse)
 	}
 	headers := resp.Header.Clone()
 
 	artifactHubCacheMu.Lock()
+	pruneArtifactHubCache(now)
+	evictArtifactHubCache(artifactHubCacheMax)
 	artifactHubCache[targetURL] = cachedArtifactHubResponse{
 		data:      append([]byte(nil), data...),
 		headers:   headers.Clone(),
@@ -277,6 +283,27 @@ func fetchArtifactHubWithHeaders(c *gin.Context, targetURL string) ([]byte, http
 	artifactHubCacheMu.Unlock()
 
 	return data, headers, nil
+}
+
+func pruneArtifactHubCache(now time.Time) {
+	for key, entry := range artifactHubCache {
+		if !now.Before(entry.expiresAt) {
+			delete(artifactHubCache, key)
+		}
+	}
+}
+
+func evictArtifactHubCache(limit int) {
+	for len(artifactHubCache) >= limit {
+		var oldestKey string
+		var oldestExpiry time.Time
+		for key, entry := range artifactHubCache {
+			if oldestKey == "" || entry.expiresAt.Before(oldestExpiry) {
+				oldestKey, oldestExpiry = key, entry.expiresAt
+			}
+		}
+		delete(artifactHubCache, oldestKey)
+	}
 }
 
 func artifactHubKubeVersion(data json.RawMessage) string {

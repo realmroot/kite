@@ -260,7 +260,7 @@ export function ClusterManagement() {
       if (clusterAgentServer && clusterAgentToken && clusterAgentPublicKey) {
         setClusterAgentCopyError(null)
         setClusterAgentCommand(
-          `kite cluster-agent --server='${clusterAgentServer}' --token='${clusterAgentToken}' --public-key='${clusterAgentPublicKey}'`
+          `kite cluster-agent --server='${clusterAgentServer}' --token='${clusterAgentToken}' --public-key='${clusterAgentPublicKey}' --api-server='https://kubernetes.default.svc' --ca-file='/path/to/cluster-ca.crt'`
         )
         setClusterAgentYaml('')
         setClusterAgentYamlError(null)
@@ -359,10 +359,18 @@ export function ClusterManagement() {
 
   const handleSubmitCluster = (clusterData: ClusterCreateRequest) => {
     if (editingCluster) {
-      // Update existing cluster - use the form data directly
       updateMutation.mutate({
         id: editingCluster.id,
-        data: clusterData,
+        data: {
+          name: clusterData.name,
+          description: clusterData.description,
+          apiServerUrl: clusterData.apiServerUrl,
+          caBundle: clusterData.caBundle,
+          tlsServerName: clusterData.tlsServerName,
+          prometheusURL: clusterData.prometheusURL,
+          isDefault: clusterData.isDefault,
+          enabled: clusterData.enabled,
+        },
       })
     } else {
       // Create new cluster
@@ -523,6 +531,12 @@ export function ClusterManagement() {
                   <IconCopy className="size-4" />
                 </Button>
               </div>
+              <p className="text-xs text-muted-foreground">
+                {t(
+                  'clusterManagement.clusterAgent.commandHint',
+                  'Run inside the target cluster and replace the CA file path if needed. The Kubernetes YAML tab is ready to apply without editing.'
+                )}
+              </p>
               {clusterAgentCopyError === 'command' && (
                 <p role="alert" className="text-sm text-destructive">
                   {t(

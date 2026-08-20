@@ -225,7 +225,11 @@ function ClusterDialogContent({
             type="url"
             value={formData.prometheusURL}
             onChange={(event) => change('prometheusURL', event.target.value)}
+            placeholder={t('clusterManagement.dialog.prometheusUrlPlaceholder')}
           />
+          <p className="text-xs text-muted-foreground">
+            {t('clusterManagement.dialog.prometheusUrlDescription')}
+          </p>
         </div>
 
         <div className="space-y-4 border-t pt-4">

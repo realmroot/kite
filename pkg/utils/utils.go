@@ -11,8 +11,12 @@ import (
 
 const kiteBasePlaceholder = "__KITE_BASE__"
 
-func InjectAnalytics(htmlContent string) string {
-	analyticsScript := `<script defer src="https://cloud.umami.is/script.js" data-website-id="c3d8a914-abbc-4eed-9699-a9192c4bef9e" data-exclude-search="true" data-exclude-hash="true" data-do-not-track="true"></script>`
+func InjectAnalytics(htmlContent, scriptURL, websiteID string) string {
+	analyticsScript := fmt.Sprintf(
+		`<script defer src="%s" data-website-id="%s" data-exclude-search="true" data-exclude-hash="true" data-do-not-track="true"></script>`,
+		html.EscapeString(scriptURL),
+		html.EscapeString(websiteID),
+	)
 
 	re := regexp.MustCompile(`</head>`)
 	return re.ReplaceAllString(htmlContent, "  "+analyticsScript+"\n  </head>")

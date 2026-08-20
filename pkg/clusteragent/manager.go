@@ -258,3 +258,18 @@ func (m *Manager) Disconnect(clusterID uint) {
 	delete(m.registrations, clientKey)
 	m.mu.Unlock()
 }
+
+func (m *Manager) DisconnectAll() {
+	m.mu.RLock()
+	clusterIDs := make([]uint, 0, len(m.registrations))
+	for clientKey := range m.registrations {
+		clusterID, err := strconv.ParseUint(clientKey, 10, 64)
+		if err == nil {
+			clusterIDs = append(clusterIDs, uint(clusterID))
+		}
+	}
+	m.mu.RUnlock()
+	for _, clusterID := range clusterIDs {
+		m.Disconnect(clusterID)
+	}
+}

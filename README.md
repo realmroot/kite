@@ -6,16 +6,9 @@
 
 _A Kubernetes dashboard where the user identity reaches the API server_
 
-<a href="https://trendshift.io/repositories/21820" target="_blank"><img src="https://trendshift.io/api/badge/repositories/21820" alt="kite-org%2Fkite | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
-
-<a href="https://github.com/kite-org/kite/stargazers"><img src="https://img.shields.io/github/stars/kite-org/kite?color=ffcb47&labelColor=black&style=flat-square&logo=github&label=Stars" /></a>
-<a href="https://github.com/kite-org/kite/releases"><img src="https://img.shields.io/github/downloads/kite-org/kite/total?color=369eff&labelColor=black&logo=github&style=flat-square&label=Downloads" /></a>
-<a href="https://github.com/kite-org/kite/graphs/contributors"><img src="https://img.shields.io/github/contributors/kite-org/kite?style=flat-square&logo=github&label=Contributors&labelColor=black" /></a>
 [![License](https://img.shields.io/badge/License-Apache-green.svg)](LICENSE)
-<a href="https://join.slack.com/t/kite-dashboard/shared_invite/zt-3cl9mccs7-eQZ1_t6IoTPHZkxXED1ceg"><img alt="Join Kite" src="https://badgen.net/badge/Slack/Join%20Kite/0abd59?icon=slack" /></a>
 
-
-[**Live Demo**](https://kite-demo.zzde.me) | [**Documentation**](https://kite.zzde.me)
+[**Documentation**](docs/index.md) | [**Architecture**](docs/oidc-kubernetes.md)
 <br>
 **English** | [中文](./README_zh.md)
 
@@ -82,7 +75,7 @@ for moving UI data access onto canonical Kubernetes resource APIs.
 
 ## 🚀 Quick Start
 
-For detailed instructions, please refer to the [documentation](https://kite.zzde.me/guide/installation.html).
+For detailed instructions, see the [installation guide](docs/guide/installation.md).
 
 ### Docker
 
@@ -94,18 +87,20 @@ closed if they are absent or use the upstream development defaults.
 
 #### Using Helm (Recommended)
 
-1. **Install from OCI registry**
+1. **Install the versioned OCI chart published by your fork**
 
    ```bash
-   helm install kite oci://ghcr.io/kite-org/charts/kite -n kube-system
+   helm install kite oci://ghcr.io/<owner>/charts/kite \
+     --version <version> -n kite-system --create-namespace -f values.yaml
    ```
 
 2. **Or install from Helm repository**
 
    ```bash
-   helm repo add kite https://kite-org.github.io/kite/
+   helm repo add kite https://<owner>.github.io/kite/
    helm repo update
-   helm install kite kite/kite -n kube-system
+   helm install kite kite/kite --version <version> \
+     -n kite-system --create-namespace -f values.yaml
    ```
 
 #### Using kubectl
@@ -114,16 +109,16 @@ closed if they are absent or use the upstream development defaults.
 
    ```bash
    kubectl apply -f deploy/install.yaml
-   # or install it online
-   # Note: This method may not be suitable for a production environment, as it does not include any configuration related to persistence. You will need to manually mount the persistence volume and set the environment variable DB_DSN=/data/db.sqlite to ensure that data is not lost. Alternatively, an external database can be used.
-   # ref: https://kite.zzde.me/faq.html#persistence-issues
-   kubectl apply -f https://raw.githubusercontent.com/kite-org/kite/refs/heads/main/deploy/install.yaml
+   # Release assets contain the same manifest with an immutable image tag.
+   curl -fLO https://github.com/<owner>/kite/releases/download/vX.Y.Z/install.yaml
+   $EDITOR install.yaml
+   kubectl apply -f install.yaml
    ```
 
 2. **Access via port-forward**
 
    ```bash
-   kubectl port-forward -n kube-system svc/kite 8080:8080
+   kubectl port-forward -n kite-system svc/kite 8080:8080
    ```
 
 ### Build from Source
@@ -131,7 +126,7 @@ closed if they are absent or use the upstream development defaults.
 1. **Clone the repository**
 
    ```bash
-   git clone https://github.com/kite-org/kite.git
+   git clone https://github.com/<owner>/kite.git
    cd kite
    ```
 
@@ -152,34 +147,7 @@ closed if they are absent or use the upstream development defaults.
 
 ## 🔍 Troubleshooting
 
-For troubleshooting, please refer to the [documentation](https://kite.zzde.me).
-
-## 💖 Support This Project
-
-If you find Kite helpful, please consider supporting its development! Your donations help maintain and improve this project.
-
-### Donation Methods
-
-<table>
-  <tr>
-    <td align="center">
-      <b>Alipay</b><br>
-      <img src="./docs/donate/alipay.jpeg" alt="Alipay QR Code" width="200">
-    </td>
-    <td align="center">
-      <b>WeChat Pay</b><br>
-      <img src="./docs/donate/wechat.jpeg" alt="WeChat Pay QR Code" width="200">
-    </td>
-    <td align="center">
-      <b>PayPal</b><br>
-      <a href="https://www.paypal.me/zxh326">
-        <img src="https://www.paypalobjects.com/webstatic/mktg/logo/pp_cc_mark_111x69.jpg" alt="PayPal" width="150">
-      </a>
-    </td>
-  </tr>
-</table>
-
-Thank you for your support! ❤️
+For troubleshooting, see the local [FAQ](docs/faq.md) and configuration guides.
 
 ## 🤝 Contributing
 

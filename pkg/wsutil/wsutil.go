@@ -26,6 +26,7 @@ type Conn struct {
 	writeMu   sync.Mutex
 	closeOnce sync.Once
 	closeErr  error
+	cancel    context.CancelFunc
 }
 
 type Session struct {
@@ -48,10 +49,10 @@ func Serve(w http.ResponseWriter, r *http.Request, handle func(*Session)) {
 
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
-	conn := &Conn{Conn: rawConn}
+	conn := &Conn{Conn: rawConn, cancel: cancel}
 	defer func() {
 		if err := conn.Close(); err != nil {
-			klog.Errorf("WebSocket close error %s: %v", conn.RemoteAddr(), err)
+			klog.V(3).Infof("WebSocket close completed with error for %s: %v", conn.RemoteAddr(), err)
 		}
 	}()
 	conn.startProtocolHeartbeat(ctx)
@@ -76,6 +77,9 @@ func (c *Conn) WriteControl(messageType int, data []byte, deadline time.Time) er
 
 func (c *Conn) Close() error {
 	c.closeOnce.Do(func() {
+		if c.cancel != nil {
+			c.cancel()
+		}
 		c.closeErr = c.Conn.Close()
 	})
 	return c.closeErr
@@ -97,7 +101,7 @@ func (c *Conn) startProtocolHeartbeat(ctx context.Context) {
 				return
 			case <-ticker.C:
 				if err := c.WriteControl(websocket.PingMessage, nil, time.Now().Add(protocolWriteTimeout)); err != nil {
-					klog.V(1).Infof("WebSocket protocol ping failed: %v", err)
+					klog.V(3).Infof("WebSocket protocol heartbeat stopped: %v", err)
 					_ = c.Close()
 					return
 				}
@@ -116,7 +120,7 @@ func SendError(conn *Conn, message string) error {
 
 func SendErrorMessage(conn *Conn, message string) {
 	if err := SendError(conn, message); err != nil {
-		klog.Errorf("Failed to send error message: %v", err)
+		klog.V(3).Infof("WebSocket closed before error message could be sent: %v", err)
 	}
 }
 

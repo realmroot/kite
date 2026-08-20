@@ -6,20 +6,34 @@ Kite supports several environment variables by default to change the default val
 - **OIDC_ISSUER**: Required OpenID Connect issuer URL. Kite uses standard provider discovery.
 - **OIDC_CLIENT_ID** / **OIDC_CLIENT_SECRET**: Required confidential web application credentials.
 - **OIDC_PROVIDER_NAME**: Login-page display name. Defaults to `OpenID Connect`.
-- **OIDC_SCOPES**: Space- or comma-separated scopes. Must contain `openid`.
+- **OIDC_SCOPES**: Space- or comma-separated scopes. Must contain `openid` and `offline_access`; scheduled Helm operations use the user's refresh grant.
 - **OIDC_USERNAME_CLAIM** / **OIDC_GROUPS_CLAIM**: Claims mapped to the local display identity and Kubernetes groups. Defaults to `email` and `groups`.
 - **OIDC_NAME_CLAIM** / **OIDC_PICTURE_CLAIM**: Optional profile claim names. Defaults to `name` and `picture`.
-- **PLATFORM_ADMIN_GROUPS**: Required groups allowed to manage Kite's shared catalog. This does not grant Kubernetes access.
+- **PLATFORM_ADMIN_GROUPS**: Groups allowed to manage Kite-owned shared metadata. Comma/space-separated values remain supported; use a JSON string array such as `["operators,west","platform admins"]` to preserve claim values containing separators. This does not grant Kubernetes access.
+- **PLATFORM_ADMIN_SUBJECTS**: Exact OIDC `sub` values with the same platform access. It accepts the same legacy-list or JSON-array syntax and is useful when the issuer does not emit groups.
+- **RESOURCE_SERVER_URL**: Optional exact protected Resource identifier, for example `https://kite.example.com/api/agent/v1`. Setting it enables the external-tool API, RFC 9728 metadata, and OpenAPI discovery.
+- **RESOURCE_SERVER_ISSUER**: Authorization-server issuer accepted for Resource access tokens. Required when `RESOURCE_SERVER_URL` is set.
+- **RESOURCE_SERVER_AUTHORIZED_CLIENT_IDS**: Space- or comma-separated OAuth client IDs allowed to present delegated Resource tokens. Required when the Resource Server is enabled.
+- **RESOURCE_SERVER_JWT_ALGORITHMS**: Accepted access-token signing algorithms. Defaults to `RS256`.
 
 - **JWT_SECRET**: Secret key used for signing and verifying JWT
 - **KITE_ENCRYPT_KEY**: Secret key used to encrypt server-side OIDC tokens.
 
-- **HOST**: Used for generating OAuth 2.0 authorization callback addresses, default will be obtained from request headers. If you find the result not as expected, you can manually configure this environment variable.
+- **HOST**: Required public HTTPS origin used for OAuth 2.0 callbacks and secure cookies. It must not contain credentials, a path, query, or fragment. Loopback HTTP is accepted only for local development; use `KITE_BASE` for a path prefix.
 
 - **TRUSTED_PROXIES**: Comma-separated list of reverse proxy, ingress, or load balancer IPs/CIDRs that Kite should trust when reading `X-Forwarded-For` / `X-Real-IP` to determine the client IP. By default, Kite trusts local/private network ranges (`127.0.0.0/8`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `::1`, `fc00::/7`) so common ingress deployments can report real client IPs. Set a narrower value such as `TRUSTED_PROXIES=10.42.0.0/16,192.168.1.10` for production, or `TRUSTED_PROXIES=none` to ignore all client-supplied forwarding headers.
 
 - **CLUSTER_AGENT_IMAGE**: Docker image used when generating the Cluster Agent manifest for Cluster Agent clusters.
+- **KUBECTL_TERMINAL_IMAGE** / **NODE_TERMINAL_IMAGE**: Versioned runtime images for the optional browser terminal workflows.
+- **RELEASE_API_URL**: Optional GitHub-compatible latest-release API. No version-check request is made when it is empty.
+- **KITE_IMAGE_REGISTRY_HOSTS**: Comma-separated additional image registry
+  `host[:port]` values that Kite may contact for the optional image-tag lookup.
+  Docker Hub, GHCR, Quay, `registry.k8s.io`, and GCR are enabled by default;
+  private or self-hosted registries require an explicit entry. Kite never
+  accepts registry credentials through this endpoint.
 
-- **ENABLE_ANALYTICS**: Enable data analytics functionality, default value is `false`. When enabled, Kite will collect limited data to help improve the product.
+- **ENABLE_ANALYTICS**: Enable the optional operator-owned analytics integration. Defaults to `false`.
+- **ANALYTICS_SCRIPT_URL** / **ANALYTICS_WEBSITE_ID**: Paired, operator-supplied Umami-compatible script URL and website ID. Kite has no built-in analytics destination. The script URL must use HTTPS except on a loopback development address, and neither value is sent anywhere while analytics is disabled.
 
 - **PORT**: Port on which Kite runs, default value is `8080`.
+- **PPROF_ADDRESS**: Optional Go diagnostics listener such as `127.0.0.1:6060`. It is disabled by default; do not expose it publicly.

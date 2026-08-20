@@ -94,7 +94,7 @@ export const globalSearch = async (
   query: string,
   options?: {
     limit?: number
-    namespace?: string
+    signal?: AbortSignal
   }
 ): Promise<SearchResponse> => {
   if (!query.trim()) {
@@ -106,12 +106,10 @@ export const globalSearch = async (
     limit: String(options?.limit || 50),
   })
 
-  if (options?.namespace) {
-    params.append('namespace', options.namespace)
-  }
-
   const endpoint = `/search?${params.toString()}`
-  const response = await fetchAPI<SearchResponse>(endpoint)
+  const response = await apiClient.get<SearchResponse>(endpoint, {
+    signal: options?.signal,
+  })
   const results = response.results || []
   return {
     ...response,

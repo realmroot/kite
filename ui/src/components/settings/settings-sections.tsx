@@ -3,6 +3,7 @@ import type { TFunction } from 'i18next'
 
 import { AuditLog } from './audit-log'
 import { ClusterManagement } from './cluster-management'
+import { GeneralManagement } from './general-management'
 import { TemplateManagement } from './template-management'
 
 export interface SettingsSectionDefinition {
@@ -27,6 +28,12 @@ function createSettingsSectionDefinition(
 }
 
 export const settingsSectionRegistry: SettingsSectionDefinition[] = [
+  createSettingsSectionDefinition(
+    'general',
+    'settings.tabs.general',
+    'General',
+    GeneralManagement
+  ),
   createSettingsSectionDefinition(
     'clusters',
     'settings.tabs.clusters',

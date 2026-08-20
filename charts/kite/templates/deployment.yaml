@@ -1,3 +1,24 @@
+{{- if and (empty .Values.platformAdminGroups) (empty .Values.platformAdminSubjects) }}
+{{- fail "platformAdminGroups or platformAdminSubjects is required" }}
+{{- end }}
+{{- if not (has .Values.db.type (list "sqlite" "postgres" "mysql")) }}
+{{- fail "db.type must be one of sqlite, postgres, or mysql" }}
+{{- end }}
+{{- if and (eq .Values.db.type "sqlite") (ne (int .Values.replicaCount) 1) }}
+{{- fail "SQLite requires replicaCount=1; use PostgreSQL or MySQL for multiple replicas" }}
+{{- end }}
+{{- if and (eq .Values.db.type "sqlite") .Values.db.sqlite.persistence.pvc.enabled (ne .Values.deploymentStrategy.type "Recreate") }}
+{{- fail "SQLite with a PVC requires deploymentStrategy.type=Recreate" }}
+{{- end }}
+{{- if and .Values.db.sqlite.persistence.pvc.enabled .Values.db.sqlite.persistence.hostPath.enabled }}
+{{- fail "SQLite PVC and hostPath persistence cannot both be enabled" }}
+{{- end }}
+{{- if ne (empty .Values.analytics.scriptURL) (empty .Values.analytics.websiteID) }}
+{{- fail "analytics.scriptURL and analytics.websiteID must be configured together" }}
+{{- end }}
+{{- if and .Values.analytics.enabled (empty .Values.analytics.scriptURL) }}
+{{- fail "analytics.scriptURL and analytics.websiteID are required when analytics is enabled" }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -31,6 +52,8 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "kite.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
       {{- with .Values.podSecurityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}
@@ -41,7 +64,7 @@ spec:
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          image: "{{ required "image.repository is required" .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command: ["/app/kite"]
           {{- if .Values.debug }}
@@ -55,10 +78,8 @@ spec:
             - secretRef:
                 name: {{ include "kite.secret" . }}
           env:
-            {{- if .Values.host }}
             - name: HOST
-              value: {{ .Values.host }}
-            {{- end }}
+              value: {{ required "host is required" .Values.host | quote }}
             - name: OIDC_ISSUER
               value: {{ required "oidc.issuer is required" .Values.oidc.issuer | quote }}
             - name: OIDC_PROVIDER_NAME
@@ -74,12 +95,50 @@ spec:
             - name: OIDC_PICTURE_CLAIM
               value: {{ .Values.oidc.pictureClaim | quote }}
             - name: PLATFORM_ADMIN_GROUPS
-              value: {{ required "platformAdminGroups is required" .Values.platformAdminGroups | quote }}
-            {{- if eq .Values.db.type "sqlite" }}
+              value: {{ .Values.platformAdminGroups | quote }}
+            - name: PLATFORM_ADMIN_SUBJECTS
+              value: {{ .Values.platformAdminSubjects | quote }}
+            {{- if .Values.resourceServer.enabled }}
+            - name: RESOURCE_SERVER_URL
+              value: {{ required "resourceServer.url is required when the Resource Server is enabled" .Values.resourceServer.url | quote }}
+            - name: RESOURCE_SERVER_ISSUER
+              value: {{ required "resourceServer.issuer is required when the Resource Server is enabled" .Values.resourceServer.issuer | quote }}
+            - name: RESOURCE_SERVER_AUTHORIZED_CLIENT_IDS
+              value: {{ required "resourceServer.authorizedClientIds is required when the Resource Server is enabled" .Values.resourceServer.authorizedClientIds | quote }}
+            - name: RESOURCE_SERVER_JWT_ALGORITHMS
+              value: {{ .Values.resourceServer.jwtAlgorithms | quote }}
+            {{- end }}
             - name: DB_TYPE
-              value: sqlite
+              value: {{ .Values.db.type | quote }}
+            - name: KUBECTL_TERMINAL_IMAGE
+              value: {{ required "terminalImages.kubectl is required" .Values.terminalImages.kubectl | quote }}
+            - name: NODE_TERMINAL_IMAGE
+              value: {{ required "terminalImages.node is required" .Values.terminalImages.node | quote }}
+            - name: CLUSTER_AGENT_IMAGE
+              value: {{ .Values.clusterAgentImage | default (printf "%s:%s" (required "image.repository is required" .Values.image.repository) (.Values.image.tag | default .Chart.AppVersion)) | quote }}
+            - name: KITE_IMAGE_REGISTRY_HOSTS
+              value: {{ .Values.imageRegistryHosts | quote }}
+            {{- if .Values.releaseAPIURL }}
+            - name: RELEASE_API_URL
+              value: {{ .Values.releaseAPIURL | quote }}
+            {{- end }}
+            {{- if .Values.analytics.enabled }}
+            - name: ENABLE_ANALYTICS
+              value: "true"
+            {{- end }}
+            {{- if .Values.analytics.scriptURL }}
+            - name: ANALYTICS_SCRIPT_URL
+              value: {{ .Values.analytics.scriptURL | quote }}
+            - name: ANALYTICS_WEBSITE_ID
+              value: {{ .Values.analytics.websiteID | quote }}
+            {{- end }}
+            {{- if eq .Values.db.type "sqlite" }}
             - name: DB_DSN
-              value: {{ (printf "%s/%s?%s" .Values.db.sqlite.persistence.mountPath .Values.db.sqlite.persistence.filename .Values.db.sqlite.options) }}
+              value: {{ (printf "%s/%s?%s" .Values.db.sqlite.persistence.mountPath .Values.db.sqlite.persistence.filename .Values.db.sqlite.options) | quote }}
+            {{- end }}
+            {{- if .Values.oidc.ca.existingSecret }}
+            - name: OIDC_CA_FILE
+              value: {{ printf "%s/%s" .Values.oidc.ca.mountPath .Values.oidc.ca.key | quote }}
             {{- end }}
             {{- if .Values.basePath }}
             - name: KITE_BASE
@@ -100,6 +159,10 @@ spec:
           readinessProbe:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+          {{- with .Values.startupProbe }}
+          startupProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           {{- with .Values.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
@@ -113,11 +176,28 @@ spec:
               mountPath: /etc/kite
               readOnly: true
           {{- end }}
+          {{- if .Values.oidc.ca.existingSecret }}
+            - name: oidc-ca
+              mountPath: {{ .Values.oidc.ca.mountPath }}
+              readOnly: true
+          {{- end }}
+            - name: tmp
+              mountPath: /tmp
           {{- if and (eq .Values.db.type "sqlite")}}
             - name: {{ include "kite.fullname" . }}-storage
               mountPath: {{ .Values.db.sqlite.persistence.mountPath }}
           {{- end }}
       volumes:
+        - name: tmp
+          emptyDir: {}
+      {{- if .Values.oidc.ca.existingSecret }}
+        - name: oidc-ca
+          secret:
+            secretName: {{ .Values.oidc.ca.existingSecret }}
+            items:
+              - key: {{ .Values.oidc.ca.key }}
+                path: {{ .Values.oidc.ca.key }}
+      {{- end }}
       {{- if .Values.config.enabled }}
         - name: kite-config
           secret:

@@ -4,14 +4,26 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/zxh326/kite/pkg/common"
 	"github.com/zxh326/kite/pkg/model"
+	"k8s.io/klog/v2"
 )
+
+const oidcSessionIDContextKey = "oidc-session-id"
+
+func OIDCSessionID(c *gin.Context) (uint, bool) {
+	value, exists := c.Get(oidcSessionIDContextKey)
+	if !exists {
+		return 0, false
+	}
+	sessionID, ok := value.(uint)
+	return sessionID, ok && sessionID != 0
+}
 
 func (h *AuthHandler) RequireAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		user, idToken, err := h.oidc.authenticatedSession(c)
+		user, idToken, sessionID, err := h.oidc.authenticatedSession(c)
 		if err != nil {
+			klog.V(2).Infof("OIDC session authentication failed: %v", err)
 			c.JSON(http.StatusUnauthorized, gin.H{
 				"error": "Invalid or expired OIDC session",
 			})
@@ -19,11 +31,10 @@ func (h *AuthHandler) RequireAuth() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		if platformAdmin(*user) {
-			user.Roles = []common.Role{platformAdminRole()}
-		}
 		c.Set("user", *user)
+		c.Set("platform-admin", platformAdmin(*user))
 		c.Set(idTokenContextKey, idToken)
+		c.Set(oidcSessionIDContextKey, sessionID)
 		c.Next()
 	}
 }

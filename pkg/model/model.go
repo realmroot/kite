@@ -81,6 +81,21 @@ func InitDB() {
 	if DB == nil {
 		panic("database connection is nil, check your DB_TYPE and DB_DSN settings")
 	}
+	sqldb, err := DB.DB()
+	if err != nil {
+		panic("failed to configure database pool: " + err.Error())
+	}
+	if common.DBType == "sqlite" {
+		// Kite's SQLite database stores low-volume product metadata. A single
+		// connection keeps transaction locking and connection-local PRAGMAs
+		// deterministic; multi-replica deployments use PostgreSQL or MySQL.
+		sqldb.SetMaxOpenConns(1)
+		sqldb.SetMaxIdleConns(1)
+	} else {
+		sqldb.SetMaxOpenConns(common.DBMaxOpenConns)
+		sqldb.SetMaxIdleConns(common.DBMaxIdleConns)
+	}
+	sqldb.SetConnMaxLifetime(common.DBMaxIdleTime)
 
 	// For SQLite we must enable foreign key enforcement explicitly.
 	// SQLite has foreign key constraints defined in the schema but they are
@@ -90,16 +105,20 @@ func InitDB() {
 			panic("failed to enable sqlite foreign keys: " + err.Error())
 		}
 	}
+	if err := runSchemaMigrations(DB); err != nil {
+		panic("failed to run database migrations: " + err.Error())
+	}
 	models := []interface{}{
 		User{},
 		Cluster{},
 		GeneralSetting{},
 		ResourceHistory{},
 		ResourceTemplate{},
-		PendingSession{},
 		OIDCSession{},
 		HelmRepository{},
 		ScheduledTask{},
+		DPoPProof{},
+		ResourceAccessAudit{},
 	}
 	for _, model := range models {
 		err = DB.AutoMigrate(model)
@@ -107,10 +126,17 @@ func InitDB() {
 			panic("failed to migrate database: " + err.Error())
 		}
 	}
-	sqldb, err := DB.DB()
-	if err == nil {
-		sqldb.SetMaxOpenConns(common.DBMaxOpenConns)
-		sqldb.SetMaxIdleConns(common.DBMaxIdleConns)
-		sqldb.SetConnMaxLifetime(common.DBMaxIdleTime)
+	if err := disableUnboundOIDCScheduledTasks(); err != nil {
+		panic("failed to disable scheduled tasks without an OIDC session: " + err.Error())
 	}
+}
+
+func disableUnboundOIDCScheduledTasks() error {
+	return DB.Model(&ScheduledTask{}).
+		Where("type = ? AND enabled = ? AND oidc_session_id = ?", "helm_release_auto_upgrade", true, 0).
+		Updates(map[string]any{
+			"enabled":     false,
+			"next_run_at": nil,
+			"last_error":  "Re-enable this task to authorize it with a current OIDC session",
+		}).Error
 }

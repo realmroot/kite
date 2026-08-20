@@ -12,23 +12,20 @@
 
 ### 方式一：Helm Chart（推荐）
 
-使用 Helm 可灵活配置和升级 Kite：
+使用 fork 发布的版本化 OCI Chart 安装（替换 `<owner>` 与 `<version>`）：
 
 ```bash
-helm install kite oci://ghcr.io/kite-org/charts/kite -n kite-system --create-namespace
+helm install kite oci://ghcr.io/<owner>/charts/kite \
+  --version <version> -n kite-system --create-namespace -f values.yaml
 ```
 
-或从 Helm 仓库安装：
+如果仓库启用了可选的 GitHub Pages Helm Index，也可以安装相同版本：
 
 ```bash
-# 添加 Kite 仓库
-helm repo add kite https://kite-org.github.io/kite/
-
-# 更新仓库信息
+helm repo add kite https://<owner>.github.io/kite/
 helm repo update
-
-# 使用默认配置安装
-helm install kite kite/kite -n kite-system --create-namespace
+helm install kite kite/kite --version <version> \
+  -n kite-system --create-namespace -f values.yaml
 ```
 
 #### 自定义安装
@@ -40,27 +37,26 @@ helm install kite kite/kite -n kite-system --create-namespace
 使用自定义值安装：
 
 ```bash
-helm install kite oci://ghcr.io/kite-org/charts/kite -n kite-system -f values.yaml
+helm upgrade --install kite oci://ghcr.io/<owner>/charts/kite \
+  --version <version> -n kite-system --create-namespace -f values.yaml
 
 # 或使用 Helm 仓库
-helm install kite kite/kite -n kite-system -f values.yaml
+helm upgrade --install kite kite/kite --version <version> \
+  -n kite-system --create-namespace -f values.yaml
 ```
 
 ### 方式二：YAML 清单
 
-如需快速部署，可直接应用官方安装 YAML：
-
-::: warning
-此方法不适合生产环境，因为他没有配置任何持久化相关内容，你需要手动挂载持久化卷并设置环境变量 `DB_DSN=/data/db.sqlite` 来确保数据不会丢失。或者也可以使用外部数据库。
-
-参考 [持久化相关](../faq#持久化相关) 获取更多详情。
-:::
+每个 Release 都包含版本化的 `install.yaml`，默认带 SQLite 持久化与非 root
+安全上下文。下载后替换 OIDC、Secret 与公网 Host 占位符，审查后再应用：
 
 ```bash
-kubectl apply -f https://raw.githubusercontent.com/kite-org/kite/main/deploy/install.yaml
+curl -fLO https://github.com/<owner>/kite/releases/download/vX.Y.Z/install.yaml
+$EDITOR install.yaml
+kubectl apply -f install.yaml
 ```
 
-此方法将使用默认配置安装 Kite。如需高级定制，建议使用 Helm Chart。
+外部数据库、私有 Issuer CA、Ingress 等高级配置应使用 Helm Chart。
 
 ## 访问 Kite
 
@@ -135,7 +131,9 @@ basePath: "/kite"
 - 或使用 Helm CLI：
 
 ```fish
-helm install kite oci://ghcr.io/kite-org/charts/kite -n kite-system --create-namespace --set basePath="/kite"
+helm upgrade --install kite oci://ghcr.io/<owner>/charts/kite \
+  --version <version> -n kite-system --create-namespace \
+  -f values.yaml --set basePath="/kite"
 ```
 
 说明：
@@ -152,21 +150,23 @@ ingress:
           pathType: Prefix
 ```
 
-- OAuth / 重定向：如果启用了 OAuth 或其他外部重定向，请在 OAuth 提供方中将重定向 URL 更新为包含子路径，例如 `https://kite.example.com/kite/oauth/callback`。
+- OIDC Callback：使用子路径时应注册包含该路径的地址，例如
+  `https://kite.example.com/kite/api/auth/callback`。
 
 ## 验证安装
 
-安装完成后，可访问仪表盘验证 Kite 是否部署成功。预期界面如下：
+安装完成后，打开 Kite 并通过配置的 OIDC Provider 登录。Provider 回调 Kite
+后应直接进入 Overview 页面。
 
 ::: tip
 如需通过环境变量配置 Kite，请参考 [环境变量](../config/env)。
 :::
 
-![setup](../../screenshots/setup.png)
-
-![setup](../../screenshots/setup2.png)
-
-可根据页面提示完成集群设置。
+`PLATFORM_ADMIN_GROUPS` 中的管理员可以进入 **设置 > 集群** 添加第一个集群。
+直连模式只填写 API Server URL、CA Bundle 和可选 TLS Server Name；私有 API
+Server 可以使用无集群凭据的隧道 Agent。Kite 不会把自身 Pod ServiceAccount
+当作集群凭据。目标集群必须信任同一个 OIDC Issuer，并通过 Kubernetes RBAC
+绑定登录用户或 group。
 
 ## 卸载 Kite
 
@@ -179,7 +179,7 @@ helm uninstall kite -n kite-system
 ### YAML 卸载
 
 ```bash
-kubectl delete -f https://raw.githubusercontent.com/kite-org/kite/main/deploy/install.yaml
+kubectl delete -f install.yaml
 ```
 
 ## 后续步骤

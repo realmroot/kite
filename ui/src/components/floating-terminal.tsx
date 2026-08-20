@@ -19,7 +19,6 @@ export function FloatingTerminal() {
   const { user, capabilities } = useAuth()
   const { isOpen, isMinimized, closeTerminal, minimizeTerminal, openTerminal } =
     useTerminal()
-  const isAdmin = user?.isAdmin() ?? false
   const kubectlEnabled = capabilities.kubectlEnabled
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [height, setHeight] = useState(
@@ -78,7 +77,7 @@ export function FloatingTerminal() {
     closeTerminal()
   }, [closeTerminal])
 
-  if (!isAdmin || !kubectlEnabled) return null
+  if (!user || !kubectlEnabled) return null
   if (!isOpen) return null
 
   return (
@@ -118,6 +117,7 @@ export function FloatingTerminal() {
               <Button
                 variant="ghost"
                 size="icon"
+                aria-label={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
                 className="h-7 w-7"
                 onClick={toggleFullscreen}
                 disabled={isMinimized}
@@ -141,6 +141,9 @@ export function FloatingTerminal() {
               <Button
                 variant="ghost"
                 size="icon"
+                aria-label={
+                  isMinimized ? 'Restore terminal' : 'Minimize terminal'
+                }
                 className="h-7 w-7"
                 onClick={handleMinimize}
               >
@@ -163,6 +166,7 @@ export function FloatingTerminal() {
               <Button
                 variant="ghost"
                 size="icon"
+                aria-label="Close terminal"
                 className="h-7 w-7 hover:bg-destructive hover:text-destructive-foreground"
                 onClick={handleClose}
               >

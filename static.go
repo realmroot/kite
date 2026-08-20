@@ -46,7 +46,7 @@ func setupStatic(r *gin.Engine) {
 
 		htmlContent := utils.InjectKiteBase(string(content), base)
 		if common.EnableAnalytics {
-			htmlContent = utils.InjectAnalytics(htmlContent)
+			htmlContent = utils.InjectAnalytics(htmlContent, common.AnalyticsScriptURL, common.AnalyticsWebsiteID)
 		}
 
 		c.Header("Content-Type", "text/html; charset=utf-8")

@@ -1,21 +1,39 @@
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
+apiVersion: v1
+kind: Namespace
 metadata:
-  name: kite
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: cluster-admin
-subjects:
-  - kind: ServiceAccount
-    name: kite
-    namespace: kube-system
+  name: kite-system
 ---
 kind: ServiceAccount
 apiVersion: v1
 metadata:
   name: kite
-  namespace: kube-system
+  namespace: kite-system
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: kite
+  namespace: kite-system
+type: Opaque
+stringData:
+  # Replace every placeholder before applying this manifest.
+  OIDC_CLIENT_ID: replace-me
+  OIDC_CLIENT_SECRET: replace-me
+  KITE_ENCRYPT_KEY: replace-with-an-independent-random-secret
+  JWT_SECRET: replace-with-another-independent-random-secret
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: kite-data
+  namespace: kite-system
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -23,23 +41,79 @@ metadata:
   labels:
     app: kite
   name: kite
-  namespace: kube-system
+  namespace: kite-system
 spec:
   replicas: 1
   selector:
     matchLabels:
       app: kite
-  strategy: {}
+  strategy:
+    type: Recreate
   template:
     metadata:
       labels:
         app: kite
     spec:
       serviceAccountName: kite
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
       containers:
-        - image: ghcr.io/kite-org/kite:latest
+        # Replace OWNER and VERSION with the immutable image published by this fork.
+        - image: ghcr.io/OWNER/kite:VERSION
           imagePullPolicy: IfNotPresent
           name: kite
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          envFrom:
+            - secretRef:
+                name: kite
+          env:
+            # Replace these values and register
+            # https://kite.example.com/api/auth/callback at the provider.
+            - name: OIDC_ISSUER
+              value: https://identity.example.com
+            - name: OIDC_PROVIDER_NAME
+              value: OpenID Connect
+            - name: OIDC_SCOPES
+              value: openid profile email groups offline_access
+            - name: OIDC_USERNAME_CLAIM
+              value: email
+            - name: OIDC_GROUPS_CLAIM
+              value: groups
+            - name: PLATFORM_ADMIN_GROUPS
+              value: kite-platform-admins
+            # Optional standards-based Resource Server for external tools.
+            - name: RESOURCE_SERVER_URL
+              value: https://kite.example.com/api/agent/v1
+            - name: RESOURCE_SERVER_ISSUER
+              value: https://identity.example.com
+            - name: RESOURCE_SERVER_AUTHORIZED_CLIENT_IDS
+              value: agent-protocol-client
+            - name: HOST
+              value: https://kite.example.com
+            - name: DB_TYPE
+              value: sqlite
+            - name: KUBECTL_TERMINAL_IMAGE
+              value: alpine/kubectl:1.36.3
+            - name: NODE_TERMINAL_IMAGE
+              value: busybox:1.37.0
+            - name: CLUSTER_AGENT_IMAGE
+              value: ghcr.io/OWNER/kite:VERSION
+            - name: RELEASE_API_URL
+              value: https://api.github.com/repos/OWNER/kite/releases/latest
+            - name: DB_DSN
+              value: /data/kite.db?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)
           resources:
             limits:
               cpu: 1000m
@@ -55,13 +129,30 @@ spec:
             periodSeconds: 10
           readinessProbe:
             httpGet:
-              path: /healthz
+              path: /readyz
               port: 8080
             initialDelaySeconds: 5
             periodSeconds: 5
+          startupProbe:
+            httpGet:
+              path: /readyz
+              port: 8080
+            periodSeconds: 2
+            failureThreshold: 30
           ports:
             - containerPort: 8080
               protocol: TCP
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: kite-data
+        - name: tmp
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
@@ -69,7 +160,7 @@ metadata:
   labels:
     app: kite
   name: kite
-  namespace: kube-system
+  namespace: kite-system
 spec:
   ports:
     - name: http

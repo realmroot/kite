@@ -1,16 +1,15 @@
 package model
 
+import "gorm.io/gorm"
+
 type Cluster struct {
 	Model
-	Name           string `json:"name" gorm:"type:varchar(100);uniqueIndex;not null"`
-	Description    string `json:"description" gorm:"type:text"`
-	APIServerURL   string `json:"apiServerUrl" gorm:"type:text"`
-	CABundle       string `json:"caBundle,omitempty" gorm:"type:text"`
-	TLSServerName  string `json:"tlsServerName,omitempty" gorm:"type:varchar(255)"`
-	ConnectionMode string `json:"connectionMode" gorm:"type:varchar(20);default:direct"`
-	// Config is retained only so old databases can be migrated. New requests
-	// never accept, return, or use persisted Kubernetes credentials.
-	Config                 SecretString `json:"-" gorm:"type:text"`
+	Name                   string       `json:"name" gorm:"type:varchar(100);uniqueIndex;not null"`
+	Description            string       `json:"description" gorm:"type:text"`
+	APIServerURL           string       `json:"apiServerUrl" gorm:"type:text"`
+	CABundle               string       `json:"caBundle,omitempty" gorm:"type:text"`
+	TLSServerName          string       `json:"tlsServerName,omitempty" gorm:"type:varchar(255)"`
+	ConnectionMode         string       `json:"connectionMode" gorm:"type:varchar(20);default:direct"`
 	PrometheusURL          string       `json:"prometheus_url,omitempty" gorm:"type:text"`
 	InCluster              bool         `json:"in_cluster" gorm:"type:boolean;default:false"`
 	ClusterAgent           bool         `json:"clusterAgent" gorm:"type:boolean;default:false"`
@@ -18,11 +17,18 @@ type Cluster struct {
 	ClusterAgentPublicKey  string       `json:"-" gorm:"type:varchar(64)"`
 	ClusterAgentPrivateKey SecretString `json:"-" gorm:"type:text"`
 	IsDefault              bool         `json:"is_default" gorm:"type:boolean;default:false"`
-	Enable                 bool         `json:"enable" gorm:"type:boolean;default:true"`
+	Enable                 bool         `json:"enable" gorm:"type:boolean;not null"`
 }
 
 func AddCluster(cluster *Cluster) error {
-	return DB.Create(cluster).Error
+	return DB.Transaction(func(tx *gorm.DB) error {
+		if cluster.IsDefault {
+			if err := tx.Model(&Cluster{}).Where("is_default = ?", true).Update("is_default", false).Error; err != nil {
+				return err
+			}
+		}
+		return tx.Create(cluster).Error
+	})
 }
 
 func GetClusterByName(name string) (*Cluster, error) {
@@ -50,15 +56,52 @@ func GetClusterByClusterAgentTokenHash(hash string) (*Cluster, error) {
 }
 
 func UpdateCluster(cluster *Cluster, updates map[string]interface{}) error {
-	return DB.Model(cluster).Updates(updates).Error
+	oldName := cluster.Name
+	targetName := oldName
+	if nextName, ok := updates["name"].(string); ok && nextName != "" {
+		targetName = nextName
+	}
+	return DB.Transaction(func(tx *gorm.DB) error {
+		if isDefault, ok := updates["is_default"].(bool); ok && isDefault {
+			if err := tx.Model(&Cluster{}).Where("id <> ? AND is_default = ?", cluster.ID, true).Update("is_default", false).Error; err != nil {
+				return err
+			}
+		}
+		if err := tx.Model(cluster).Updates(updates).Error; err != nil {
+			return err
+		}
+		if targetName != oldName {
+			if err := tx.Model(&ScheduledTask{}).
+				Where("cluster_name = ?", oldName).
+				Update("cluster_name", targetName).Error; err != nil {
+				return err
+			}
+		}
+		if enabled, ok := updates["enable"].(bool); ok && !enabled {
+			if err := tx.Model(&ScheduledTask{}).
+				Where("cluster_name = ? AND enabled = ?", targetName, true).
+				Updates(map[string]any{
+					"enabled":     false,
+					"next_run_at": nil,
+					"locked_at":   nil,
+					"locked_by":   "",
+					"lock_until":  nil,
+					"last_error":  "Cluster disabled; re-enable this task after enabling the cluster",
+				}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 func DeleteCluster(cluster *Cluster) error {
-	return DB.Delete(cluster).Error
-}
-
-func ClearDefaultCluster() error {
-	return DB.Model(&Cluster{}).Where("is_default = ?", true).Update("is_default", false).Error
+	return DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Unscoped().Where("cluster_name = ?", cluster.Name).Delete(&ScheduledTask{}).Error; err != nil {
+			return err
+		}
+		return tx.Unscoped().Delete(cluster).Error
+	})
 }
 
 func DisableCluster(cluster *Cluster) error {

@@ -18,6 +18,7 @@ import (
 	"github.com/zxh326/kite/pkg/kube"
 	"github.com/zxh326/kite/pkg/middleware"
 	"github.com/zxh326/kite/pkg/model"
+	authorizationv1 "k8s.io/api/authorization/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -25,6 +26,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	clientgofake "k8s.io/client-go/kubernetes/fake"
+	clientgotesting "k8s.io/client-go/testing"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
@@ -43,11 +46,13 @@ type crAPITestConfig struct {
 	clusterBObjects      []client.Object
 	clusterAInterceptors interceptor.Funcs
 	clusterBInterceptors interceptor.Funcs
+	denyHistory          bool
 }
 
 type crAPITestFixture struct {
 	router  *gin.Engine
 	clients map[string]client.Client
+	reviews *[]*authorizationv1.ResourceAttributes
 }
 
 type crAPITestClusterProvider map[string]*cluster.ClientSet
@@ -88,17 +93,31 @@ func newCRAPITestFixture(t *testing.T, config crAPITestConfig) *crAPITestFixture
 	}
 	clusterAClient := newClient(config.clusterAObjects, config.clusterAInterceptors)
 	clusterBClient := newClient(config.clusterBObjects, config.clusterBInterceptors)
+	reviews := make([]*authorizationv1.ResourceAttributes, 0)
+	newAuthorizationClient := func() *clientgofake.Clientset {
+		clientSet := clientgofake.NewSimpleClientset()
+		clientSet.PrependReactor("create", "selfsubjectaccessreviews", func(action clientgotesting.Action) (bool, runtime.Object, error) {
+			review := action.(clientgotesting.CreateAction).GetObject().(*authorizationv1.SelfSubjectAccessReview).DeepCopy()
+			reviews = append(reviews, review.Spec.ResourceAttributes.DeepCopy())
+			review.Status.Allowed = !config.denyHistory
+			review.Status.Reason = "test RBAC decision"
+			return true, review, nil
+		})
+		return clientSet
+	}
 	clientSets := crAPITestClusterProvider{
 		"cluster-a": {
 			Name: "cluster-a",
 			K8sClient: &kube.K8sClient{
-				Client: clusterAClient,
+				Client:    clusterAClient,
+				ClientSet: newAuthorizationClient(),
 			},
 		},
 		"cluster-b": {
 			Name: "cluster-b",
 			K8sClient: &kube.K8sClient{
-				Client: clusterBClient,
+				Client:    clusterBClient,
+				ClientSet: newAuthorizationClient(),
 			},
 		},
 	}
@@ -125,7 +144,6 @@ func newCRAPITestFixture(t *testing.T, config crAPITestConfig) *crAPITestFixture
 		api.Group("/_clusters/:cluster"),
 	} {
 		group.Use(middleware.ClusterMiddleware(clientSets))
-		group.Use(middleware.RBACMiddleware())
 		RegisterRoutes(group)
 	}
 
@@ -135,6 +153,7 @@ func newCRAPITestFixture(t *testing.T, config crAPITestConfig) *crAPITestFixture
 			"cluster-a": clusterAClient,
 			"cluster-b": clusterBClient,
 		},
+		reviews: &reviews,
 	}
 }
 
@@ -201,25 +220,12 @@ func newWidget(name, namespace string, labels map[string]string) *unstructured.U
 	return widget
 }
 
-func newWidgetUser(clusters, namespaces, verbs []string) model.User {
-	return model.User{
-		Username: "alice",
-		Roles: []common.Role{{
-			Name:       "widget-access",
-			Clusters:   clusters,
-			Namespaces: namespaces,
-			Resources:  []string{widgetCRDName},
-			Verbs:      verbs,
-		}},
-	}
+func newWidgetUser() model.User {
+	return model.User{Username: "alice"}
 }
 
 func TestCRAPIList(t *testing.T) {
-	user := newWidgetUser(
-		[]string{"cluster-a"},
-		[]string{"*"},
-		[]string{string(common.VerbGet)},
-	)
+	user := newWidgetUser()
 
 	t.Run("default all and namespace routes", func(t *testing.T) {
 		fixture := newCRAPITestFixture(t, crAPITestConfig{
@@ -363,11 +369,7 @@ func TestCRAPIList(t *testing.T) {
 }
 
 func TestCRAPIGet(t *testing.T) {
-	user := newWidgetUser(
-		[]string{"cluster-a"},
-		[]string{"*"},
-		[]string{string(common.VerbGet)},
-	)
+	user := newWidgetUser()
 
 	t.Run("gets namespaced resource and removes server metadata", func(t *testing.T) {
 		widget := newWidget("target", "default", nil)
@@ -478,11 +480,7 @@ func TestCRAPIGet(t *testing.T) {
 }
 
 func TestCRAPIUpdate(t *testing.T) {
-	user := newWidgetUser(
-		[]string{"cluster-a"},
-		[]string{"default", common.AllNamespaces},
-		[]string{string(common.VerbUpdate)},
-	)
+	user := newWidgetUser()
 
 	t.Run("uses URL identity and preserves stored metadata", func(t *testing.T) {
 		widget := newWidget("target", "default", nil)
@@ -611,11 +609,7 @@ func TestCRAPIUpdate(t *testing.T) {
 }
 
 func TestCRAPIDelete(t *testing.T) {
-	user := newWidgetUser(
-		[]string{"cluster-a"},
-		[]string{"default"},
-		[]string{string(common.VerbDelete)},
-	)
+	user := newWidgetUser()
 
 	t.Run("uses background propagation and deletes resource", func(t *testing.T) {
 		var gotOptions client.DeleteOptions
@@ -759,258 +753,42 @@ func TestCRAPIDelete(t *testing.T) {
 	})
 }
 
-func TestCRRBACAllNamespaces(t *testing.T) {
-	t.Skip("application RBAC filtering was removed; Kubernetes filters resource access")
-	t.Run("does not join resource and namespace permissions across roles", func(t *testing.T) {
-		fixture := newCRAPITestFixture(t, crAPITestConfig{
-			user: model.User{
-				Username: "alice",
-				Roles: []common.Role{
-					{
-						Name:       "widget-default-reader",
-						Clusters:   []string{"cluster-a"},
-						Namespaces: []string{common.AllNamespaces, "default"},
-						Resources:  []string{widgetCRDName},
-						Verbs:      []string{string(common.VerbGet)},
-					},
-					{
-						Name:       "deployment-team-reader",
-						Clusters:   []string{"cluster-a"},
-						Namespaces: []string{"team-a"},
-						Resources:  []string{string(common.Deployments)},
-						Verbs:      []string{string(common.VerbGet)},
-					},
-				},
-			},
-			clusterAObjects: []client.Object{
-				newWidgetCRD(apiextensionsv1.NamespaceScoped),
-				newWidget("default-widget", "default", nil),
-				newWidget("team-widget", "team-a", nil),
-			},
-		})
-
-		response := performCRAPIRequest(t, fixture, http.MethodGet, "/api/v1/_clusters/cluster-a/widgets.example.com/_all", "", nil)
-		if response.Code != http.StatusOK {
-			t.Fatalf("all namespace list returned %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
-		}
-		list := decodeCRAPIResponse[unstructured.UnstructuredList](t, response)
-		if len(list.Items) != 1 || list.Items[0].GetNamespace() != "default" || list.Items[0].GetName() != "default-widget" {
-			t.Fatalf("all namespace list returned %#v, want default/default-widget", list.Items)
-		}
-	})
-
-	t.Run("honors excluded namespaces", func(t *testing.T) {
-		fixture := newCRAPITestFixture(t, crAPITestConfig{
-			user: model.User{
-				Username: "alice",
-				Roles: []common.Role{{
-					Name:       "widget-reader",
-					Clusters:   []string{"cluster-a"},
-					Namespaces: []string{"!kube-system", "*"},
-					Resources:  []string{widgetCRDName},
-					Verbs:      []string{string(common.VerbGet)},
-				}},
-			},
-			clusterAObjects: []client.Object{
-				newWidgetCRD(apiextensionsv1.NamespaceScoped),
-				newWidget("visible", "default", nil),
-				newWidget("hidden", "kube-system", nil),
-			},
-		})
-
-		response := performCRAPIRequest(t, fixture, http.MethodGet, "/api/v1/_clusters/cluster-a/widgets.example.com/_all", "", nil)
-		if response.Code != http.StatusOK {
-			t.Fatalf("all namespace list returned %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
-		}
-		list := decodeCRAPIResponse[unstructured.UnstructuredList](t, response)
-		if len(list.Items) != 1 || list.Items[0].GetNamespace() != "default" || list.Items[0].GetName() != "visible" {
-			t.Fatalf("all namespace list returned %#v, want default/visible", list.Items)
-		}
-	})
-
-	for _, path := range []string{
-		"/api/v1/widgets.example.com",
-		"/api/v1/widgets.example.com/_all",
-		"/api/v1/_clusters/cluster-a/widgets.example.com",
-		"/api/v1/_clusters/cluster-a/widgets.example.com/_all",
-	} {
-		t.Run("exact namespace only sees authorized objects "+path, func(t *testing.T) {
-			fixture := newCRAPITestFixture(t, crAPITestConfig{
-				user: newWidgetUser(
-					[]string{"cluster-a"},
-					[]string{"default"},
-					[]string{string(common.VerbGet)},
-				),
-				clusterAObjects: []client.Object{
-					newWidgetCRD(apiextensionsv1.NamespaceScoped),
-					newWidget("allowed", "default", nil),
-					newWidget("denied", "team-a", nil),
-				},
-			})
-			response := performCRAPIRequest(t, fixture, http.MethodGet, path, "", nil)
-			if response.Code != http.StatusOK {
-				t.Fatalf("GET %s returned %d, want %d; body=%s", path, response.Code, http.StatusOK, response.Body.String())
-			}
-			list := decodeCRAPIResponse[unstructured.UnstructuredList](t, response)
-			if len(list.Items) != 1 || list.Items[0].GetNamespace() != "default" || list.Items[0].GetName() != "allowed" {
-				t.Fatalf("GET %s returned %#v, want default/allowed", path, list.Items)
-			}
-		})
-	}
-
-	for _, path := range []string{
-		"/api/v1/widgets.example.com",
-		"/api/v1/widgets.example.com/_all",
-		"/api/v1/_clusters/cluster-a/widgets.example.com",
-		"/api/v1/_clusters/cluster-a/widgets.example.com/_all",
-	} {
-		t.Run("cluster scoped resource requires all namespace permission "+path, func(t *testing.T) {
-			fixture := newCRAPITestFixture(t, crAPITestConfig{
-				user: newWidgetUser(
-					[]string{"cluster-a"},
-					[]string{"default"},
-					[]string{string(common.VerbGet)},
-				),
-				clusterAObjects: []client.Object{
-					newWidgetCRD(apiextensionsv1.ClusterScoped),
-					newWidget("global", "", nil),
-				},
-			})
-			response := performCRAPIRequest(t, fixture, http.MethodGet, path, "", nil)
-			if response.Code != http.StatusForbidden {
-				t.Fatalf("GET %s returned %d, want %d; body=%s", path, response.Code, http.StatusForbidden, response.Body.String())
-			}
-		})
-	}
-}
-
-func TestCRRBACHTTPVerbs(t *testing.T) {
-	allVerbs := []string{
-		string(common.VerbGet),
-		string(common.VerbUpdate),
-		string(common.VerbDelete),
-	}
+func TestCRAPIHistoryUsesCustomResourceAuthorization(t *testing.T) {
 	for _, test := range []struct {
-		name        string
-		method      string
-		body        string
-		path        string
-		missingVerb string
+		name       string
+		deny       bool
+		wantStatus int
 	}{
-		{name: "GET requires get", method: http.MethodGet, path: "/api/v1/widgets.example.com/default/target", missingVerb: string(common.VerbGet)},
-		{name: "PUT requires update", method: http.MethodPut, path: "/api/v1/widgets.example.com/default/target", body: `{"apiVersion":"example.com/v1","kind":"Widget"}`, missingVerb: string(common.VerbUpdate)},
-		{name: "DELETE requires delete", method: http.MethodDelete, path: "/api/v1/widgets.example.com/default/target?wait=false", missingVerb: string(common.VerbDelete)},
+		{name: "allowed", wantStatus: http.StatusOK},
+		{name: "denied", deny: true, wantStatus: http.StatusForbidden},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			verbs := make([]string, 0, len(allVerbs)-1)
-			for _, verb := range allVerbs {
-				if verb != test.missingVerb {
-					verbs = append(verbs, verb)
-				}
-			}
+			user := model.User{Issuer: "https://issuer.example.test", Sub: "alice", Username: "alice"}
 			fixture := newCRAPITestFixture(t, crAPITestConfig{
-				user: newWidgetUser(
-					[]string{"cluster-a"},
-					[]string{"default"},
-					verbs,
-				),
-				clusterAObjects: []client.Object{
-					newWidgetCRD(apiextensionsv1.NamespaceScoped),
-					newWidget("target", "default", nil),
-				},
+				user:            user,
+				write:           true,
+				denyHistory:     test.deny,
+				clusterAObjects: []client.Object{newWidgetCRD(apiextensionsv1.NamespaceScoped)},
 			})
-
-			response := performCRAPIRequest(t, fixture, test.method, test.path, test.body, nil)
-			if response.Code != http.StatusForbidden {
-				t.Fatalf("%s %s returned %d, want %d; body=%s", test.method, test.path, response.Code, http.StatusForbidden, response.Body.String())
+			response := performCRAPIRequest(t, fixture, http.MethodGet, "/api/v1/widgets.example.com/default/target/history", "", nil)
+			if response.Code != test.wantStatus {
+				t.Fatalf("status = %d, want %d: %s", response.Code, test.wantStatus, response.Body.String())
 			}
-			body := decodeCRAPIResponse[map[string]string](t, response)
-			want := fmt.Sprintf("user alice does not have permission to %s %s in namespace default on cluster cluster-a", test.missingVerb, widgetCRDName)
-			if body["error"] != want {
-				t.Fatalf("error = %q, want %q", body["error"], want)
+			if fixture.reviews == nil || len(*fixture.reviews) != 1 {
+				t.Fatalf("authorization reviews = %#v", fixture.reviews)
+			}
+			attributes := (*fixture.reviews)[0]
+			if attributes.Verb != "get" || attributes.Group != "example.com" || attributes.Resource != "widgets" ||
+				attributes.Namespace != "default" || attributes.Name != "target" {
+				t.Fatalf("authorization attributes = %#v", attributes)
 			}
 		})
 	}
-}
-
-func TestCRRBACDimensions(t *testing.T) {
-	for _, test := range []struct {
-		name      string
-		path      string
-		headers   map[string]string
-		role      common.Role
-		wantError string
-	}{
-		{
-			name:    "wrong cluster",
-			path:    "/api/v1/widgets.example.com/default/target",
-			headers: map[string]string{middleware.ClusterNameHeader: "cluster-b"},
-			role: common.Role{
-				Clusters: []string{"cluster-a"}, Namespaces: []string{"default"}, Resources: []string{widgetCRDName}, Verbs: []string{string(common.VerbGet)},
-			},
-			wantError: "user alice does not have permission to get widgets.example.com in namespace default on cluster cluster-b",
-		},
-		{
-			name: "wrong namespace",
-			path: "/api/v1/widgets.example.com/team-a/target",
-			role: common.Role{
-				Clusters: []string{"cluster-a"}, Namespaces: []string{"default"}, Resources: []string{widgetCRDName}, Verbs: []string{string(common.VerbGet)},
-			},
-			wantError: "user alice does not have permission to get widgets.example.com in namespace team-a on cluster cluster-a",
-		},
-		{
-			name: "resource must be full CRD name",
-			path: "/api/v1/widgets.example.com/default/target",
-			role: common.Role{
-				Clusters: []string{"cluster-a"}, Namespaces: []string{"default"}, Resources: []string{"widgets"}, Verbs: []string{string(common.VerbGet)},
-			},
-			wantError: "user alice does not have permission to get widgets.example.com in namespace default on cluster cluster-a",
-		},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			test.role.Name = test.name
-			fixture := newCRAPITestFixture(t, crAPITestConfig{
-				user: model.User{Username: "alice", Roles: []common.Role{test.role}},
-			})
-			response := performCRAPIRequest(t, fixture, http.MethodGet, test.path, "", test.headers)
-			if response.Code != http.StatusForbidden {
-				t.Fatalf("get returned %d, want %d; body=%s", response.Code, http.StatusForbidden, response.Body.String())
-			}
-			body := decodeCRAPIResponse[map[string]string](t, response)
-			if body["error"] != test.wantError {
-				t.Fatalf("error = %q, want %q", body["error"], test.wantError)
-			}
-		})
-	}
-
-	t.Run("does not combine dimensions across roles", func(t *testing.T) {
-		fixture := newCRAPITestFixture(t, crAPITestConfig{
-			user: model.User{
-				Username: "alice",
-				Roles: []common.Role{
-					{
-						Name: "wrong-resource", Clusters: []string{"cluster-a"}, Namespaces: []string{"default"}, Resources: []string{string(common.Deployments)}, Verbs: []string{string(common.VerbGet)},
-					},
-					{
-						Name: "wrong-cluster-and-namespace", Clusters: []string{"cluster-b"}, Namespaces: []string{"team-a"}, Resources: []string{widgetCRDName}, Verbs: []string{string(common.VerbGet)},
-					},
-				},
-			},
-		})
-		response := performCRAPIRequest(t, fixture, http.MethodGet, "/api/v1/widgets.example.com/default/target", "", nil)
-		if response.Code != http.StatusForbidden {
-			t.Fatalf("get returned %d, want %d; body=%s", response.Code, http.StatusForbidden, response.Body.String())
-		}
-	})
 }
 
 func TestCRAPIClusterSelection(t *testing.T) {
 	fixture := newCRAPITestFixture(t, crAPITestConfig{
-		user: newWidgetUser(
-			[]string{"*"},
-			[]string{"default"},
-			[]string{string(common.VerbGet)},
-		),
+		user: newWidgetUser(),
 		clusterAObjects: []client.Object{
 			newWidgetCRD(apiextensionsv1.NamespaceScoped),
 			newWidget("from-a", "default", nil),

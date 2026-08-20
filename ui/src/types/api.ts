@@ -236,9 +236,10 @@ export interface HelmChartDetail extends HelmChart {
 export interface HelmReleaseInstallRequest {
   releaseName: string
   namespace?: string
-  chartUrl: string
   repositoryName?: string
   source?: 'repository' | 'artifacthub'
+  chartName: string
+  chartVersion?: string
   values?: Record<string, unknown>
   description?: string
   createNamespace?: boolean
@@ -246,9 +247,10 @@ export interface HelmReleaseInstallRequest {
 }
 
 export interface HelmReleaseUpgradeRequest {
-  chartUrl?: string
   repositoryName?: string
   source?: 'repository' | 'artifacthub'
+  chartName?: string
+  chartVersion?: string
   values?: Record<string, unknown>
   description?: string
   forceConflicts?: boolean
@@ -645,77 +647,6 @@ export interface Cluster {
   error?: string
 }
 
-export interface OAuthProvider {
-  id: number
-  name: string
-  clientId: string
-  clientSecret: string
-  authUrl?: string
-  tokenUrl?: string
-  userInfoUrl?: string
-  scopes?: string
-  issuer?: string
-  usernameClaim?: string
-  groupsClaim?: string
-  allowedGroups?: string
-  enabled: boolean
-  createdAt: string
-  updatedAt: string
-}
-
-export interface RoleAssignment {
-  id: number
-  roleId: number
-  subjectType: 'user' | 'group'
-  subject: string
-  createdAt: string
-  updatedAt: string
-}
-
-export interface Role {
-  id: number
-  name: string
-  description?: string
-  isSystem?: boolean
-  clusters: string[]
-  namespaces: string[]
-  resources: string[]
-  verbs: string[]
-  assignments?: RoleAssignment[]
-  createdAt: string
-  updatedAt: string
-}
-
-export interface UserItem {
-  id: number
-  username: string
-  sub?: string
-  provider: string
-  createdAt: string
-  lastLoginAt?: string
-  enabled?: boolean
-  avatar_url?: string
-  name?: string
-  roles?: Role[]
-}
-
-export interface FetchUserListResponse {
-  users: UserItem[]
-  total: number
-  page: number
-  size: number
-}
-
-export interface APIKey {
-  id: number
-  username: string
-  apiKey: string
-  lastLoginAt?: string
-  createdAt: string
-  updatedAt: string
-  roles?: Role[]
-}
-
 // Resource History types
 export interface ResourceHistory {
   id: number
@@ -732,7 +663,8 @@ export interface ResourceHistory {
   operatorId: number
   operator: {
     username: string
-    provider: string
+    issuer: string
+    sub: string
   }
   createdAt: string
   updatedAt: string
@@ -768,11 +700,16 @@ export interface WorkloadRevisionsResponse {
 }
 
 export interface AuditLogResponse {
-  data: ResourceHistory[]
+  data: AuditLogEntry[]
   total: number
   page: number
   size: number
 }
+
+export type AuditLogEntry = Omit<
+  ResourceHistory,
+  'resourceYaml' | 'previousYaml'
+>
 export interface ResourceTemplate {
   id: number
   name: string

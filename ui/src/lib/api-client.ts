@@ -77,7 +77,9 @@ class ApiClient {
 
       return response
     } catch (error) {
-      console.error('API request failed:', error)
+      if (!(error instanceof DOMException && error.name === 'AbortError')) {
+        console.error('API request failed:', error)
+      }
       throw error
     }
   }

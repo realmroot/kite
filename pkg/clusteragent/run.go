@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/rancher/remotedialer"
+	"github.com/zxh326/kite/pkg/kube"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog/v2"
 )
 
@@ -25,9 +25,9 @@ func Run(ctx context.Context, args []string) error {
 	server := flags.String("server", "", "Kite server URL")
 	token := flags.String("token", "", "Cluster Agent token")
 	publicKey := flags.String("public-key", "", "Cluster Agent registration public key")
-	kubeconfig := flags.String("kubeconfig", "", "Path to kubeconfig file")
 	apiServer := flags.String("api-server", "", "Kubernetes API server URL without credentials")
 	caFile := flags.String("ca-file", "", "Kubernetes API server CA file")
+	tlsServerName := flags.String("tls-server-name", "", "Optional Kubernetes API server TLS name override")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -39,6 +39,9 @@ func Run(ctx context.Context, args []string) error {
 	}
 	if *publicKey == "" {
 		return errors.New("--public-key is required")
+	}
+	if *apiServer == "" {
+		return errors.New("--api-server is required")
 	}
 
 	serverURL, err := url.Parse(*server)
@@ -55,26 +58,26 @@ func Run(ctx context.Context, args []string) error {
 		return errors.New("invalid cluster agent server URL")
 	}
 
-	var config *rest.Config
-	switch {
-	case *apiServer != "":
-		config = &rest.Config{Host: *apiServer}
-		if *caFile != "" {
-			config.CAData, err = os.ReadFile(*caFile)
-			if err != nil {
-				return fmt.Errorf("load Kubernetes CA: %w", err)
-			}
-		}
-	case *kubeconfig == "":
-		config, err = rest.InClusterConfig()
+	if !validKubernetesAPIServerURL(*apiServer) {
+		return errors.New("--api-server must be a valid HTTPS URL")
+	}
+	config := &rest.Config{
+		Host: *apiServer,
+		TLSClientConfig: rest.TLSClientConfig{
+			ServerName: strings.TrimSpace(*tlsServerName),
+		},
+	}
+	if *caFile != "" {
+		config.CAData, err = os.ReadFile(*caFile)
 		if err != nil {
-			return fmt.Errorf("load in-cluster Kubernetes configuration: %w", err)
+			return fmt.Errorf("load Kubernetes CA: %w", err)
 		}
-	default:
-		config, err = clientcmd.BuildConfigFromFlags("", *kubeconfig)
-		if err != nil {
-			return fmt.Errorf("load kubeconfig: %w", err)
-		}
+	}
+	if err := kube.ValidateCAData(config.CAData); err != nil {
+		return fmt.Errorf("invalid Kubernetes CA: %w", err)
+	}
+	if err := kube.ValidateTLSServerName(config.ServerName); err != nil {
+		return err
 	}
 
 	registrationURL := *serverURL

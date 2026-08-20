@@ -11,6 +11,10 @@ Kite's integration with Prometheus provides:
 - Pod and container resource usage tracking
 - Node performance monitoring
 
+Current CPU and memory samples come from the Kubernetes Metrics API when
+metrics-server is installed. Prometheus is optional and adds historical CPU,
+memory, network, and disk series. The two integrations are independent.
+
 ## Prerequisites
 
 - A running Kubernetes cluster
@@ -47,9 +51,48 @@ Follow the official documentation for each component for detailed installation i
 
 ## Connecting Kite to Prometheus
 
-Users with the **admin** role can access the settings entry in the upper right corner of the page to enter the cluster management interface.
+Open **Settings > Clusters**, edit the cluster, and enter the cluster-local
+Prometheus Service URL, for example:
 
-Select the cluster that needs to be configured and fill in the Prometheus address.
+```text
+http://prometheus-kube-prometheus-prometheus.monitoring.svc:9090
+```
+
+Kite accepts only `<service>.<namespace>.svc` and
+`<service>.<namespace>.svc.cluster.local` base URLs. It sends each request
+through the Kubernetes API Service Proxy with the signed-in user's OIDC token.
+Kite does not store Prometheus credentials and does not connect anonymously to
+an external Prometheus endpoint.
+
+Grant users who need historical metrics `get` access to the Prometheus Service
+proxy subresource. Adapt the Service name and namespace to your installation:
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: kite-prometheus-reader
+  namespace: monitoring
+rules:
+  - apiGroups: [""]
+    resources: ["services/proxy"]
+    resourceNames: ["prometheus-kube-prometheus-prometheus:9090"]
+    verbs: ["get"]
+```
+
+Bind this Role to the required OIDC users or groups with a RoleBinding. The
+Kubernetes API server remains the authorization authority. Kite also performs
+a Kubernetes `SelfSubjectAccessReview` before returning Prometheus data:
+
+- Pod history requires `get` on that exact Pod.
+- A named node history query requires `get` on that exact Node.
+- Cluster-wide history requires `list` on Nodes.
+
+This second check prevents broad Prometheus Service Proxy access from exposing
+metrics for Kubernetes resources the user cannot read. The metrics-server
+fallback is queried directly with the same user token. Its short in-memory
+sample cache is shared by resource only after a successful current-user API
+request, is capped globally, and is never duplicated per user.
 
 ## Troubleshooting
 
@@ -67,9 +110,13 @@ Select the cluster that needs to be configured and fill in the Prometheus addres
    - Check Prometheus configuration includes all necessary scrape jobs
    - Verify target pods/nodes are labeled correctly for Prometheus discovery
 
-3. **Authentication errors**:
-   - If Prometheus requires authentication, ensure credentials are provided
-   - Check for TLS configuration if HTTPS is used
+3. **Authorization errors**:
+
+   - Verify the OIDC user or group can `get` `services/proxy` for the configured
+     Service and port.
+   - Verify the user can read the target Pod or Node as described above.
+   - Verify the cluster's Kubernetes API server accepts the user's OIDC token.
+   - Kite intentionally has no shared Prometheus credential fallback.
 
 ### Verifying Prometheus Configuration
 

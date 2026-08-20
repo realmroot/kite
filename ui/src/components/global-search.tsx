@@ -69,55 +69,13 @@ interface GlobalSearchProps {
   onOpenChange: (open: boolean) => void
 }
 
-let cachedSearchResults: SearchResult[] = []
-const cachedSearchResultsByQuery = new Map<string, SearchResult[]>()
-
-function normalizeCachedSearchQuery(query: string) {
-  return query.trim().toLowerCase()
-}
-
-function cacheSearchResults(query: string, results: SearchResult[]) {
-  const key = normalizeCachedSearchQuery(query)
-  if (!key) {
-    return
-  }
-
-  cachedSearchResultsByQuery.set(key, results)
-  cachedSearchResults = results
-  if (cachedSearchResultsByQuery.size > 30) {
-    const oldestKey = cachedSearchResultsByQuery.keys().next().value
-    if (oldestKey) {
-      cachedSearchResultsByQuery.delete(oldestKey)
-    }
-  }
-}
-
-function getCachedPrefixResults(query: string) {
-  const key = normalizeCachedSearchQuery(query)
-  let bestKey = ''
-  let bestResults: SearchResult[] | undefined
-
-  for (const [cachedQuery, results] of cachedSearchResultsByQuery) {
-    if (key.startsWith(cachedQuery) && cachedQuery.length > bestKey.length) {
-      bestKey = cachedQuery
-      bestResults = results
-    }
-  }
-
-  return bestResults
-}
-
 export function GlobalSearch({ open, onOpenChange }: GlobalSearchProps) {
   const { t } = useTranslation()
   const [query, setQuery] = useState('')
-  const [results, setResults] = useState<SearchResult[]>(
-    () => cachedSearchResults || []
-  )
-  const [lastSearchResults, setLastSearchResults] = useState<SearchResult[]>(
-    () => cachedSearchResults || []
-  )
+  const [results, setResults] = useState<SearchResult[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const searchRequestIdRef = useRef(0)
+  const searchAbortControllerRef = useRef<AbortController | null>(null)
   const mountedRef = useRef(true)
   const navigate = useNavigate()
   const { user } = useAuth()
@@ -136,6 +94,7 @@ export function GlobalSearch({ open, onOpenChange }: GlobalSearchProps) {
     return () => {
       mountedRef.current = false
       searchRequestIdRef.current += 1
+      searchAbortControllerRef.current?.abort()
     }
   }, [])
 
@@ -302,7 +261,7 @@ export function GlobalSearch({ open, onOpenChange }: GlobalSearchProps) {
     favorites,
     isFavorite,
     toggleFavorite: toggleResourceFavorite,
-  } = useFavorites()
+  } = useFavorites(user ? `${user.issuer}\u0000${user.sub}` : 'unauthenticated')
 
   const toggleFavorite = useCallback(
     (result: SearchResult, event: React.MouseEvent) => {
@@ -312,74 +271,35 @@ export function GlobalSearch({ open, onOpenChange }: GlobalSearchProps) {
     [toggleResourceFavorite]
   )
 
-  const filterResults = useCallback(
-    (items: SearchResult[], searchQuery: string) => {
-      const terms = searchQuery
-        .trim()
-        .toLowerCase()
-        .split(/\s+/)
-        .filter(Boolean)
-
-      if (terms.length === 0) {
-        return items
-      }
-
-      return items.filter((item) => {
-        const haystack = `${item.name} ${item.namespace || ''} ${
-          item.resourceType
-        }`.toLowerCase()
-        return terms.every((term) => haystack.includes(term))
-      })
-    },
-    []
-  )
-
   useEffect(() => {
     const searchQuery = query.trim()
     const favoriteResults = favorites || []
-    const previousResults = lastSearchResults || []
-    const isLabelQuery = searchQuery.includes(':') || searchQuery.includes('=')
-    const prefixResults = getCachedPrefixResults(searchQuery)
     if (!searchQuery) {
-      setResults(favoriteResults.length > 0 ? favoriteResults : previousResults)
+      setResults(favoriteResults)
       return
     }
 
-    if (isLabelQuery) {
-      setResults(
-        cachedSearchResultsByQuery.get(
-          normalizeCachedSearchQuery(searchQuery)
-        ) || []
-      )
-      return
-    }
-
-    const cachedResults =
-      prefixResults ??
-      (previousResults.length > 0
-        ? previousResults
-        : favoriteResults.length > 0
-          ? favoriteResults
-          : undefined)
-
-    setResults((currentResults) =>
-      filterResults(cachedResults || currentResults, searchQuery)
-    )
-  }, [favorites, filterResults, lastSearchResults, query])
+    setResults([])
+  }, [favorites, query])
 
   const performSearch = useCallback(
-    async (searchQuery: string, requestId: number) => {
+    async (searchQuery: string, requestId: number, signal: AbortSignal) => {
       try {
-        const response = await globalSearch(searchQuery, { limit: 10 })
+        const response = await globalSearch(searchQuery, {
+          limit: 10,
+          signal,
+        })
         if (!mountedRef.current || searchRequestIdRef.current !== requestId) {
           return
         }
         const nextResults = response.results || []
-        cacheSearchResults(searchQuery, nextResults)
-        setLastSearchResults(nextResults)
         setResults(nextResults)
       } catch (error) {
-        if (mountedRef.current && searchRequestIdRef.current === requestId) {
+        if (
+          !signal.aborted &&
+          mountedRef.current &&
+          searchRequestIdRef.current === requestId
+        ) {
           console.error('Search failed:', error)
         }
       } finally {
@@ -401,13 +321,19 @@ export function GlobalSearch({ open, onOpenChange }: GlobalSearchProps) {
 
     const requestId = searchRequestIdRef.current + 1
     searchRequestIdRef.current = requestId
+    searchAbortControllerRef.current?.abort()
+    const abortController = new AbortController()
+    searchAbortControllerRef.current = abortController
     setIsLoading(true)
 
     const timeoutId = setTimeout(() => {
-      performSearch(searchQuery, requestId)
+      void performSearch(searchQuery, requestId, abortController.signal)
     }, 100)
 
-    return () => clearTimeout(timeoutId)
+    return () => {
+      clearTimeout(timeoutId)
+      abortController.abort()
+    }
   }, [query, performSearch])
 
   // Handle item selection
@@ -424,6 +350,7 @@ export function GlobalSearch({ open, onOpenChange }: GlobalSearchProps) {
   useEffect(() => {
     if (!open) {
       searchRequestIdRef.current += 1
+      searchAbortControllerRef.current?.abort()
       setQuery('')
       setIsLoading(false)
     }
@@ -432,10 +359,9 @@ export function GlobalSearch({ open, onOpenChange }: GlobalSearchProps) {
   useEffect(() => {
     if (open && query === '') {
       const favoriteResults = favorites || []
-      const previousResults = lastSearchResults || []
-      setResults(favoriteResults.length > 0 ? favoriteResults : previousResults)
+      setResults(favoriteResults)
     }
-  }, [open, query, favorites, lastSearchResults])
+  }, [open, query, favorites])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

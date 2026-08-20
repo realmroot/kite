@@ -1,143 +1,78 @@
 import { useEffect, useState } from 'react'
-import {
-  IconLink,
-  IconMessage,
-  IconRobot,
-  IconSettings,
-  IconTerminal2,
-} from '@tabler/icons-react'
+import { IconChartBar, IconLink, IconTerminal2 } from '@tabler/icons-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import {
-  GeneralSettingUpdateRequest,
   updateGeneralSetting,
   useGeneralSetting,
+  type GeneralSettingUpdateRequest,
 } from '@/lib/api'
 import { translateError } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
-import { Textarea } from '@/components/ui/textarea'
 
-const DEFAULT_MODEL = 'gpt-4o-mini'
-const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-4-5'
-const DEFAULT_KUBECTL_IMAGE = 'zzde/kubectl:latest'
-const DEFAULT_NODE_TERMINAL_IMAGE = 'busybox:latest'
-const DEFAULT_CLUSTER_AGENT_IMAGE = 'ghcr.io/kite-org/kite:latest'
+const DEFAULT_KUBECTL_IMAGE = 'alpine/kubectl:1.36.3'
+const DEFAULT_NODE_TERMINAL_IMAGE = 'busybox:1.37.0'
+const DEFAULT_CLUSTER_AGENT_IMAGE = ''
 
 interface GeneralSettingsFormData {
-  aiAgentEnabled: boolean
-  aiProvider: 'openai' | 'anthropic'
-  aiModel: string
-  aiApiKey: string
-  aiApiKeyConfigured: boolean
-  aiBaseUrl: string
-  aiMaxTokens: number
   kubectlEnabled: boolean
   kubectlImage: string
   nodeTerminalImage: string
   clusterAgentImage: string
   enableAnalytics: boolean
   enableVersionCheck: boolean
-  loginPrompt: string
+}
+
+const DEFAULT_FORM_DATA: GeneralSettingsFormData = {
+  kubectlEnabled: true,
+  kubectlImage: DEFAULT_KUBECTL_IMAGE,
+  nodeTerminalImage: DEFAULT_NODE_TERMINAL_IMAGE,
+  clusterAgentImage: DEFAULT_CLUSTER_AGENT_IMAGE,
+  enableAnalytics: false,
+  enableVersionCheck: true,
 }
 
 export function GeneralManagement() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const { data, isLoading } = useGeneralSetting()
-  const [formData, setFormData] = useState<GeneralSettingsFormData>({
-    aiAgentEnabled: false,
-    aiProvider: 'openai',
-    aiModel: DEFAULT_MODEL,
-    aiApiKey: '',
-    aiApiKeyConfigured: false,
-    aiBaseUrl: '',
-    aiMaxTokens: 16384,
-    kubectlEnabled: true,
-    kubectlImage: DEFAULT_KUBECTL_IMAGE,
-    nodeTerminalImage: DEFAULT_NODE_TERMINAL_IMAGE,
-    clusterAgentImage: DEFAULT_CLUSTER_AGENT_IMAGE,
-    enableAnalytics: true,
-    enableVersionCheck: true,
-    loginPrompt: '',
-  })
+  const [formData, setFormData] =
+    useState<GeneralSettingsFormData>(DEFAULT_FORM_DATA)
 
   useEffect(() => {
     if (!data) return
     setFormData({
-      aiAgentEnabled: data.aiAgentEnabled,
-      aiProvider: data.aiProvider || 'openai',
-      aiModel: data.aiModel || DEFAULT_MODEL,
-      aiApiKey: '',
-      aiApiKeyConfigured: data.aiApiKeyConfigured ?? false,
-      aiBaseUrl: data.aiBaseUrl || '',
-      aiMaxTokens: data.aiMaxTokens || 16384,
-      kubectlEnabled: data.kubectlEnabled ?? true,
+      kubectlEnabled: data.kubectlEnabled,
       kubectlImage: data.kubectlImage || DEFAULT_KUBECTL_IMAGE,
       nodeTerminalImage: data.nodeTerminalImage || DEFAULT_NODE_TERMINAL_IMAGE,
       clusterAgentImage: data.clusterAgentImage || DEFAULT_CLUSTER_AGENT_IMAGE,
-      enableAnalytics: data.enableAnalytics ?? false,
-      enableVersionCheck: data.enableVersionCheck ?? true,
-      loginPrompt: data.loginPrompt || '',
+      enableAnalytics: data.enableAnalytics,
+      enableVersionCheck: data.enableVersionCheck,
     })
   }, [data])
 
   const mutation = useMutation({
     mutationFn: (payload: GeneralSettingUpdateRequest) =>
       updateGeneralSetting(payload),
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        predicate: (query) =>
-          query.queryKey[0] === 'general-setting' ||
-          query.queryKey[0] === 'ai-status' ||
-          query.queryKey[0] === 'bootstrap',
-      })
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['general-setting'] }),
+        queryClient.invalidateQueries({ queryKey: ['bootstrap'] }),
+      ])
       toast.success(
         t('generalManagement.messages.updated', 'General settings updated')
       )
     },
-    onError: (error) => {
-      toast.error(translateError(error, t))
-    },
+    onError: (error) => toast.error(translateError(error, t)),
   })
 
   const handleSave = () => {
-    const defaultModel =
-      formData.aiProvider === 'anthropic'
-        ? DEFAULT_ANTHROPIC_MODEL
-        : DEFAULT_MODEL
-
-    if (formData.aiAgentEnabled && !formData.aiModel.trim()) {
-      toast.error(
-        t('generalManagement.errors.modelRequired', 'Model is required')
-      )
-      return
-    }
-    if (
-      formData.aiAgentEnabled &&
-      !formData.aiApiKey.trim() &&
-      !formData.aiApiKeyConfigured
-    ) {
-      toast.error(
-        t(
-          'generalManagement.errors.apiKeyRequired',
-          'API Key is required when AI Agent is enabled'
-        )
-      )
-      return
-    }
     if (formData.kubectlEnabled && !formData.kubectlImage.trim()) {
       toast.error(
         t(
@@ -157,35 +92,21 @@ export function GeneralManagement() {
       return
     }
 
-    const payload: GeneralSettingUpdateRequest = {
-      aiAgentEnabled: formData.aiAgentEnabled,
-      aiProvider: formData.aiProvider,
-      aiModel: formData.aiModel.trim() || defaultModel,
-      aiBaseUrl: formData.aiBaseUrl.trim(),
-      aiMaxTokens: formData.aiMaxTokens || 16384,
+    mutation.mutate({
       kubectlEnabled: formData.kubectlEnabled,
-      kubectlImage: formData.kubectlImage.trim() || DEFAULT_KUBECTL_IMAGE,
-      nodeTerminalImage:
-        formData.nodeTerminalImage.trim() || DEFAULT_NODE_TERMINAL_IMAGE,
+      kubectlImage: formData.kubectlImage.trim(),
+      nodeTerminalImage: formData.nodeTerminalImage.trim(),
       clusterAgentImage:
         formData.clusterAgentImage.trim() || DEFAULT_CLUSTER_AGENT_IMAGE,
       enableAnalytics: formData.enableAnalytics,
       enableVersionCheck: formData.enableVersionCheck,
-      loginPrompt: formData.loginPrompt.trim(),
-    }
-    if (formData.aiApiKey.trim()) {
-      payload.aiApiKey = formData.aiApiKey.trim()
-    }
-
-    mutation.mutate(payload)
+    })
   }
 
   if (isLoading && !data) {
     return (
-      <div className="flex items-center justify-center py-8">
-        <div className="text-muted-foreground">
-          {t('common.messages.loading', 'Loading...')}
-        </div>
+      <div className="py-8 text-center text-muted-foreground">
+        {t('common.messages.loading', 'Loading...')}
       </div>
     )
   }
@@ -193,160 +114,17 @@ export function GeneralManagement() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <IconSettings className="h-5 w-5" />
-          {t('generalManagement.title', 'General')}
-        </CardTitle>
+        <CardTitle>{t('generalManagement.title', 'General')}</CardTitle>
       </CardHeader>
-
       <CardContent className="space-y-4">
-        <div className="rounded-lg border">
+        <section className="rounded-lg border" aria-labelledby="kubectl-title">
           <div className="flex items-center justify-between p-3">
             <div className="space-y-1">
-              <Label className="flex items-center gap-2 text-sm font-medium">
-                <IconRobot className="h-4 w-4" />
-                {t('generalManagement.aiAgent.title', 'AI Agent')}
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                {t(
-                  'generalManagement.aiAgent.description',
-                  'Enable AI assistant and configure model endpoint.'
-                )}
-              </p>
-            </div>
-            <Switch
-              checked={formData.aiAgentEnabled}
-              onCheckedChange={(checked) =>
-                setFormData((prev) => ({ ...prev, aiAgentEnabled: checked }))
-              }
-            />
-          </div>
-
-          {formData.aiAgentEnabled && (
-            <div className="space-y-4 border-t p-3">
-              <div className="space-y-2">
-                <Label htmlFor="general-ai-provider">
-                  {t('common.fields.provider', 'Provider')}
-                </Label>
-                <Select
-                  value={formData.aiProvider}
-                  onValueChange={(value: 'openai' | 'anthropic') =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      aiProvider: value,
-                      aiModel:
-                        value === 'anthropic'
-                          ? prev.aiModel || DEFAULT_ANTHROPIC_MODEL
-                          : prev.aiModel || DEFAULT_MODEL,
-                    }))
-                  }
-                >
-                  <SelectTrigger id="general-ai-provider">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="openai">OpenAI Compatible</SelectItem>
-                    <SelectItem value="anthropic">
-                      Anthropic Compatible
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="general-ai-model">
-                  {t('generalManagement.aiAgent.form.model', 'Model')}
-                </Label>
-                <Input
-                  id="general-ai-model"
-                  value={formData.aiModel}
-                  onChange={(e) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      aiModel: e.target.value,
-                    }))
-                  }
-                  placeholder={
-                    formData.aiProvider === 'anthropic'
-                      ? DEFAULT_ANTHROPIC_MODEL
-                      : DEFAULT_MODEL
-                  }
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="general-ai-api-key">
-                  {t('generalManagement.aiAgent.form.apiKey', 'API Key')}
-                </Label>
-                <Input
-                  id="general-ai-api-key"
-                  type="password"
-                  value={formData.aiApiKey}
-                  onChange={(e) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      aiApiKey: e.target.value,
-                    }))
-                  }
-                  placeholder={
-                    formData.aiApiKeyConfigured
-                      ? t(
-                          'generalManagement.aiAgent.form.apiKeyPlaceholder',
-                          'Leave empty to keep current API Key'
-                        )
-                      : 'sk-...'
-                  }
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="general-ai-base-url">
-                  {t('generalManagement.aiAgent.form.baseUrl', 'Base URL')}
-                </Label>
-                <Input
-                  id="general-ai-base-url"
-                  value={formData.aiBaseUrl}
-                  onChange={(e) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      aiBaseUrl: e.target.value,
-                    }))
-                  }
-                  placeholder={
-                    formData.aiProvider === 'anthropic'
-                      ? 'https://api.anthropic.com'
-                      : 'https://api.openai.com/v1'
-                  }
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="general-ai-max-tokens">
-                  {t('generalManagement.aiAgent.form.maxTokens', 'Max Tokens')}
-                </Label>
-                <Input
-                  id="general-ai-max-tokens"
-                  type="number"
-                  min="1"
-                  max="128000"
-                  value={formData.aiMaxTokens}
-                  onChange={(e) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      aiMaxTokens: parseInt(e.target.value) || 16384,
-                    }))
-                  }
-                  placeholder="16384"
-                />
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="rounded-lg border">
-          <div className="flex items-center justify-between p-3">
-            <div className="space-y-1">
-              <Label className="flex items-center gap-2 text-sm font-medium">
+              <Label
+                id="kubectl-title"
+                htmlFor="general-kubectl-enabled"
+                className="flex items-center gap-2 text-sm font-medium"
+              >
                 <IconTerminal2 className="h-4 w-4" />
                 {t('generalManagement.kubectl.title', 'Kubectl')}
               </Label>
@@ -358,13 +136,13 @@ export function GeneralManagement() {
               </p>
             </div>
             <Switch
+              id="general-kubectl-enabled"
               checked={formData.kubectlEnabled}
-              onCheckedChange={(checked) =>
-                setFormData((prev) => ({ ...prev, kubectlEnabled: checked }))
+              onCheckedChange={(kubectlEnabled) =>
+                setFormData((current) => ({ ...current, kubectlEnabled }))
               }
             />
           </div>
-
           {formData.kubectlEnabled && (
             <div className="space-y-2 border-t p-3">
               <Label htmlFor="general-kubectl-image">
@@ -373,19 +151,18 @@ export function GeneralManagement() {
               <Input
                 id="general-kubectl-image"
                 value={formData.kubectlImage}
-                onChange={(e) =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    kubectlImage: e.target.value,
+                onChange={(event) =>
+                  setFormData((current) => ({
+                    ...current,
+                    kubectlImage: event.target.value,
                   }))
                 }
-                placeholder={DEFAULT_KUBECTL_IMAGE}
               />
             </div>
           )}
-        </div>
+        </section>
 
-        <div className="rounded-lg border p-3">
+        <section className="space-y-3 rounded-lg border p-3">
           <div className="space-y-1">
             <Label className="flex items-center gap-2 text-sm font-medium">
               <IconTerminal2 className="h-4 w-4" />
@@ -398,26 +175,22 @@ export function GeneralManagement() {
               )}
             </p>
           </div>
+          <Label htmlFor="general-node-terminal-image">
+            {t('generalManagement.nodeTerminal.form.image', 'Image')}
+          </Label>
+          <Input
+            id="general-node-terminal-image"
+            value={formData.nodeTerminalImage}
+            onChange={(event) =>
+              setFormData((current) => ({
+                ...current,
+                nodeTerminalImage: event.target.value,
+              }))
+            }
+          />
+        </section>
 
-          <div className="mt-3 space-y-2">
-            <Label htmlFor="general-node-terminal-image">
-              {t('generalManagement.nodeTerminal.form.image', 'Image')}
-            </Label>
-            <Input
-              id="general-node-terminal-image"
-              value={formData.nodeTerminalImage}
-              onChange={(e) =>
-                setFormData((prev) => ({
-                  ...prev,
-                  nodeTerminalImage: e.target.value,
-                }))
-              }
-              placeholder={DEFAULT_NODE_TERMINAL_IMAGE}
-            />
-          </div>
-        </div>
-
-        <div className="rounded-lg border p-3">
+        <section className="space-y-3 rounded-lg border p-3">
           <div className="space-y-1">
             <Label className="flex items-center gap-2 text-sm font-medium">
               <IconLink className="h-4 w-4" />
@@ -426,32 +199,32 @@ export function GeneralManagement() {
             <p className="text-xs text-muted-foreground">
               {t(
                 'generalManagement.clusterAgent.description',
-                'Container image used when generating the Cluster Agent manifest for Cluster Agent clusters.'
+                'Container image used for generated Cluster Agent manifests.'
               )}
             </p>
           </div>
+          <Label htmlFor="general-cluster-agent-image">
+            {t('generalManagement.clusterAgent.form.image', 'Image')}
+          </Label>
+          <Input
+            id="general-cluster-agent-image"
+            value={formData.clusterAgentImage}
+            onChange={(event) =>
+              setFormData((current) => ({
+                ...current,
+                clusterAgentImage: event.target.value,
+              }))
+            }
+          />
+        </section>
 
-          <div className="mt-3 space-y-2">
-            <Label htmlFor="general-cluster-agent-image">
-              {t('generalManagement.clusterAgent.form.image', 'Image')}
-            </Label>
-            <Input
-              id="general-cluster-agent-image"
-              value={formData.clusterAgentImage}
-              onChange={(e) =>
-                setFormData((prev) => ({
-                  ...prev,
-                  clusterAgentImage: e.target.value,
-                }))
-              }
-              placeholder={DEFAULT_CLUSTER_AGENT_IMAGE}
-            />
-          </div>
-        </div>
-
-        <div className="rounded-lg border">
+        <section className="rounded-lg border" aria-labelledby="runtime-title">
           <div className="p-3">
-            <Label className="text-sm font-medium">
+            <Label
+              id="runtime-title"
+              className="flex items-center gap-2 text-sm font-medium"
+            >
+              <IconChartBar className="h-4 w-4" />
               {t('generalManagement.runtime.title', 'Runtime')}
             </Label>
             <p className="mt-1 text-xs text-muted-foreground">
@@ -461,9 +234,8 @@ export function GeneralManagement() {
               )}
             </p>
           </div>
-
           <div className="flex items-center justify-between border-t p-3">
-            <Label htmlFor="general-enable-analytics" className="text-sm">
+            <Label htmlFor="general-enable-analytics">
               {t(
                 'generalManagement.runtime.form.enableAnalytics',
                 'Enable analytics'
@@ -472,14 +244,22 @@ export function GeneralManagement() {
             <Switch
               id="general-enable-analytics"
               checked={formData.enableAnalytics}
-              onCheckedChange={(checked) =>
-                setFormData((prev) => ({ ...prev, enableAnalytics: checked }))
+              disabled={!data?.analyticsConfigured}
+              onCheckedChange={(enableAnalytics) =>
+                setFormData((current) => ({ ...current, enableAnalytics }))
               }
             />
           </div>
-
+          {!data?.analyticsConfigured && (
+            <p className="border-t px-3 py-2 text-xs text-muted-foreground">
+              {t(
+                'generalManagement.runtime.analyticsNotConfigured',
+                'Analytics is unavailable until the operator configures a script URL and website ID.'
+              )}
+            </p>
+          )}
           <div className="flex items-center justify-between border-t p-3">
-            <Label htmlFor="general-enable-version-check" className="text-sm">
+            <Label htmlFor="general-enable-version-check">
               {t(
                 'generalManagement.runtime.form.enableVersionCheck',
                 'Enable version check'
@@ -488,50 +268,15 @@ export function GeneralManagement() {
             <Switch
               id="general-enable-version-check"
               checked={formData.enableVersionCheck}
-              onCheckedChange={(checked) =>
-                setFormData((prev) => ({
-                  ...prev,
-                  enableVersionCheck: checked,
+              onCheckedChange={(enableVersionCheck) =>
+                setFormData((current) => ({
+                  ...current,
+                  enableVersionCheck,
                 }))
               }
             />
           </div>
-        </div>
-
-        <div className="rounded-lg border p-3">
-          <div className="space-y-1">
-            <Label className="flex items-center gap-2 text-sm font-medium">
-              <IconMessage className="h-4 w-4" />
-              {t('generalManagement.loginPrompt.title', 'Login Prompt')}
-            </Label>
-            <p className="text-xs text-muted-foreground">
-              {t(
-                'generalManagement.loginPrompt.description',
-                'Show a custom message on the login page.'
-              )}
-            </p>
-          </div>
-
-          <div className="mt-3 space-y-2">
-            <Label htmlFor="general-login-prompt">
-              {t('generalManagement.loginPrompt.form.message', 'Message')}
-            </Label>
-            <Textarea
-              id="general-login-prompt"
-              value={formData.loginPrompt}
-              onChange={(e) =>
-                setFormData((prev) => ({
-                  ...prev,
-                  loginPrompt: e.target.value,
-                }))
-              }
-              placeholder={t(
-                'generalManagement.loginPrompt.form.placeholder',
-                'Leave empty to hide the login prompt'
-              )}
-            />
-          </div>
-        </div>
+        </section>
 
         <div className="flex justify-end">
           <Button onClick={handleSave} disabled={mutation.isPending}>

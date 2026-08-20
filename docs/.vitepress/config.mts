@@ -1,5 +1,16 @@
 import { defineConfig } from "vitepress";
 
+const analyticsScriptURL = process.env.DOCS_ANALYTICS_SCRIPT_URL?.trim();
+const analyticsWebsiteID = process.env.DOCS_ANALYTICS_WEBSITE_ID?.trim();
+if (!!analyticsScriptURL !== !!analyticsWebsiteID) {
+  throw new Error(
+    "DOCS_ANALYTICS_SCRIPT_URL and DOCS_ANALYTICS_WEBSITE_ID must be configured together",
+  );
+}
+if (analyticsScriptURL && new URL(analyticsScriptURL).protocol !== "https:") {
+  throw new Error("DOCS_ANALYTICS_SCRIPT_URL must use HTTPS");
+}
+
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
   title: "Kite",
@@ -46,14 +57,18 @@ export default defineConfig({
 
   head: [
     ["link", { rel: "icon", href: "/logo.svg" }],
-    [
-      "script",
-      {
-        src: "https://cloud.umami.is/script.js",
-        "data-website-id": "764af8e4-8fa4-4fc5-83e2-304718cc15fe",
-        defer: "true",
-      },
-    ],
+    ...(analyticsScriptURL && analyticsWebsiteID
+      ? [
+          [
+            "script",
+            {
+              src: analyticsScriptURL,
+              "data-website-id": analyticsWebsiteID,
+              defer: "true",
+            },
+          ] as const,
+        ]
+      : []),
   ],
 
   themeConfig: {
@@ -96,6 +111,10 @@ export default defineConfig({
             { text: "Environment Variables", link: "/config/env" },
             { text: "Configuration File", link: "/config/config-file" },
             { text: "Chart Values", link: "/config/chart-values" },
+            {
+              text: "Kubernetes Compatibility",
+              link: "/architecture/kubernetes-compatibility",
+            },
           ],
         },
         {
@@ -106,7 +125,6 @@ export default defineConfig({
             { text: "Logs", link: "/guide/logs" },
             { text: "Monitor", link: "/guide/monitoring" },
             { text: "Helm Management", link: "/guide/helm-management" },
-            { text: "AI Assistant", link: "/guide/ai-assistant" },
             { text: "Web Terminal", link: "/guide/web-terminal" },
             { text: "Kite Cluster Agent", link: "/guide/kite-cluster-agent" },
             { text: "Resource History", link: "/guide/resource-history" },
@@ -133,11 +151,11 @@ export default defineConfig({
           link: "/api/cluster-management",
         },
         {
-          text: "RBAC Management",
+          text: "Authorization",
           link: "/api/rbac-management",
         },
         {
-          text: "User Management",
+          text: "User Preferences",
           link: "/api/user-management",
         },
       ],
@@ -160,6 +178,10 @@ export default defineConfig({
             { text: "环境变量", link: "/zh/config/env" },
             { text: "配置文件", link: "/zh/config/config-file" },
             { text: "Chart Values", link: "/zh/config/chart-values" },
+            {
+              text: "Kubernetes 兼容性",
+              link: "/zh/architecture/kubernetes-compatibility",
+            },
           ],
         },
         {
@@ -170,9 +192,11 @@ export default defineConfig({
             { text: "日志", link: "/zh/guide/logs" },
             { text: "监控", link: "/zh/guide/monitoring" },
             { text: "Helm 管理", link: "/zh/guide/helm-management" },
-            { text: "AI 助手", link: "/zh/guide/ai-assistant" },
             { text: "Web 终端", link: "/zh/guide/web-terminal" },
-            { text: "Kite Cluster Agent", link: "/zh/guide/kite-cluster-agent" },
+            {
+              text: "Kite Cluster Agent",
+              link: "/zh/guide/kite-cluster-agent",
+            },
             { text: "资源历史", link: "/zh/guide/resource-history" },
             { text: "自定义侧边栏", link: "/zh/guide/custom-sidebar" },
             { text: "Kube Proxy", link: "/zh/guide/kube-proxy" },
@@ -197,11 +221,11 @@ export default defineConfig({
           link: "/zh/api/cluster-management",
         },
         {
-          text: "RBAC 管理",
+          text: "授权边界",
           link: "/zh/api/rbac-management",
         },
         {
-          text: "用户管理",
+          text: "用户偏好",
           link: "/zh/api/user-management",
         },
       ],

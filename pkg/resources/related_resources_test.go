@@ -2,20 +2,18 @@ package resources
 
 import (
 	"context"
-	"net/http"
 	"reflect"
 	"testing"
 
 	"github.com/zxh326/kite/pkg/common"
 	"github.com/zxh326/kite/pkg/kube"
-	"github.com/zxh326/kite/pkg/model"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
@@ -53,112 +51,53 @@ func TestDiscoverIngressServices(t *testing.T) {
 	}
 }
 
-func TestRelatedResourcesRBACFiltering(t *testing.T) {
-	t.Skip("application RBAC filtering was removed; Kubernetes authorizes each related-resource query")
-	fixture := newPodAPITestFixture(t, podAPITestConfig{
-		user: model.User{
-			Username: "alice",
-			Roles: []common.Role{
-				{
-					Name:       "pod-reader",
-					Clusters:   []string{"cluster-a"},
-					Namespaces: []string{"default"},
-					Resources:  []string{string(common.Pods)},
-					Verbs:      []string{string(common.VerbGet)},
-				},
-				{
-					Name:       "configmap-reader",
-					Clusters:   []string{"cluster-a"},
-					Namespaces: []string{"default"},
-					Resources:  []string{string(common.ConfigMaps)},
-					Verbs:      []string{string(common.VerbGet)},
-				},
-			},
-		},
-		clusterAObjects: []client.Object{
-			&corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{Name: "source", Namespace: "default", Labels: map[string]string{"app": "source"}},
-				Spec: corev1.PodSpec{Containers: []corev1.Container{{
-					Name: "app",
-					EnvFrom: []corev1.EnvFromSource{
-						{ConfigMapRef: &corev1.ConfigMapEnvSource{LocalObjectReference: corev1.LocalObjectReference{Name: "visible"}}},
-						{SecretRef: &corev1.SecretEnvSource{LocalObjectReference: corev1.LocalObjectReference{Name: "hidden"}}},
-					},
-				}}},
-			},
-		},
-	})
-
-	response := performPodAPIRequest(t, fixture, http.MethodGet, "/api/v1/pods/default/source/related", "", nil)
-	if response.Code != http.StatusOK {
-		t.Fatalf("related resources returned %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
+func TestDiscoverPodsByServiceUsesEndpointSlices(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := discoveryv1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
 	}
-	items := decodePodAPIResponse[[]common.RelatedResource](t, response)
-	if len(items) != 1 || items[0].Type != string(common.ConfigMaps) || items[0].Name != "visible" || items[0].Namespace != "default" {
-		t.Fatalf("related resources = %#v, want only configmaps default/visible", items)
+	ready := true
+	notReady := false
+	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&discoveryv1.EndpointSlice{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "web-abc",
+			Namespace: "default",
+			Labels:    map[string]string{discoveryv1.LabelServiceName: "web"},
+		},
+		Endpoints: []discoveryv1.Endpoint{
+			{Conditions: discoveryv1.EndpointConditions{Ready: &ready}, TargetRef: &corev1.ObjectReference{Kind: "Pod", Name: "web-1"}},
+			{Conditions: discoveryv1.EndpointConditions{Ready: &ready}, TargetRef: &corev1.ObjectReference{Kind: "Pod", Name: "web-1"}},
+			{Conditions: discoveryv1.EndpointConditions{Ready: &notReady}, TargetRef: &corev1.ObjectReference{Kind: "Pod", Name: "web-2"}},
+		},
+	}).Build()
+
+	got := discoverPodsByService(context.Background(), &kube.K8sClient{Client: client}, &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "default"},
+	})
+	want := []common.RelatedResource{{Type: "pods", Namespace: "default", Name: "web-1"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("discoverPodsByService() = %#v, want %#v", got, want)
 	}
 }
 
-func TestRelatedResourcesCustomOwnerRBAC(t *testing.T) {
-	t.Skip("application RBAC filtering was removed; Kubernetes authorizes each related-resource query")
-	tests := []struct {
-		name        string
-		customRole  bool
-		wantVisible bool
-	}{
-		{name: "builtin permission cannot access custom owner"},
-		{name: "qualified custom permission can access owner", customRole: true, wantVisible: true},
+func TestDiscoverPodsByServiceFallsBackWhenEndpointSliceAPIIsUnavailable(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
 	}
+	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&corev1.Endpoints{
+		ObjectMeta: metav1.ObjectMeta{Name: "legacy", Namespace: "default"},
+		Subsets: []corev1.EndpointSubset{{Addresses: []corev1.EndpointAddress{{
+			TargetRef: &corev1.ObjectReference{Kind: "Pod", Name: "legacy-1", Namespace: "default"},
+		}}}},
+	}).Build()
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			roles := []common.Role{{
-				Name:       "source-pod-reader",
-				Clusters:   []string{"cluster-a"},
-				Namespaces: []string{"default"},
-				Resources:  []string{string(common.Pods)},
-				Verbs:      []string{string(common.VerbGet)},
-			}}
-			if tt.customRole {
-				roles = append(roles, common.Role{
-					Name:       "custom-pod-reader",
-					Clusters:   []string{"cluster-a"},
-					Namespaces: []string{"default"},
-					Resources:  []string{"pods.example.com"},
-					Verbs:      []string{string(common.VerbGet)},
-				})
-			}
-			fixture := newPodAPITestFixture(t, podAPITestConfig{
-				user: model.User{Username: "alice", Roles: roles},
-				clusterAObjects: []client.Object{&corev1.Pod{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "source",
-						Namespace: "default",
-						OwnerReferences: []metav1.OwnerReference{{
-							APIVersion: "example.com/v1",
-							Kind:       "Pod",
-							Name:       "custom-owner",
-						}},
-					},
-				}},
-			})
-
-			response := performPodAPIRequest(t, fixture, http.MethodGet, "/api/v1/pods/default/source/related", "", nil)
-			if response.Code != http.StatusOK {
-				t.Fatalf("related resources returned %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
-			}
-			items := decodePodAPIResponse[[]common.RelatedResource](t, response)
-			if !tt.wantVisible {
-				if len(items) != 0 {
-					t.Fatalf("related resources = %#v, want no custom owner", items)
-				}
-				return
-			}
-			want := []common.RelatedResource{{Type: "pods", APIVersion: "example.com/v1", Name: "custom-owner", Namespace: "default"}}
-			if !reflect.DeepEqual(items, want) {
-				t.Fatalf("related resources = %#v, want %#v", items, want)
-			}
-		})
+	got := discoverPodsByService(context.Background(), &kube.K8sClient{Client: client}, &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "legacy", Namespace: "default"},
+	})
+	want := []common.RelatedResource{{Type: "pods", Namespace: "default", Name: "legacy-1"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("discoverPodsByService() = %#v, want %#v", got, want)
 	}
 }
 

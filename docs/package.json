@@ -1,7 +1,7 @@
 {
   "scripts": {
     "docs:dev": "vitepress dev .",
-    "docs:build": "git fetch --unshallow || vitepress build .",
+    "docs:build": "if [ \"$(git rev-parse --is-shallow-repository)\" = true ]; then git fetch --unshallow; fi && vitepress build .",
     "docs:preview": "vitepress preview ."
   },
   "devDependencies": {

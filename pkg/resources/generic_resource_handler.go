@@ -67,18 +67,27 @@ func (h *GenericResourceHandler[T, V]) recordHistory(c *gin.Context, opType stri
 	cs := c.MustGet("cluster").(*cluster.ClientSet)
 	user := c.MustGet("user").(model.User)
 	resourceYAML := h.ToYAML(curr)
+	previousYAML := h.ToYAML(prev)
+	if h.name == string(common.Secrets) {
+		resourceYAML = ""
+		previousYAML = ""
+		if errMsg != "" {
+			errMsg = "Kubernetes Secret operation failed; details omitted"
+		}
+	}
 	if opType == "delete" {
 		resourceYAML = ""
 	}
 
 	history := model.ResourceHistory{
+		ClusterID:     cs.ClusterID,
 		ClusterName:   cs.Name,
 		ResourceType:  h.name,
 		ResourceName:  curr.GetName(),
 		Namespace:     curr.GetNamespace(),
 		OperationType: opType,
 		ResourceYAML:  resourceYAML,
-		PreviousYAML:  h.ToYAML(prev),
+		PreviousYAML:  previousYAML,
 		Success:       success,
 		ErrorMessage:  errMsg,
 		OperatorID:    user.ID,
@@ -122,7 +131,7 @@ func (h *GenericResourceHandler[T, V]) Get(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		writeKubernetesError(c, err, "")
 		return
 	}
 	obj, err := meta.Accessor(object)

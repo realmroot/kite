@@ -7,74 +7,91 @@ import (
 
 func TestLoadEnvs(t *testing.T) {
 	old := struct {
-		JwtSecret            string
-		Port                 string
-		EnableAnalytics      bool
-		AgentPodNamespace    string
-		NodeTerminalImage    string
-		KubectlTerminalImage string
-		DBDSN                string
-		DBType               string
-		KiteEncryptKey       string
-		AnonymousUserEnabled bool
-		Host                 string
-		DisableGZIP          bool
-		EnableVersionCheck   bool
-		Base                 string
-		CORSAllowedOrigins   []string
-		TrustedProxies       []string
-		OIDCIssuer           string
-		OIDCClientID         string
-		OIDCClientSecret     string
-		OIDCProviderName     string
-		OIDCScopes           []string
-		OIDCUsernameClaim    string
-		OIDCGroupsClaim      string
-		PlatformAdminGroups  []string
+		JwtSecret                 string
+		Port                      string
+		PprofAddress              string
+		EnableAnalytics           bool
+		AnalyticsScriptURL        string
+		AnalyticsWebsiteID        string
+		AgentPodNamespace         string
+		NodeTerminalImage         string
+		KubectlTerminalImage      string
+		DBDSN                     string
+		DBType                    string
+		KiteEncryptKey            string
+		Host                      string
+		DisableGZIP               bool
+		EnableVersionCheck        bool
+		VersionCheckDisabledByEnv bool
+		ReleaseAPIURL             string
+		Base                      string
+		CORSAllowedOrigins        []string
+		TrustedProxies            []string
+		OIDCIssuer                string
+		OIDCCAFile                string
+		OIDCClientID              string
+		OIDCClientSecret          string
+		OIDCProviderName          string
+		OIDCScopes                []string
+		OIDCUsernameClaim         string
+		OIDCGroupsClaim           string
+		PlatformAdminGroups       []string
+		PlatformAdminSubjects     []string
 	}{
-		JwtSecret:            JwtSecret,
-		Port:                 Port,
-		EnableAnalytics:      EnableAnalytics,
-		AgentPodNamespace:    AgentPodNamespace,
-		NodeTerminalImage:    NodeTerminalImage,
-		KubectlTerminalImage: KubectlTerminalImage,
-		DBDSN:                DBDSN,
-		DBType:               DBType,
-		KiteEncryptKey:       KiteEncryptKey,
-		AnonymousUserEnabled: AnonymousUserEnabled,
-		Host:                 Host,
-		DisableGZIP:          DisableGZIP,
-		EnableVersionCheck:   EnableVersionCheck,
-		Base:                 Base,
-		CORSAllowedOrigins:   append([]string(nil), CORSAllowedOrigins...),
-		TrustedProxies:       append([]string(nil), TrustedProxies...),
-		OIDCIssuer:           OIDCIssuer,
-		OIDCClientID:         OIDCClientID,
-		OIDCClientSecret:     OIDCClientSecret,
-		OIDCProviderName:     OIDCProviderName,
-		OIDCScopes:           append([]string(nil), OIDCScopes...),
-		OIDCUsernameClaim:    OIDCUsernameClaim,
-		OIDCGroupsClaim:      OIDCGroupsClaim,
-		PlatformAdminGroups:  append([]string(nil), PlatformAdminGroups...),
+		JwtSecret:                 JwtSecret,
+		Port:                      Port,
+		PprofAddress:              PprofAddress,
+		EnableAnalytics:           EnableAnalytics,
+		AnalyticsScriptURL:        AnalyticsScriptURL,
+		AnalyticsWebsiteID:        AnalyticsWebsiteID,
+		AgentPodNamespace:         AgentPodNamespace,
+		NodeTerminalImage:         NodeTerminalImage,
+		KubectlTerminalImage:      KubectlTerminalImage,
+		DBDSN:                     DBDSN,
+		DBType:                    DBType,
+		KiteEncryptKey:            KiteEncryptKey,
+		Host:                      Host,
+		DisableGZIP:               DisableGZIP,
+		EnableVersionCheck:        EnableVersionCheck,
+		VersionCheckDisabledByEnv: VersionCheckDisabledByEnv,
+		ReleaseAPIURL:             ReleaseAPIURL,
+		Base:                      Base,
+		CORSAllowedOrigins:        append([]string(nil), CORSAllowedOrigins...),
+		TrustedProxies:            append([]string(nil), TrustedProxies...),
+		OIDCIssuer:                OIDCIssuer,
+		OIDCCAFile:                OIDCCAFile,
+		OIDCClientID:              OIDCClientID,
+		OIDCClientSecret:          OIDCClientSecret,
+		OIDCProviderName:          OIDCProviderName,
+		OIDCScopes:                append([]string(nil), OIDCScopes...),
+		OIDCUsernameClaim:         OIDCUsernameClaim,
+		OIDCGroupsClaim:           OIDCGroupsClaim,
+		PlatformAdminGroups:       append([]string(nil), PlatformAdminGroups...),
+		PlatformAdminSubjects:     append([]string(nil), PlatformAdminSubjects...),
 	}
 	defer func() {
 		JwtSecret = old.JwtSecret
 		Port = old.Port
+		PprofAddress = old.PprofAddress
 		EnableAnalytics = old.EnableAnalytics
+		AnalyticsScriptURL = old.AnalyticsScriptURL
+		AnalyticsWebsiteID = old.AnalyticsWebsiteID
 		AgentPodNamespace = old.AgentPodNamespace
 		NodeTerminalImage = old.NodeTerminalImage
 		KubectlTerminalImage = old.KubectlTerminalImage
 		DBDSN = old.DBDSN
 		DBType = old.DBType
 		KiteEncryptKey = old.KiteEncryptKey
-		AnonymousUserEnabled = old.AnonymousUserEnabled
 		Host = old.Host
 		DisableGZIP = old.DisableGZIP
 		EnableVersionCheck = old.EnableVersionCheck
+		VersionCheckDisabledByEnv = old.VersionCheckDisabledByEnv
+		ReleaseAPIURL = old.ReleaseAPIURL
 		Base = old.Base
 		CORSAllowedOrigins = append([]string(nil), old.CORSAllowedOrigins...)
 		TrustedProxies = append([]string(nil), old.TrustedProxies...)
 		OIDCIssuer = old.OIDCIssuer
+		OIDCCAFile = old.OIDCCAFile
 		OIDCClientID = old.OIDCClientID
 		OIDCClientSecret = old.OIDCClientSecret
 		OIDCProviderName = old.OIDCProviderName
@@ -82,6 +99,7 @@ func TestLoadEnvs(t *testing.T) {
 		OIDCUsernameClaim = old.OIDCUsernameClaim
 		OIDCGroupsClaim = old.OIDCGroupsClaim
 		PlatformAdminGroups = append([]string(nil), old.PlatformAdminGroups...)
+		PlatformAdminSubjects = append([]string(nil), old.PlatformAdminSubjects...)
 	}()
 
 	CORSAllowedOrigins = nil
@@ -89,7 +107,10 @@ func TestLoadEnvs(t *testing.T) {
 
 	t.Setenv("JWT_SECRET", "test-jwt-secret")
 	t.Setenv("PORT", "9090")
+	t.Setenv("PPROF_ADDRESS", "127.0.0.1:6060")
 	t.Setenv("ENABLE_ANALYTICS", "true")
+	t.Setenv("ANALYTICS_SCRIPT_URL", "https://analytics.example.test/script.js")
+	t.Setenv("ANALYTICS_WEBSITE_ID", "kite-site")
 	t.Setenv("NAMESPACE", "test-namespace")
 	t.Setenv("NODE_TERMINAL_IMAGE", "test-node-image")
 	t.Setenv("KUBECTL_TERMINAL_IMAGE", "test-kubectl-image")
@@ -97,14 +118,15 @@ func TestLoadEnvs(t *testing.T) {
 	t.Setenv("DB_DSN", "test.db")
 	t.Setenv("DB_TYPE", "mysql")
 	t.Setenv("KITE_ENCRYPT_KEY", "test-encrypt-key")
-	t.Setenv("ANONYMOUS_USER_ENABLED", "true")
 	t.Setenv("HOST", "example.com")
 	t.Setenv("DISABLE_GZIP", "false")
 	t.Setenv("DISABLE_VERSION_CHECK", "true")
+	t.Setenv("RELEASE_API_URL", "https://code.example.test/api/releases/latest")
 	t.Setenv("KITE_BASE", "kite/")
 	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:5173, https://example.com ,,")
 	t.Setenv("TRUSTED_PROXIES", "10.42.0.0/16, 192.0.2.10 ,, ")
 	t.Setenv("OIDC_ISSUER", "https://identity.example.com/")
+	t.Setenv("OIDC_CA_FILE", "/etc/kite/identity-ca.pem")
 	t.Setenv("OIDC_CLIENT_ID", "kite-client")
 	t.Setenv("OIDC_CLIENT_SECRET", "client-secret")
 	t.Setenv("OIDC_PROVIDER_NAME", "Company Login")
@@ -112,6 +134,7 @@ func TestLoadEnvs(t *testing.T) {
 	t.Setenv("OIDC_USERNAME_CLAIM", "preferred_username")
 	t.Setenv("OIDC_GROUPS_CLAIM", "roles")
 	t.Setenv("PLATFORM_ADMIN_GROUPS", "operators, platform-admins")
+	t.Setenv("PLATFORM_ADMIN_SUBJECTS", "subject-1,subject-2")
 
 	LoadEnvs()
 
@@ -121,9 +144,13 @@ func TestLoadEnvs(t *testing.T) {
 	if Port != "9090" {
 		t.Fatalf("Port = %q, want %q", Port, "9090")
 	}
+	if PprofAddress != "127.0.0.1:6060" {
+		t.Fatalf("PprofAddress = %q, want %q", PprofAddress, "127.0.0.1:6060")
+	}
 	if !EnableAnalytics {
 		t.Fatalf("EnableAnalytics = %v, want true", EnableAnalytics)
 	}
+	assertAnalyticsConfigurationLoaded(t)
 	if AgentPodNamespace != "test-namespace" {
 		t.Fatalf("AgentPodNamespace = %q, want %q", AgentPodNamespace, "test-namespace")
 	}
@@ -142,9 +169,6 @@ func TestLoadEnvs(t *testing.T) {
 	if KiteEncryptKey != "test-encrypt-key" {
 		t.Fatalf("KiteEncryptKey = %q, want %q", KiteEncryptKey, "test-encrypt-key")
 	}
-	if !AnonymousUserEnabled {
-		t.Fatalf("AnonymousUserEnabled = %v, want true", AnonymousUserEnabled)
-	}
 	if Host != "example.com" {
 		t.Fatalf("Host = %q, want %q", Host, "example.com")
 	}
@@ -153,6 +177,12 @@ func TestLoadEnvs(t *testing.T) {
 	}
 	if EnableVersionCheck {
 		t.Fatalf("EnableVersionCheck = %v, want false", EnableVersionCheck)
+	}
+	if !VersionCheckDisabledByEnv {
+		t.Fatal("VersionCheckDisabledByEnv = false, want true")
+	}
+	if ReleaseAPIURL != "https://code.example.test/api/releases/latest" {
+		t.Fatalf("ReleaseAPIURL = %q", ReleaseAPIURL)
 	}
 	if Base != "/kite" {
 		t.Fatalf("Base = %q, want %q", Base, "/kite")
@@ -170,6 +200,9 @@ func TestLoadEnvs(t *testing.T) {
 	if OIDCIssuer != "https://identity.example.com" || OIDCClientID != "kite-client" || OIDCClientSecret != "client-secret" {
 		t.Fatalf("OIDC client configuration was not loaded")
 	}
+	if OIDCCAFile != "/etc/kite/identity-ca.pem" {
+		t.Fatalf("OIDCCAFile = %q", OIDCCAFile)
+	}
 	if OIDCProviderName != "Company Login" || OIDCUsernameClaim != "preferred_username" || OIDCGroupsClaim != "roles" {
 		t.Fatalf("OIDC display or claim configuration was not loaded")
 	}
@@ -178,6 +211,29 @@ func TestLoadEnvs(t *testing.T) {
 	}
 	if !reflect.DeepEqual(PlatformAdminGroups, []string{"operators", "platform-admins"}) {
 		t.Fatalf("PlatformAdminGroups = %#v", PlatformAdminGroups)
+	}
+	if !reflect.DeepEqual(PlatformAdminSubjects, []string{"subject-1", "subject-2"}) {
+		t.Fatalf("PlatformAdminSubjects = %#v", PlatformAdminSubjects)
+	}
+}
+
+func TestSplitPrincipalListPreservesStandardClaimValues(t *testing.T) {
+	got := splitPrincipalList(`["operators,west","platform admins","team/a"]`)
+	want := []string{"operators,west", "platform admins", "team/a"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("splitPrincipalList() = %#v, want %#v", got, want)
+	}
+
+	legacy := splitPrincipalList("operators, platform-admins")
+	if !reflect.DeepEqual(legacy, []string{"operators", "platform-admins"}) {
+		t.Fatalf("legacy splitPrincipalList() = %#v", legacy)
+	}
+}
+
+func assertAnalyticsConfigurationLoaded(t *testing.T) {
+	t.Helper()
+	if AnalyticsScriptURL != "https://analytics.example.test/script.js" || AnalyticsWebsiteID != "kite-site" || !AnalyticsConfigured() {
+		t.Fatal("analytics configuration was not loaded")
 	}
 }
 

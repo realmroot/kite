@@ -1,7 +1,6 @@
 apiVersion: v2
 name: kite
-description: A Helm chart for Kubernetes
-icon: https://kite.zzde.me/logo.svg
+description: A standards-based OIDC dashboard for Kubernetes resources
 
 # A chart can be either an 'application' or a 'library' chart.
 #

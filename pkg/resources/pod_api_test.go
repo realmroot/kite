@@ -19,7 +19,6 @@ import (
 	"github.com/zxh326/kite/pkg/kube"
 	"github.com/zxh326/kite/pkg/middleware"
 	"github.com/zxh326/kite/pkg/model"
-	"github.com/zxh326/kite/pkg/rbac"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 	corev1 "k8s.io/api/core/v1"
@@ -162,7 +161,6 @@ func newPodAPITestFixture(t *testing.T, config podAPITestConfig) *podAPITestFixt
 		api.Group("/_clusters/:cluster"),
 	} {
 		group.Use(middleware.ClusterMiddleware(clientSets))
-		group.Use(middleware.RBACMiddleware())
 		if config.registerRoutes != nil {
 			config.registerRoutes(group)
 		} else {
@@ -204,147 +202,8 @@ func decodePodAPIResponse[T any](t *testing.T, response *httptest.ResponseRecord
 	return value
 }
 
-func TestPodRBACAllNamespacesDoesNotJoinPermissionsAcrossRoles(t *testing.T) {
-	t.Skip("application RBAC filtering was removed; Kubernetes authorizes pod lists")
-	user := model.User{
-		Username: "alice",
-		Roles: []common.Role{
-			{
-				Name:       "pod-reader",
-				Clusters:   []string{"cluster-a"},
-				Namespaces: []string{common.AllNamespaces, "default"},
-				Resources:  []string{string(common.Pods)},
-				Verbs:      []string{string(common.VerbGet)},
-			},
-			{
-				Name:       "team-a-deployment-reader",
-				Clusters:   []string{"cluster-a"},
-				Namespaces: []string{"team-a"},
-				Resources:  []string{string(common.Deployments)},
-				Verbs:      []string{string(common.VerbGet)},
-			},
-		},
-	}
-	fixture := newPodAPITestFixture(t, podAPITestConfig{
-		user: user,
-		clusterAObjects: []client.Object{
-			&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "p-default", Namespace: "default"}},
-			&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "p-team", Namespace: "team-a"}},
-		},
-	})
-
-	response := performPodAPIRequest(t, fixture, http.MethodGet, "/api/v1/pods/_all", "", nil)
-	if response.Code != http.StatusOK {
-		t.Fatalf("GET /api/v1/pods/_all returned %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
-	}
-	pods := decodePodAPIResponse[PodListWithMetrics](t, response)
-	got := make([]string, len(pods.Items))
-	for i, pod := range pods.Items {
-		got[i] = pod.Namespace + "/" + pod.Name
-	}
-	want := []string{"default/p-default"}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("GET /api/v1/pods/_all returned pods %v, want %v", got, want)
-	}
-}
-
-func TestPodWatchRBACDoesNotJoinPermissionsAcrossRoles(t *testing.T) {
-	t.Skip("application RBAC filtering was removed; Kubernetes authorizes watches")
-	originalConfig := rbac.RBACConfig
-	t.Cleanup(func() {
-		rbac.RBACConfig = originalConfig
-	})
-
-	watchServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v1/pods" || r.URL.Query().Get("watch") != "true" {
-			http.NotFound(w, r)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = fmt.Fprintln(w, `{"type":"ADDED","object":{"apiVersion":"v1","kind":"Pod","metadata":{"name":"allowed","namespace":"default"}}}`)
-		_, _ = fmt.Fprintln(w, `{"type":"ADDED","object":{"apiVersion":"v1","kind":"Pod","metadata":{"name":"denied","namespace":"team-a"}}}`)
-	}))
-	t.Cleanup(watchServer.Close)
-
-	clientSet, err := kubernetes.NewForConfig(&rest.Config{Host: watchServer.URL})
-	if err != nil {
-		t.Fatal(err)
-	}
-	roles := []common.Role{
-		{
-			Name:       "pod-default-reader",
-			Clusters:   []string{"cluster-a"},
-			Namespaces: []string{"default"},
-			Resources:  []string{string(common.Pods)},
-			Verbs:      []string{string(common.VerbGet)},
-		},
-		{
-			Name:       "deployment-team-reader",
-			Clusters:   []string{"cluster-a"},
-			Namespaces: []string{"team-a"},
-			Resources:  []string{string(common.Deployments)},
-			Verbs:      []string{string(common.VerbGet)},
-		},
-	}
-	rbac.RBACConfig = &common.RolesConfig{
-		Roles: roles,
-		RoleMapping: []common.RoleMapping{
-			{Name: "pod-default-reader", Users: []string{"alice"}},
-			{Name: "deployment-team-reader", Users: []string{"alice"}},
-		},
-	}
-	fixture := newPodAPITestFixture(t, podAPITestConfig{
-		user:              model.User{Username: "alice", Roles: roles},
-		clusterAClientSet: clientSet,
-	})
-
-	for _, path := range []string{
-		"/api/v1/pods/_all/watch",
-		"/api/v1/_clusters/cluster-a/pods/_all/watch",
-	} {
-		t.Run(path, func(t *testing.T) {
-			response := performPodAPIRequest(t, fixture, http.MethodGet, path, "", nil)
-			if response.Code != http.StatusOK {
-				t.Fatalf("GET %s returned %d, want %d; body=%s", path, response.Code, http.StatusOK, response.Body.String())
-			}
-			if !bytes.Contains(response.Body.Bytes(), []byte(`"name":"allowed"`)) {
-				t.Fatalf("GET %s omitted authorized pod; body=%s", path, response.Body.String())
-			}
-			if bytes.Contains(response.Body.Bytes(), []byte(`"name":"denied"`)) {
-				t.Fatalf("GET %s leaked unauthorized pod; body=%s", path, response.Body.String())
-			}
-		})
-	}
-
-	rbac.RBACConfig = &common.RolesConfig{}
-	for _, path := range []string{
-		"/api/v1/pods/_all/watch",
-		"/api/v1/_clusters/cluster-a/pods/_all/watch",
-	} {
-		t.Run("revoked "+path, func(t *testing.T) {
-			response := performPodAPIRequest(t, fixture, http.MethodGet, path, "", nil)
-			if response.Code != http.StatusOK {
-				t.Fatalf("GET %s returned %d, want %d; body=%s", path, response.Code, http.StatusOK, response.Body.String())
-			}
-			if bytes.Contains(response.Body.Bytes(), []byte(`"name":"allowed"`)) ||
-				bytes.Contains(response.Body.Bytes(), []byte(`"name":"denied"`)) {
-				t.Fatalf("GET %s returned pod events after current RBAC revocation; body=%s", path, response.Body.String())
-			}
-		})
-	}
-}
-
 func podAPIListUser() model.User {
-	return model.User{
-		Username: "alice",
-		Roles: []common.Role{{
-			Name:       "pod-reader",
-			Clusters:   []string{"cluster-a"},
-			Namespaces: []string{"*"},
-			Resources:  []string{string(common.Pods)},
-			Verbs:      []string{string(common.VerbGet)},
-		}},
-	}
+	return model.User{Username: "alice"}
 }
 
 func TestPodAPIList(t *testing.T) {
@@ -618,13 +477,6 @@ func TestPodAPIListResponseVariants(t *testing.T) {
 	t.Run("application namespace rules do not filter Kubernetes results", func(t *testing.T) {
 		negativeUser := model.User{
 			Username: "alice",
-			Roles: []common.Role{{
-				Name:       "pod-reader",
-				Clusters:   []string{"cluster-a"},
-				Namespaces: []string{"!kube-system", "*"},
-				Resources:  []string{string(common.Pods)},
-				Verbs:      []string{string(common.VerbGet)},
-			}},
 		}
 		fixture := newPodAPITestFixture(t, podAPITestConfig{
 			user: negativeUser,
@@ -648,13 +500,6 @@ func TestPodAPIListResponseVariants(t *testing.T) {
 func TestPodAPIGet(t *testing.T) {
 	user := model.User{
 		Username: "alice",
-		Roles: []common.Role{{
-			Name:       "pod-reader",
-			Clusters:   []string{"cluster-a"},
-			Namespaces: []string{"default"},
-			Resources:  []string{string(common.Pods)},
-			Verbs:      []string{string(common.VerbGet)},
-		}},
 	}
 
 	t.Run("returns a cleaned pod", func(t *testing.T) {
@@ -727,13 +572,6 @@ func TestPodAPIGet(t *testing.T) {
 func TestPodAPICreate(t *testing.T) {
 	user := model.User{
 		Username: "operator",
-		Roles: []common.Role{{
-			Name:       "pod-creator",
-			Clusters:   []string{"cluster-a"},
-			Namespaces: []string{"default"},
-			Resources:  []string{string(common.Pods)},
-			Verbs:      []string{string(common.VerbCreate)},
-		}},
 	}
 
 	t.Run("creates in URL namespace", func(t *testing.T) {
@@ -785,13 +623,6 @@ func TestPodAPICreate(t *testing.T) {
 func TestPodAPIUpdate(t *testing.T) {
 	user := model.User{
 		Username: "operator",
-		Roles: []common.Role{{
-			Name:       "pod-updater",
-			Clusters:   []string{"cluster-a"},
-			Namespaces: []string{"default"},
-			Resources:  []string{string(common.Pods)},
-			Verbs:      []string{string(common.VerbUpdate)},
-		}},
 	}
 
 	t.Run("uses URL name and namespace", func(t *testing.T) {
@@ -828,12 +659,12 @@ func TestPodAPIUpdate(t *testing.T) {
 		}
 	})
 
-	t.Run("not found follows current internal error contract", func(t *testing.T) {
+	t.Run("preserves Kubernetes not found status", func(t *testing.T) {
 		fixture := newPodAPITestFixture(t, podAPITestConfig{user: user, write: true})
 		body := `{"apiVersion":"v1","kind":"Pod","metadata":{"resourceVersion":"1"}}`
 		response := performPodAPIRequest(t, fixture, http.MethodPut, "/api/v1/pods/default/missing", body, nil)
-		if response.Code != http.StatusInternalServerError {
-			t.Fatalf("update returned %d, want %d; body=%s", response.Code, http.StatusInternalServerError, response.Body.String())
+		if response.Code != http.StatusNotFound {
+			t.Fatalf("update returned %d, want %d; body=%s", response.Code, http.StatusNotFound, response.Body.String())
 		}
 	})
 
@@ -861,13 +692,6 @@ func TestPodAPIUpdate(t *testing.T) {
 func TestPodAPIPatch(t *testing.T) {
 	user := model.User{
 		Username: "operator",
-		Roles: []common.Role{{
-			Name:       "pod-updater",
-			Clusters:   []string{"cluster-a"},
-			Namespaces: []string{"default"},
-			Resources:  []string{string(common.Pods)},
-			Verbs:      []string{string(common.VerbUpdate)},
-		}},
 	}
 
 	for _, test := range []struct {
@@ -978,13 +802,6 @@ func TestPodAPIPatch(t *testing.T) {
 func TestPodAPIDelete(t *testing.T) {
 	user := model.User{
 		Username: "operator",
-		Roles: []common.Role{{
-			Name:       "pod-deleter",
-			Clusters:   []string{"cluster-a"},
-			Namespaces: []string{"default"},
-			Resources:  []string{string(common.Pods)},
-			Verbs:      []string{string(common.VerbDelete)},
-		}},
 	}
 
 	t.Run("defaults to foreground and waits for deletion", func(t *testing.T) {
@@ -1110,206 +927,10 @@ func TestPodAPIDelete(t *testing.T) {
 	})
 }
 
-func TestPodRBACHTTPVerbs(t *testing.T) {
-	allVerbs := []string{
-		string(common.VerbGet),
-		string(common.VerbCreate),
-		string(common.VerbUpdate),
-		string(common.VerbDelete),
-	}
-	for _, test := range []struct {
-		name        string
-		method      string
-		path        string
-		body        string
-		missingVerb string
-	}{
-		{name: "GET requires get", method: http.MethodGet, path: "/api/v1/pods/default/target", missingVerb: string(common.VerbGet)},
-		{name: "POST requires create", method: http.MethodPost, path: "/api/v1/pods/default", body: `{}`, missingVerb: string(common.VerbCreate)},
-		{name: "PUT requires update", method: http.MethodPut, path: "/api/v1/pods/default/target", body: `{}`, missingVerb: string(common.VerbUpdate)},
-		{name: "PATCH requires update", method: http.MethodPatch, path: "/api/v1/pods/default/target", body: `{}`, missingVerb: string(common.VerbUpdate)},
-		{name: "DELETE requires delete", method: http.MethodDelete, path: "/api/v1/pods/default/target?wait=false", missingVerb: string(common.VerbDelete)},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			verbs := make([]string, 0, len(allVerbs)-1)
-			for _, verb := range allVerbs {
-				if verb != test.missingVerb {
-					verbs = append(verbs, verb)
-				}
-			}
-			fixture := newPodAPITestFixture(t, podAPITestConfig{
-				user: model.User{
-					Username: "alice",
-					Roles: []common.Role{{
-						Name:       "pod-operator",
-						Clusters:   []string{"cluster-a"},
-						Namespaces: []string{"default"},
-						Resources:  []string{string(common.Pods)},
-						Verbs:      verbs,
-					}},
-				},
-				clusterAObjects: []client.Object{&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "target", Namespace: "default"}}},
-			})
-
-			response := performPodAPIRequest(t, fixture, test.method, test.path, test.body, nil)
-			if response.Code != http.StatusForbidden {
-				t.Fatalf("%s %s returned %d, want %d; body=%s", test.method, test.path, response.Code, http.StatusForbidden, response.Body.String())
-			}
-			body := decodePodAPIResponse[map[string]string](t, response)
-			want := fmt.Sprintf("user alice does not have permission to %s pods in namespace default on cluster cluster-a", test.missingVerb)
-			if body["error"] != want {
-				t.Fatalf("error = %q, want %q", body["error"], want)
-			}
-		})
-	}
-}
-
-func TestPodRBACDimensions(t *testing.T) {
-	t.Skip("application RBAC dimensions were removed; Kubernetes is authoritative")
-	t.Run("same role matches all four dimensions", func(t *testing.T) {
-		fixture := newPodAPITestFixture(t, podAPITestConfig{
-			user: model.User{
-				Username: "alice",
-				Roles: []common.Role{{
-					Name:       "complete",
-					Clusters:   []string{"cluster-a"},
-					Namespaces: []string{"default"},
-					Resources:  []string{string(common.Pods)},
-					Verbs:      []string{string(common.VerbGet)},
-				}},
-			},
-			clusterAObjects: []client.Object{&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "target", Namespace: "default"}}},
-		})
-		response := performPodAPIRequest(t, fixture, http.MethodGet, "/api/v1/pods/default/target", "", nil)
-		if response.Code != http.StatusOK {
-			t.Fatalf("get returned %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
-		}
-	})
-
-	t.Run("does not combine dimensions across roles", func(t *testing.T) {
-		fixture := newPodAPITestFixture(t, podAPITestConfig{
-			user: model.User{
-				Username: "alice",
-				Roles: []common.Role{
-					{
-						Name:       "wrong-resource",
-						Clusters:   []string{"cluster-a"},
-						Namespaces: []string{"default"},
-						Resources:  []string{string(common.Deployments)},
-						Verbs:      []string{string(common.VerbGet)},
-					},
-					{
-						Name:       "wrong-cluster-and-namespace",
-						Clusters:   []string{"cluster-b"},
-						Namespaces: []string{"team-a"},
-						Resources:  []string{string(common.Pods)},
-						Verbs:      []string{string(common.VerbGet)},
-					},
-				},
-			},
-			clusterAObjects: []client.Object{&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "target", Namespace: "default"}}},
-		})
-		response := performPodAPIRequest(t, fixture, http.MethodGet, "/api/v1/pods/default/target", "", nil)
-		if response.Code != http.StatusForbidden {
-			t.Fatalf("get returned %d, want %d; body=%s", response.Code, http.StatusForbidden, response.Body.String())
-		}
-	})
-
-	for _, test := range []struct {
-		name      string
-		path      string
-		headers   map[string]string
-		role      common.Role
-		wantError string
-	}{
-		{
-			name:    "wrong cluster",
-			path:    "/api/v1/pods/default/target",
-			headers: map[string]string{middleware.ClusterNameHeader: "cluster-b"},
-			role: common.Role{
-				Clusters: []string{"cluster-a"}, Namespaces: []string{"default"}, Resources: []string{string(common.Pods)}, Verbs: []string{string(common.VerbGet)},
-			},
-			wantError: "user alice does not have permission to get pods in namespace default on cluster cluster-b",
-		},
-		{
-			name:      "wrong namespace",
-			path:      "/api/v1/pods/team-a/target",
-			wantError: "user alice does not have permission to get pods in namespace team-a on cluster cluster-a",
-			role: common.Role{
-				Clusters: []string{"cluster-a"}, Namespaces: []string{"default"}, Resources: []string{string(common.Pods)}, Verbs: []string{string(common.VerbGet)},
-			},
-		},
-		{
-			name:      "wrong resource",
-			path:      "/api/v1/pods/default/target",
-			wantError: "user alice does not have permission to get pods in namespace default on cluster cluster-a",
-			role: common.Role{
-				Clusters: []string{"cluster-a"}, Namespaces: []string{"default"}, Resources: []string{string(common.Deployments)}, Verbs: []string{string(common.VerbGet)},
-			},
-		},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			test.role.Name = test.name
-			fixture := newPodAPITestFixture(t, podAPITestConfig{
-				user: model.User{Username: "alice", Roles: []common.Role{test.role}},
-			})
-			response := performPodAPIRequest(t, fixture, http.MethodGet, test.path, "", test.headers)
-			if response.Code != http.StatusForbidden {
-				t.Fatalf("get returned %d, want %d; body=%s", response.Code, http.StatusForbidden, response.Body.String())
-			}
-			body := decodePodAPIResponse[map[string]string](t, response)
-			if body["error"] != test.wantError {
-				t.Fatalf("error = %q, want %q", body["error"], test.wantError)
-			}
-		})
-	}
-
-	for _, path := range []string{
-		"/api/v1/pods",
-		"/api/v1/pods/_all",
-		"/api/v1/_clusters/cluster-a/pods",
-		"/api/v1/_clusters/cluster-a/pods/_all",
-	} {
-		t.Run("all namespace entry "+path, func(t *testing.T) {
-			fixture := newPodAPITestFixture(t, podAPITestConfig{
-				user: model.User{
-					Username: "alice",
-					Roles: []common.Role{{
-						Name:       "default-only",
-						Clusters:   []string{"cluster-a"},
-						Namespaces: []string{"default"},
-						Resources:  []string{string(common.Pods)},
-						Verbs:      []string{string(common.VerbGet)},
-					}},
-				},
-				clusterAObjects: []client.Object{
-					&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "allowed", Namespace: "default"}},
-					&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "denied", Namespace: "team-a"}},
-				},
-			})
-			response := performPodAPIRequest(t, fixture, http.MethodGet, path, "", nil)
-			if response.Code != http.StatusOK {
-				t.Fatalf("GET %s returned %d, want %d; body=%s", path, response.Code, http.StatusOK, response.Body.String())
-			}
-			pods := decodePodAPIResponse[PodListWithMetrics](t, response)
-			if len(pods.Items) != 1 || pods.Items[0].Name != "allowed" || pods.Items[0].Namespace != "default" {
-				t.Fatalf("GET %s returned %#v, want only default/allowed", path, pods.Items)
-			}
-		})
-	}
-}
-
 func TestPodAPIClusterSelection(t *testing.T) {
 	fixture := newPodAPITestFixture(t, podAPITestConfig{
 		user: model.User{
 			Username: "alice",
-			Roles: []common.Role{{
-				Name:       "pod-reader",
-				Clusters:   []string{"*"},
-				Namespaces: []string{"default"},
-				Resources:  []string{string(common.Pods)},
-				Verbs:      []string{string(common.VerbGet)},
-			}},
 		},
 		clusterAObjects: []client.Object{&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "from-a", Namespace: "default"}}},
 		clusterBObjects: []client.Object{&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "from-b", Namespace: "default"}}},
@@ -1377,13 +998,6 @@ func TestPodAPIDescribe(t *testing.T) {
 		fixture := newPodAPITestFixture(t, podAPITestConfig{
 			user: model.User{
 				Username: "alice",
-				Roles: []common.Role{{
-					Name:       "pod-reader",
-					Clusters:   []string{"*"},
-					Namespaces: []string{"default"},
-					Resources:  []string{string(common.Pods)},
-					Verbs:      []string{string(common.VerbGet)},
-				}},
 			},
 			registerRoutes: func(group *gin.RouterGroup) {
 				group.GET("/pods/:namespace/:name/describe", func(c *gin.Context) {
@@ -1408,36 +1022,6 @@ func TestPodAPIDescribe(t *testing.T) {
 		}
 		if calls != 2 {
 			t.Fatalf("describe handler calls = %d, want 2", calls)
-		}
-	})
-
-	t.Run("permission denied before handler", func(t *testing.T) {
-		calls := 0
-		fixture := newPodAPITestFixture(t, podAPITestConfig{
-			user: model.User{
-				Username: "alice",
-				Roles: []common.Role{{
-					Name:       "pod-creator",
-					Clusters:   []string{"cluster-a"},
-					Namespaces: []string{"default"},
-					Resources:  []string{string(common.Pods)},
-					Verbs:      []string{string(common.VerbCreate)},
-				}},
-			},
-			registerRoutes: func(group *gin.RouterGroup) {
-				group.GET("/pods/:namespace/:name/describe", func(c *gin.Context) {
-					calls++
-					c.JSON(http.StatusOK, gin.H{"result": "fixed pod description"})
-				})
-			},
-		})
-
-		response := performPodAPIRequest(t, fixture, http.MethodGet, "/api/v1/pods/default/pod-a/describe", "", nil)
-		if response.Code != http.StatusForbidden {
-			t.Fatalf("describe returned %d, want %d; body=%s", response.Code, http.StatusForbidden, response.Body.String())
-		}
-		if calls != 0 {
-			t.Fatalf("describe handler calls = %d, want 0", calls)
 		}
 	})
 }

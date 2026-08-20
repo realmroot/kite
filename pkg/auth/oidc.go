@@ -4,10 +4,14 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -17,11 +21,14 @@ import (
 	"github.com/zxh326/kite/pkg/common"
 	"github.com/zxh326/kite/pkg/model"
 	"golang.org/x/oauth2"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 const (
 	sessionCookieName = "kite_session"
 	idTokenContextKey = "oidc-id-token"
+	sessionLockShards = 64
 )
 
 type oidcClaims struct {
@@ -33,8 +40,50 @@ type oidcClaims struct {
 }
 
 type oidcAuthenticator struct {
-	mu       sync.Mutex
-	provider *oidc.Provider
+	mu                  sync.Mutex
+	sessionRefreshLocks [sessionLockShards]sync.Mutex
+	provider            *oidc.Provider
+	clientOnce          sync.Once
+	client              *http.Client
+	clientErr           error
+}
+
+type SessionCredentialError struct {
+	Err       error
+	Permanent bool
+}
+
+func (e *SessionCredentialError) Error() string     { return e.Err.Error() }
+func (e *SessionCredentialError) Unwrap() error     { return e.Err }
+func (e *SessionCredentialError) IsPermanent() bool { return e.Permanent }
+
+func (a *oidcAuthenticator) context(ctx context.Context) (context.Context, error) {
+	if common.OIDCCAFile == "" {
+		return ctx, nil
+	}
+	a.clientOnce.Do(func() {
+		ca, err := os.ReadFile(common.OIDCCAFile)
+		if err != nil {
+			a.clientErr = fmt.Errorf("read OIDC CA file: %w", err)
+			return
+		}
+		roots, err := x509.SystemCertPool()
+		if err != nil {
+			a.clientErr = fmt.Errorf("load system CA pool: %w", err)
+			return
+		}
+		if !roots.AppendCertsFromPEM(ca) {
+			a.clientErr = errors.New("OIDC CA file contains no valid PEM certificates")
+			return
+		}
+		transport := http.DefaultTransport.(*http.Transport).Clone()
+		transport.TLSClientConfig = &tls.Config{RootCAs: roots, MinVersion: tls.VersionTLS12}
+		a.client = &http.Client{Transport: transport, Timeout: 30 * time.Second}
+	})
+	if a.clientErr != nil {
+		return nil, a.clientErr
+	}
+	return oidc.ClientContext(ctx, a.client), nil
 }
 
 func randomOpaqueValue() (string, error) {
@@ -51,12 +100,16 @@ func hashOpaqueValue(value string) string {
 }
 
 func (a *oidcAuthenticator) discoveredProvider(ctx context.Context) (*oidc.Provider, error) {
+	oidcContext, err := a.context(ctx)
+	if err != nil {
+		return nil, err
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.provider != nil {
 		return a.provider, nil
 	}
-	provider, err := oidc.NewProvider(ctx, common.OIDCIssuer)
+	provider, err := oidc.NewProvider(oidcContext, common.OIDCIssuer)
 	if err != nil {
 		return nil, fmt.Errorf("discover OIDC provider: %w", err)
 	}
@@ -68,16 +121,16 @@ func oidcConfigured() bool {
 	return common.OIDCIssuer != "" && common.OIDCClientID != "" && common.OIDCClientSecret != ""
 }
 
-func oidcRedirectURL(c *gin.Context) string {
-	return strings.TrimRight(getRequestHost(c), "/") + common.Base + "/api/auth/callback"
+func oidcRedirectURL() string {
+	return strings.TrimRight(common.Host, "/") + common.Base + "/api/auth/callback"
 }
 
-func oidcOAuthConfig(c *gin.Context, provider *oidc.Provider) oauth2.Config {
+func oidcOAuthConfig(provider *oidc.Provider, redirectURL string) oauth2.Config {
 	return oauth2.Config{
 		ClientID:     common.OIDCClientID,
 		ClientSecret: common.OIDCClientSecret,
 		Endpoint:     provider.Endpoint(),
-		RedirectURL:  oidcRedirectURL(c),
+		RedirectURL:  redirectURL,
 		Scopes:       append([]string(nil), common.OIDCScopes...),
 	}
 }
@@ -102,7 +155,7 @@ func (a *oidcAuthenticator) authorizationURL(c *gin.Context) (string, error) {
 	setCookieSecure(c, "oauth_state", state, 600)
 	setCookieSecure(c, "oauth_nonce", nonce, 600)
 	setCookieSecure(c, "oauth_pkce", verifier, 600)
-	config := oidcOAuthConfig(c, provider)
+	config := oidcOAuthConfig(provider, oidcRedirectURL())
 	return config.AuthCodeURL(state,
 		oauth2.AccessTypeOffline,
 		oidc.Nonce(nonce),
@@ -124,12 +177,16 @@ func (a *oidcAuthenticator) exchange(c *gin.Context, code, state string) (*oauth
 	if stateErr != nil || nonceErr != nil || verifierErr != nil || state == "" || state != expectedState {
 		return nil, nil, errors.New("invalid OIDC callback state")
 	}
-	provider, err := a.discoveredProvider(c.Request.Context())
+	oidcContext, err := a.context(c.Request.Context())
 	if err != nil {
 		return nil, nil, err
 	}
-	config := oidcOAuthConfig(c, provider)
-	token, err := config.Exchange(c.Request.Context(), code, oauth2.VerifierOption(verifier))
+	provider, err := a.discoveredProvider(oidcContext)
+	if err != nil {
+		return nil, nil, err
+	}
+	config := oidcOAuthConfig(provider, oidcRedirectURL())
+	token, err := config.Exchange(oidcContext, code, oauth2.VerifierOption(verifier))
 	if err != nil {
 		return nil, nil, fmt.Errorf("exchange authorization code: %w", err)
 	}
@@ -217,13 +274,23 @@ func oidcStringListClaim(raw map[string]json.RawMessage, name string) ([]string,
 	}
 	var values []string
 	if err := json.Unmarshal(raw[name], &values); err == nil {
-		return values, nil
+		return nonEmptyOIDCValues(values), nil
 	}
 	value, err := oidcStringClaim(raw, name)
 	if err != nil {
 		return nil, fmt.Errorf("OIDC claim %q must be a string or string array: %w", name, err)
 	}
-	return []string{value}, nil
+	return nonEmptyOIDCValues([]string{value}), nil
+}
+
+func nonEmptyOIDCValues(values []string) []string {
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		if value = strings.TrimSpace(value); value != "" {
+			result = append(result, value)
+		}
+	}
+	return result
 }
 
 func userFromOIDCClaims(claims *oidcClaims) *model.User {
@@ -235,10 +302,9 @@ func userFromOIDCClaims(claims *oidcClaims) *model.User {
 		Username:   username,
 		Name:       claims.Name,
 		AvatarURL:  claims.Picture,
-		Provider:   "oidc",
+		Issuer:     common.OIDCIssuer,
 		OIDCGroups: append(model.SliceString(nil), claims.Groups...),
 		Sub:        claims.Subject,
-		Enabled:    true,
 	}
 }
 
@@ -251,8 +317,9 @@ func sessionExpiry(token *oauth2.Token, idToken *oidc.IDToken) time.Time {
 }
 
 func createOIDCSession(c *gin.Context, user *model.User, token *oauth2.Token, idToken *oidc.IDToken) error {
-	if err := model.DeleteExpiredOIDCSessions(time.Now()); err != nil {
-		return fmt.Errorf("delete expired OIDC sessions: %w", err)
+	staleBefore := time.Now().Add(-time.Duration(common.CookieExpirationSeconds) * time.Second)
+	if err := model.DeleteInactiveOIDCSessions(staleBefore); err != nil {
+		return fmt.Errorf("delete inactive OIDC sessions: %w", err)
 	}
 	rawIDToken, _ := token.Extra("id_token").(string)
 	opaqueToken, err := randomOpaqueValue()
@@ -275,6 +342,11 @@ func createOIDCSession(c *gin.Context, user *model.User, token *oauth2.Token, id
 }
 
 func platformAdmin(user model.User) bool {
+	for _, allowed := range common.PlatformAdminSubjects {
+		if user.Sub == allowed {
+			return true
+		}
+	}
 	for _, actual := range user.OIDCGroups {
 		for _, allowed := range common.PlatformAdminGroups {
 			if actual == allowed {
@@ -285,62 +357,110 @@ func platformAdmin(user model.User) bool {
 	return false
 }
 
-func platformAdminRole() common.Role {
-	return common.Role{
-		Name:       "admin",
-		Clusters:   []string{"*"},
-		Resources:  []string{"*"},
-		Namespaces: []string{"*"},
-		Verbs:      []string{"*"},
-	}
-}
-
-func (a *oidcAuthenticator) authenticatedSession(c *gin.Context) (*model.User, string, error) {
+func (a *oidcAuthenticator) authenticatedSession(c *gin.Context) (*model.User, string, uint, error) {
 	opaqueToken, err := c.Cookie(sessionCookieName)
 	if err != nil || opaqueToken == "" {
-		return nil, "", errors.New("session cookie is missing")
+		return nil, "", 0, errors.New("session cookie is missing")
 	}
 	session, err := model.GetOIDCSessionByHash(hashOpaqueValue(opaqueToken))
 	if err != nil {
-		return nil, "", errors.New("session not found")
-	}
-	if time.Until(session.ExpiresAt) <= time.Minute {
-		if err := a.refreshSession(c, session); err != nil {
-			_ = model.DeleteOIDCSession(session)
-			return nil, "", err
-		}
+		return nil, "", 0, errors.New("session not found")
 	}
 	user, err := model.GetUserByIDCached(uint64(session.UserID))
-	if err != nil || !user.Enabled || user.Provider != "oidc" {
+	if err != nil {
 		_ = model.DeleteOIDCSession(session)
-		return nil, "", errors.New("OIDC user not found")
+		return nil, "", 0, errors.New("OIDC user not found")
 	}
-	return user, string(session.IDToken), nil
+	if user.Issuer != common.OIDCIssuer {
+		_ = model.DeleteOIDCSession(session)
+		return nil, "", 0, errors.New("OIDC session issuer no longer matches the configured issuer")
+	}
+	idToken, err := a.idTokenForLoadedSession(c.Request.Context(), session)
+	if err != nil {
+		return nil, "", 0, err
+	}
+	return user, idToken, session.ID, nil
 }
 
-func (a *oidcAuthenticator) refreshSession(c *gin.Context, session *model.OIDCSession) error {
-	if session.RefreshToken == "" {
-		return errors.New("OIDC session cannot be refreshed")
+func (a *oidcAuthenticator) idTokenForSession(ctx context.Context, sessionID uint) (string, error) {
+	if sessionID == 0 {
+		return "", &SessionCredentialError{Err: errors.New("OIDC session is missing"), Permanent: true}
 	}
-	provider, err := a.discoveredProvider(c.Request.Context())
+	session, err := model.GetOIDCSessionByID(model.DB.WithContext(ctx), sessionID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return "", &SessionCredentialError{Err: errors.New("OIDC session no longer exists"), Permanent: true}
+		}
+		return "", err
+	}
+	return a.idTokenForLoadedSession(ctx, session)
+}
+
+func (a *oidcAuthenticator) idTokenForLoadedSession(ctx context.Context, session *model.OIDCSession) (string, error) {
+	if session == nil || session.ID == 0 {
+		return "", &SessionCredentialError{Err: errors.New("OIDC session is missing"), Permanent: true}
+	}
+	if time.Until(session.ExpiresAt) > time.Minute {
+		return string(session.IDToken), nil
+	}
+
+	refreshLock := &a.sessionRefreshLocks[session.ID%sessionLockShards]
+	refreshLock.Lock()
+	defer refreshLock.Unlock()
+
+	var rawIDToken string
+	err := model.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		current, err := model.GetOIDCSessionByID(tx.Clauses(clause.Locking{Strength: "UPDATE"}), session.ID)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return &SessionCredentialError{Err: errors.New("OIDC session no longer exists"), Permanent: true}
+			}
+			return err
+		}
+		if time.Until(current.ExpiresAt) <= time.Minute {
+			if err := a.refreshSession(ctx, tx, current); err != nil {
+				return err
+			}
+		}
+		rawIDToken = string(current.IDToken)
+		return nil
+	})
+	var credentialError *SessionCredentialError
+	if errors.As(err, &credentialError) && credentialError.Permanent {
+		_ = model.RevokeOIDCSession(session.ID, "OIDC authorization expired; re-enable this task to authorize it again")
+	}
+	return rawIDToken, err
+}
+
+func (a *oidcAuthenticator) refreshSession(ctx context.Context, db *gorm.DB, session *model.OIDCSession) error {
+	if session.RefreshToken == "" {
+		return &SessionCredentialError{Err: errors.New("OIDC session cannot be refreshed"), Permanent: true}
+	}
+	oidcContext, err := a.context(ctx)
 	if err != nil {
 		return err
 	}
-	config := oidcOAuthConfig(c, provider)
+	provider, err := a.discoveredProvider(oidcContext)
+	if err != nil {
+		return err
+	}
+	config := oidcOAuthConfig(provider, oidcRedirectURL())
 	current := &oauth2.Token{
 		AccessToken:  string(session.AccessToken),
 		RefreshToken: string(session.RefreshToken),
 		Expiry:       time.Now().Add(-time.Minute),
 	}
-	refreshed, err := config.TokenSource(c.Request.Context(), current).Token()
+	refreshed, err := config.TokenSource(oidcContext, current).Token()
 	if err != nil {
-		return fmt.Errorf("refresh OIDC token: %w", err)
+		var retrieveError *oauth2.RetrieveError
+		permanent := errors.As(err, &retrieveError) && (retrieveError.ErrorCode == "invalid_grant" || retrieveError.ErrorCode == "invalid_client")
+		return &SessionCredentialError{Err: fmt.Errorf("refresh OIDC token: %w", err), Permanent: permanent}
 	}
 	rawIDToken, ok := refreshed.Extra("id_token").(string)
 	if !ok || rawIDToken == "" {
 		return errors.New("OIDC refresh did not return an ID token")
 	}
-	claims, idToken, err := a.verifyIDToken(c.Request.Context(), provider, rawIDToken, "")
+	claims, idToken, err := a.verifyIDToken(oidcContext, provider, rawIDToken, "")
 	if err != nil {
 		return err
 	}
@@ -360,7 +480,7 @@ func (a *oidcAuthenticator) refreshSession(c *gin.Context, session *model.OIDCSe
 		refreshToken = string(session.RefreshToken)
 	}
 	expiresAt := sessionExpiry(refreshed, idToken)
-	if err := model.UpdateOIDCSession(session, map[string]any{
+	if err := model.UpdateOIDCSession(db, session, map[string]any{
 		"id_token":      model.SecretString(rawIDToken),
 		"access_token":  model.SecretString(refreshed.AccessToken),
 		"refresh_token": model.SecretString(refreshToken),
