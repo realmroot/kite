@@ -1,6 +1,9 @@
 # Makefile for Kite project
 .PHONY: help dev build clean test verify format-check verify-architecture verify-deployment verify-kubernetes-compatibility docker-build docker-run frontend static backend install deps e2e-install e2e-install-browser e2e-kind-up e2e-kind-down e2e-stop-app e2e-setup-dex e2e-run e2e-run-headed e2e-test e2e-test-headed
 
+-include .env
+export
+
 # Variables
 BINARY_NAME=kite
 UI_DIR=ui

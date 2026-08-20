@@ -8,6 +8,11 @@
 #SQLite dev.db
 dev.db
 
+# Local environment configuration
+.env
+.env.*
+!.env.example
+
 # Test binary, built with `go test -c`
 *.test
 
