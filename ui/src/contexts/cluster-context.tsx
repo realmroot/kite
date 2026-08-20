@@ -24,6 +24,13 @@ export const ClusterContext = createContext<ClusterContextType | undefined>(
   undefined
 )
 
+const shouldInvalidateForClusterSwitch = (query: {
+  queryKey: readonly unknown[]
+}) => {
+  const key = query.queryKey[0]
+  return typeof key === 'string' && !['user', 'auth', 'clusters'].includes(key)
+}
+
 export const ClusterProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
@@ -75,24 +82,30 @@ export const ClusterProvider: React.FC<{ children: React.ReactNode }> = ({
   }, [refetchClusters])
 
   useEffect(() => {
-    if (clusters.length > 0 && !currentCluster) {
+    if (clusters.length === 0) {
+      return
+    }
+
+    if (
+      !currentCluster ||
+      !clusters.some((cluster) => cluster.name === currentCluster)
+    ) {
       const defaultCluster = clusters.find((cluster) => cluster.isDefault)
       const nextCluster = defaultCluster
         ? defaultCluster.name
         : clusters[0].name
       setCurrentClusterState(nextCluster)
       persistCurrentCluster(nextCluster)
-    }
 
-    if (
-      currentCluster &&
-      clusters.length > 0 &&
-      !clusters.some((cluster) => cluster.name === currentCluster)
-    ) {
-      setCurrentClusterState(null)
-      clearCurrentCluster()
+      void queryClient
+        .invalidateQueries({ predicate: shouldInvalidateForClusterSwitch })
+        .catch(() => {
+          toast.error('Failed to load the selected cluster', {
+            id: 'cluster-switch',
+          })
+        })
     }
-  }, [clusters, currentCluster])
+  }, [clusters, currentCluster, queryClient])
 
   const setCurrentCluster = async (clusterName: string) => {
     if (clusterName === currentCluster || isSwitching) {
@@ -105,10 +118,7 @@ export const ClusterProvider: React.FC<{ children: React.ReactNode }> = ({
 
     try {
       await queryClient.invalidateQueries({
-        predicate: (query) => {
-          const key = query.queryKey[0] as string
-          return !['user', 'auth', 'clusters'].includes(key)
-        },
+        predicate: shouldInvalidateForClusterSwitch,
       })
       toast.success(`Switched to cluster: ${clusterName}`, {
         id: 'cluster-switch',
