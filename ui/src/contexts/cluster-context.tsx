@@ -24,7 +24,7 @@ export const ClusterContext = createContext<ClusterContextType | undefined>(
   undefined
 )
 
-const shouldInvalidateForClusterSwitch = (query: {
+const shouldRefreshForClusterSwitch = (query: {
   queryKey: readonly unknown[]
 }) => {
   const key = query.queryKey[0]
@@ -98,7 +98,7 @@ export const ClusterProvider: React.FC<{ children: React.ReactNode }> = ({
       persistCurrentCluster(nextCluster)
 
       void queryClient
-        .invalidateQueries({ predicate: shouldInvalidateForClusterSwitch })
+        .resetQueries({ predicate: shouldRefreshForClusterSwitch })
         .catch(() => {
           toast.error('Failed to load the selected cluster', {
             id: 'cluster-switch',
@@ -117,8 +117,8 @@ export const ClusterProvider: React.FC<{ children: React.ReactNode }> = ({
     persistCurrentCluster(clusterName)
 
     try {
-      await queryClient.invalidateQueries({
-        predicate: shouldInvalidateForClusterSwitch,
+      await queryClient.resetQueries({
+        predicate: shouldRefreshForClusterSwitch,
       })
       toast.success(`Switched to cluster: ${clusterName}`, {
         id: 'cluster-switch',

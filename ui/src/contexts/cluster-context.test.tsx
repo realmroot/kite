@@ -7,12 +7,12 @@ import { useCluster } from '@/hooks/use-cluster'
 import { ClusterProvider } from './cluster-context'
 
 const mocks = vi.hoisted(() => ({
-  invalidateQueries: vi.fn().mockResolvedValue(undefined),
+  resetQueries: vi.fn().mockResolvedValue(undefined),
   refetchClusters: vi.fn(),
 }))
 
 vi.mock('@tanstack/react-query', () => ({
-  useQueryClient: () => ({ invalidateQueries: mocks.invalidateQueries }),
+  useQueryClient: () => ({ resetQueries: mocks.resetQueries }),
 }))
 
 vi.mock('@/lib/api/cluster', () => ({
@@ -27,7 +27,7 @@ describe('ClusterProvider', () => {
   beforeEach(() => {
     localStorage.setItem('current-cluster', 'removed-cluster')
     sessionStorage.setItem('current-cluster', 'removed-cluster')
-    mocks.invalidateQueries.mockClear()
+    mocks.resetQueries.mockClear()
     mocks.refetchClusters.mockResolvedValue({
       data: [{ name: 'local-kind', isDefault: true }],
     })
@@ -42,6 +42,6 @@ describe('ClusterProvider', () => {
 
     expect(localStorage.getItem('current-cluster')).toBe('local-kind')
     expect(sessionStorage.getItem('current-cluster')).toBe('local-kind')
-    expect(mocks.invalidateQueries).toHaveBeenCalledOnce()
+    expect(mocks.resetQueries).toHaveBeenCalledOnce()
   })
 })
