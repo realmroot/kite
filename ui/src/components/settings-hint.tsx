@@ -1,20 +1,9 @@
 import { useState } from 'react'
-import {
-  IconCheck,
-  IconKey,
-  IconServer,
-  IconShieldCheck,
-  IconX,
-} from '@tabler/icons-react'
+import { IconCheck, IconServer, IconX } from '@tabler/icons-react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 
-import {
-  useClusterList,
-  useLDAPSetting,
-  useOAuthProviderList,
-  useRoleList,
-} from '@/lib/api'
+import { useClusterList } from '@/lib/api'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -36,16 +25,10 @@ export function SettingsHint({ onDismiss }: SettingsHintProps) {
   )
 
   const { data: clusters = [] } = useClusterList()
-  const { data: oauthProviders = [] } = useOAuthProviderList()
-  const { data: ldapSetting } = useLDAPSetting({ staleTime: 30000 })
-  const { data: roles = [] } = useRoleList()
 
   const hasP8S = clusters.some((cluster) => !!cluster.prometheusURL)
-  const hasOAuthProviders =
-    oauthProviders.length > 0 || ldapSetting?.enabled === true
-  const hasRoles = roles.length > 2
 
-  if ((hasP8S && hasOAuthProviders && hasRoles) || isDismissed) {
+  if (hasP8S || isDismissed) {
     return null
   }
 
@@ -63,28 +46,6 @@ export function SettingsHint({ onDismiss }: SettingsHintProps) {
       icon: IconServer,
       completed: hasP8S,
       href: '/settings?tab=clusters',
-    },
-    {
-      key: 'oauth',
-      title: t('settings.tabs.oauth', 'Authentication'),
-      description: t(
-        'settingsHint.oauth.description',
-        'Set up LDAP or OAuth authentication'
-      ),
-      icon: IconKey,
-      completed: hasOAuthProviders,
-      href: '/settings?tab=oauth',
-    },
-    {
-      key: 'rbac',
-      title: t('settings.tabs.rbac', 'RBAC'),
-      description: t(
-        'settingsHint.rbac.description',
-        'Configure roles and permissions'
-      ),
-      icon: IconShieldCheck,
-      completed: hasRoles,
-      href: '/settings?tab=rbac',
     },
   ]
 
