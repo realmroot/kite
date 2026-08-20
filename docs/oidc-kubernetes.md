@@ -11,9 +11,10 @@ not a Kubernetes identity provider or authorization proxy.
    ID, access, and refresh tokens in an encrypted server-side session.
 3. The browser receives only an opaque, `HttpOnly`, `SameSite=Lax` session
    cookie.
-4. For every Kubernetes request, Kite constructs a fresh client using the
-   signed-in user's OIDC ID token. No cross-user Kubernetes client or
-   informer cache is shared.
+4. Kite keeps one credential-free connection runtime and HTTP transport per
+   cluster. Each request wraps that shared transport with the signed-in user's
+   OIDC ID token; tokens and Kubernetes clients are never shared between users.
+   Kite starts no informer cache.
 5. The Kubernetes API server authenticates the token and authorizes the
    configured username and group claims through native RBAC.
 
@@ -24,6 +25,10 @@ resources. Kubernetes RoleBindings and ClusterRoleBindings remain authoritative.
 The node terminal, browser kubectl console, AI execution routes, local password
 and passkey login, LDAP, local OAuth-provider management, Kite RBAC, API keys,
 and kubeconfig import are intentionally unavailable in this fork.
+
+Ordinary Kubernetes API calls are also available through the transparent
+[Kubernetes API gateway](kubernetes-api-gateway.md). Compatibility endpoints
+used by the existing UI follow the same per-request identity rule.
 
 ## Required Kite configuration
 
@@ -95,7 +100,7 @@ Each cluster row stores only:
 - connection mode: `direct` or `tunnel`;
 - HTTPS API server URL for direct mode;
 - CA bundle and optional TLS server-name override;
-- optional Prometheus URL;
+- optional cluster-local Prometheus service URL;
 - enabled/default flags;
 - tunnel enrollment keys and connection metadata for tunnel mode.
 
@@ -107,6 +112,12 @@ Direct mode requires network reachability from Kite to the API server. Tunnel
 mode deploys a transport-only agent in the cluster. Its manifest has no
 ServiceAccount token, Role, ClusterRole, RoleBinding, or ClusterRoleBinding;
 the end user's token traverses the tunnel to the API server unchanged.
+
+Prometheus is enabled only for `.svc`/`.svc.cluster.local` service URLs. Kite
+reaches that service through the Kubernetes service proxy using the current
+user token, so the API server must authorize `services/proxy`. Direct anonymous
+or shared-credential access to an external Prometheus endpoint is deliberately
+disabled because it cannot preserve Kubernetes RBAC boundaries.
 
 ## Helm installation
 

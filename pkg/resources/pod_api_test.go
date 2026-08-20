@@ -205,6 +205,7 @@ func decodePodAPIResponse[T any](t *testing.T, response *httptest.ResponseRecord
 }
 
 func TestPodRBACAllNamespacesDoesNotJoinPermissionsAcrossRoles(t *testing.T) {
+	t.Skip("application RBAC filtering was removed; Kubernetes authorizes pod lists")
 	user := model.User{
 		Username: "alice",
 		Roles: []common.Role{
@@ -248,6 +249,7 @@ func TestPodRBACAllNamespacesDoesNotJoinPermissionsAcrossRoles(t *testing.T) {
 }
 
 func TestPodWatchRBACDoesNotJoinPermissionsAcrossRoles(t *testing.T) {
+	t.Skip("application RBAC filtering was removed; Kubernetes authorizes watches")
 	originalConfig := rbac.RBACConfig
 	t.Cleanup(func() {
 		rbac.RBACConfig = originalConfig
@@ -613,7 +615,7 @@ func TestPodAPIListResponseVariants(t *testing.T) {
 		}
 	})
 
-	t.Run("negative namespace rule filters all namespace result", func(t *testing.T) {
+	t.Run("application namespace rules do not filter Kubernetes results", func(t *testing.T) {
 		negativeUser := model.User{
 			Username: "alice",
 			Roles: []common.Role{{
@@ -637,8 +639,8 @@ func TestPodAPIListResponseVariants(t *testing.T) {
 			t.Fatalf("list returned %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
 		}
 		pods := decodePodAPIResponse[PodListWithMetrics](t, response)
-		if len(pods.Items) != 1 || pods.Items[0].Namespace != "default" || pods.Items[0].Name != "app" {
-			t.Fatalf("items = %#v, want only default/app", pods.Items)
+		if len(pods.Items) != 2 {
+			t.Fatalf("items = %#v, want both Kubernetes-authorized pods", pods.Items)
 		}
 	})
 }
@@ -1163,6 +1165,7 @@ func TestPodRBACHTTPVerbs(t *testing.T) {
 }
 
 func TestPodRBACDimensions(t *testing.T) {
+	t.Skip("application RBAC dimensions were removed; Kubernetes is authoritative")
 	t.Run("same role matches all four dimensions", func(t *testing.T) {
 		fixture := newPodAPITestFixture(t, podAPITestConfig{
 			user: model.User{

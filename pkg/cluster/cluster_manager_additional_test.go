@@ -1,6 +1,7 @@
 package cluster
 
 import (
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -15,6 +16,12 @@ import (
 
 	"github.com/zxh326/kite/pkg/kube"
 )
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (fn roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
+	return fn(request)
+}
 
 func init() {
 	if err := os.Setenv("MOCKEY_CHECK_GCFLAGS", "false"); err != nil {
@@ -63,7 +70,7 @@ func TestCreateK8sProxyTransport(t *testing.T) {
 	}
 
 	t.Run("uses explicit port", func(t *testing.T) {
-		transport, err := createK8sProxyTransport(k8sConfig, "https://prometheus.monitoring.svc.cluster.local:9090")
+		transport, err := createK8sProxyTransport(k8sConfig, http.DefaultTransport, "https://prometheus.monitoring.svc.cluster.local:9090")
 		if err != nil {
 			t.Fatalf("createK8sProxyTransport() error = %v", err)
 		}
@@ -79,7 +86,7 @@ func TestCreateK8sProxyTransport(t *testing.T) {
 	})
 
 	t.Run("defaults https port", func(t *testing.T) {
-		transport, err := createK8sProxyTransport(k8sConfig, "https://prometheus.monitoring.svc.cluster.local")
+		transport, err := createK8sProxyTransport(k8sConfig, http.DefaultTransport, "https://prometheus.monitoring.svc.cluster.local")
 		if err != nil {
 			t.Fatalf("createK8sProxyTransport() error = %v", err)
 		}
@@ -87,6 +94,29 @@ func TestCreateK8sProxyTransport(t *testing.T) {
 			t.Fatalf("port = %q, want %q", transport.port, "443")
 		}
 	})
+}
+
+func TestNewUserClientSetOnlyEnablesKubernetesAuthorizedPrometheus(t *testing.T) {
+	config := &rest.Config{Host: "https://apiserver.example.test"}
+	httpClient := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		return nil, errors.New("unexpected request")
+	})}
+
+	external, err := newUserClientSet("prod", config, httpClient, "https://prometheus.example.test")
+	if err != nil {
+		t.Fatalf("external Prometheus metadata should not break Kubernetes access: %v", err)
+	}
+	if external.PromClient != nil {
+		t.Fatal("external Prometheus must not bypass Kubernetes authorization")
+	}
+
+	inCluster, err := newUserClientSet("prod", config, httpClient, "http://prometheus.monitoring.svc.cluster.local:9090")
+	if err != nil {
+		t.Fatalf("create Kubernetes-authorized Prometheus client: %v", err)
+	}
+	if inCluster.PromClient == nil {
+		t.Fatal("cluster-local Prometheus should use the Kubernetes service proxy")
+	}
 }
 
 func TestK8sProxyTransportRoundTrip(t *testing.T) {

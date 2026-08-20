@@ -7,7 +7,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/zxh326/kite/pkg/cluster"
-	"github.com/zxh326/kite/pkg/common"
 	"github.com/zxh326/kite/pkg/model"
 )
 
@@ -42,62 +41,11 @@ func TestNormalizeAgentMessages(t *testing.T) {
 	}
 }
 
-func TestSummarizeScope(t *testing.T) {
-	if got := summarizeScope(nil); got != "-" {
-		t.Fatalf("expected -, got %q", got)
-	}
-	if got := summarizeScope([]string{"pods"}); got != "pods" {
-		t.Fatalf("expected pods, got %q", got)
-	}
-	if got := summarizeScope([]string{"get"}); got != "get,list,watch" {
-		t.Fatalf("expected get,list,watch, got %q", got)
-	}
-}
-
-func TestBuildRBACOverview(t *testing.T) {
-	user := model.User{
-		Username: "alice",
-		Roles: []common.Role{
-			{
-				Name:       "viewer",
-				Clusters:   []string{"cluster-b"},
-				Namespaces: []string{"get"},
-				Resources:  []string{"pods"},
-				Verbs:      []string{"get"},
-			},
-			{
-				Name:       "admin",
-				Clusters:   []string{"cluster-a"},
-				Namespaces: []string{"default"},
-				Resources:  []string{"deployments"},
-				Verbs:      []string{"update"},
-			},
-		},
-	}
-
-	got := buildRBACOverview(user)
-	want := "admin[clusters=cluster-a;namespaces=default;resources=deployments;verbs=update] | viewer[clusters=cluster-b;namespaces=get,list,watch;resources=pods;verbs=get,list,watch]"
-	if got != want {
-		t.Fatalf("unexpected rbac overview:\nwant: %s\ngot:  %s", want, got)
-	}
-}
-
 func TestBuildRuntimePromptContext(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
-	c.Set("user", model.User{
-		Username: "alice",
-		Roles: []common.Role{
-			{
-				Name:       "viewer",
-				Clusters:   []string{"cluster-a"},
-				Namespaces: []string{"default"},
-				Resources:  []string{"pods"},
-				Verbs:      []string{"get"},
-			},
-		},
-	})
+	c.Set("user", model.User{Username: "alice"})
 
 	ctx := buildRuntimePromptContext(c, &cluster.ClientSet{Name: "cluster-a"})
 	if ctx.ClusterName != "cluster-a" {
@@ -106,15 +54,12 @@ func TestBuildRuntimePromptContext(t *testing.T) {
 	if ctx.AccountName != "alice" {
 		t.Fatalf("expected alice, got %q", ctx.AccountName)
 	}
-	if !strings.Contains(ctx.RBACOverview, "viewer[clusters=cluster-a") {
-		t.Fatalf("unexpected RBAC overview: %s", ctx.RBACOverview)
-	}
 }
 
 func TestBuildContextualSystemPrompt(t *testing.T) {
 	prompt := buildContextualSystemPrompt(
 		&PageContext{Page: "pod-detail", Namespace: "default", ResourceKind: "Pod", ResourceName: "nginx"},
-		runtimePromptContext{ClusterName: "cluster-a", AccountName: "alice", RBACOverview: "viewer[...]"},
+		runtimePromptContext{ClusterName: "cluster-a", AccountName: "alice"},
 		"zh",
 	)
 

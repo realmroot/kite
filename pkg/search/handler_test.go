@@ -224,7 +224,7 @@ func performGlobalSearchForUser(t *testing.T, handler *SearchHandler, clusterNam
 	return resp
 }
 
-func TestGlobalSearchCacheRechecksRBAC(t *testing.T) {
+func TestGlobalSearchCacheIsScopedByAuthenticatedUser(t *testing.T) {
 	var calls atomic.Int32
 	handler := NewSearchHandler(map[string]resources.SearchFunc{
 		string(common.Nodes): func(_ *gin.Context, _ string, _ int64) ([]common.SearchResult, error) {
@@ -252,15 +252,15 @@ func TestGlobalSearchCacheRechecksRBAC(t *testing.T) {
 		Verbs:      []string{string(common.VerbGet)},
 	}}}
 	response = performGlobalSearchForUser(t, handler, "cluster-a", "/search?q=worker&limit=50", revokedUser)
-	if response.Total != 0 {
-		t.Fatalf("cached search after role revocation returned %#v", response.Results)
+	if response.Total != 1 {
+		t.Fatalf("cached search should not consult application roles: %#v", response.Results)
 	}
 	if calls.Load() != 1 {
 		t.Fatalf("search function called %d times, want cache hit", calls.Load())
 	}
 }
 
-func TestGlobalSearchFiltersUnauthorizedResults(t *testing.T) {
+func TestGlobalSearchTrustsKubernetesAuthorizedSearchResults(t *testing.T) {
 	handler := NewSearchHandler(map[string]resources.SearchFunc{
 		string(common.Nodes): func(_ *gin.Context, _ string, _ int64) ([]common.SearchResult, error) {
 			return []common.SearchResult{{Name: "worker-node", ResourceType: string(common.Nodes)}}, nil
@@ -274,8 +274,8 @@ func TestGlobalSearchFiltersUnauthorizedResults(t *testing.T) {
 		Verbs:      []string{string(common.VerbGet)},
 	}}}
 	response := performGlobalSearchForUser(t, handler, "cluster-a", "/search?q=worker&limit=50", user)
-	if response.Total != 0 {
-		t.Fatalf("unauthorized search returned %#v", response.Results)
+	if response.Total != 1 {
+		t.Fatalf("search result was filtered by application roles: %#v", response.Results)
 	}
 }
 

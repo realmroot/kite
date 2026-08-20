@@ -2,53 +2,11 @@ package auth
 
 import (
 	"net/http"
-	"strconv"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/zxh326/kite/pkg/common"
 	"github.com/zxh326/kite/pkg/model"
-	"github.com/zxh326/kite/pkg/rbac"
 )
-
-func (h *AuthHandler) RequireAPIKeyAuth(c *gin.Context, token string) {
-	keyPart := strings.SplitN(token, "-", 2)
-	if len(keyPart) < 2 {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "Invalid API key",
-		})
-		c.Abort()
-		return
-	}
-	id := keyPart[0]
-	key := keyPart[1]
-	dbID, err := strconv.ParseUint(id, 10, 64)
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "Invalid API key",
-		})
-		c.Abort()
-		return
-	}
-	apikey, err := model.GetUserByIDCached(dbID)
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "Invalid API key",
-		})
-		c.Abort()
-		return
-	}
-	if !apikey.Enabled || apikey.Provider != common.APIKeyProvider || key == "" || string(apikey.APIKey) == "" || key != string(apikey.APIKey) {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "Invalid API key",
-		})
-		c.Abort()
-		return
-	}
-	_ = model.LoginUser(apikey)
-	apikey.Roles = rbac.GetUserRoles(*apikey)
-	c.Set("user", *apikey)
-}
 
 func (h *AuthHandler) RequireAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {

@@ -10,8 +10,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/zxh326/kite/pkg/cluster"
 	"github.com/zxh326/kite/pkg/common"
-	"github.com/zxh326/kite/pkg/model"
-	"github.com/zxh326/kite/pkg/rbac"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
@@ -104,8 +102,6 @@ func (h *GenericResourceHandler[T, V]) list(c *gin.Context) (V, error) {
 		return t1.After(t2.Time)
 	})
 
-	user := c.MustGet("user").(model.User)
-	filterItems := make([]runtime.Object, 0, len(items))
 	for i := range items {
 		obj, err := meta.Accessor(items[i])
 		if err != nil {
@@ -117,16 +113,8 @@ func (h *GenericResourceHandler[T, V]) list(c *gin.Context) (V, error) {
 		if anno != nil {
 			delete(anno, common.KubectlAnnotation)
 		}
-		if h.Name() == string(common.Namespaces) && !rbac.CanAccessNamespace(user, cs.Name, obj.GetName()) {
-			continue
-		}
-		if allNamespaces && obj.GetNamespace() != "" &&
-			!rbac.CanAccess(user, h.Name(), string(common.VerbGet), cs.Name, obj.GetNamespace()) {
-			continue
-		}
-		filterItems = append(filterItems, items[i])
 	}
-	_ = meta.SetList(objectList, filterItems)
+	_ = meta.SetList(objectList, items)
 
 	return objectList, nil
 }
@@ -144,7 +132,6 @@ func (h *GenericResourceHandler[T, V]) Search(c *gin.Context, q string, limit in
 		return nil, nil
 	}
 	cs := c.MustGet("cluster").(*cluster.ClientSet)
-	user := c.MustGet("user").(model.User)
 	ctx := c.Request.Context()
 	objectList := reflect.New(h.listType).Interface().(V)
 	var listOpts []client.ListOption
@@ -178,19 +165,6 @@ func (h *GenericResourceHandler[T, V]) Search(c *gin.Context, q string, limit in
 		}
 		if !isLabelSearch && !strings.Contains(strings.ToLower(obj.GetName()), strings.ToLower(q)) {
 			continue
-		}
-		if h.Name() == string(common.Namespaces) {
-			if !rbac.CanAccessNamespace(user, cs.Name, obj.GetName()) {
-				continue
-			}
-		} else {
-			namespace := obj.GetNamespace()
-			if namespace == "" {
-				namespace = common.AllNamespaces
-			}
-			if !rbac.CanAccess(user, h.Name(), string(common.VerbGet), cs.Name, namespace) {
-				continue
-			}
 		}
 		result := common.SearchResult{
 			ID:           string(obj.GetUID()),

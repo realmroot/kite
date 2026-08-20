@@ -2,14 +2,11 @@ package ai
 
 import (
 	"fmt"
-	"sort"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/zxh326/kite/pkg/cluster"
 	"github.com/zxh326/kite/pkg/model"
-	"github.com/zxh326/kite/pkg/rbac"
 	"k8s.io/klog/v2"
 )
 
@@ -31,12 +28,10 @@ Operating principles:
 - Scope safety: prefer the smallest safe scope; avoid broad or destructive actions unless the user explicitly asks for them.
 - Pod exec safety: prefer read-only diagnostic commands. Do not use exec when a structured resource or log tool can answer the question.
 
-Kite RBAC semantics:
-- The verbs in Kite only include get, update, delete, create, log, and exec.
-- patch is covered by update in Kite RBAC. If update is allowed, patch operations are allowed.
-- watch is covered by get in Kite RBAC. If get is allowed, watch-style read operations are allowed.
-- Do not treat missing patch or watch entries in RBAC context as denial before verb normalization.
-- First check the RBAC context, clarify the permission boundaries. If the resource to be checked exceeds the permission scope, first explain the permission restrictions and suggest the next step.
+Authorization semantics:
+- The Kubernetes API server is the sole authority for resource authorization.
+- Every tool call uses the signed-in user's OIDC identity and Kubernetes RBAC bindings.
+- Never infer access from application roles. Treat Kubernetes Forbidden responses as authoritative.
 
 Context priority:
 - Follow explicit user instructions first.
@@ -84,9 +79,8 @@ type Agent struct {
 }
 
 type runtimePromptContext struct {
-	ClusterName  string
-	AccountName  string
-	RBACOverview string
+	ClusterName string
+	AccountName string
 }
 
 const maxConversationMessages = 30
@@ -134,41 +128,6 @@ func NewAgent(cs *cluster.ClientSet, cfg *RuntimeConfig) (*Agent, error) {
 	return agent, nil
 }
 
-func summarizeScope(items []string) string {
-	if len(items) == 0 {
-		return "-"
-	}
-	scope := strings.Join(items, ",")
-	if strings.Contains(scope, "get") {
-		scope += ",list,watch"
-	}
-	return scope
-}
-
-func buildRBACOverview(user model.User) string {
-	roles := rbac.GetUserRoles(user)
-	if len(roles) == 0 {
-		return "no roles"
-	}
-
-	sort.Slice(roles, func(i, j int) bool {
-		return roles[i].Name < roles[j].Name
-	})
-
-	summaries := make([]string, 0, len(roles))
-	for _, role := range roles {
-		summaries = append(summaries, fmt.Sprintf(
-			"%s[clusters=%s;namespaces=%s;resources=%s;verbs=%s]",
-			role.Name,
-			summarizeScope(role.Clusters),
-			summarizeScope(role.Namespaces),
-			summarizeScope(role.Resources),
-			summarizeScope(role.Verbs),
-		))
-	}
-	return strings.Join(summaries, " | ")
-}
-
 func buildRuntimePromptContext(c *gin.Context, cs *cluster.ClientSet) runtimePromptContext {
 	ctx := runtimePromptContext{}
 	if cs != nil {
@@ -186,7 +145,6 @@ func buildRuntimePromptContext(c *gin.Context, cs *cluster.ClientSet) runtimePro
 		return ctx
 	}
 	ctx.AccountName = user.Key()
-	ctx.RBACOverview = buildRBACOverview(user)
 	return ctx
 }
 
@@ -197,16 +155,13 @@ func buildContextualSystemPrompt(pageCtx *PageContext, runtimeCtx runtimePromptC
 	// Add current system time
 	prompt += fmt.Sprintf("\n\nCurrent system time: %s", time.Now().Format("2006-01-02 15:04:05 MST"))
 
-	if runtimeCtx.ClusterName != "" || runtimeCtx.AccountName != "" || runtimeCtx.RBACOverview != "" {
+	if runtimeCtx.ClusterName != "" || runtimeCtx.AccountName != "" {
 		prompt += "\n\nCurrent runtime context:"
 		if runtimeCtx.ClusterName != "" {
 			prompt += fmt.Sprintf("\n- Current cluster: %s", runtimeCtx.ClusterName)
 		}
 		if runtimeCtx.AccountName != "" {
 			prompt += fmt.Sprintf("\n- Current account name: %s", runtimeCtx.AccountName)
-		}
-		if runtimeCtx.RBACOverview != "" {
-			prompt += fmt.Sprintf("\n- RBAC overview: %s", runtimeCtx.RBACOverview)
 		}
 	}
 

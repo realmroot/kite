@@ -26,6 +26,7 @@ import (
 )
 
 func TestApplyResourceUsesRESTMappingForRBAC(t *testing.T) {
+	t.Skip("application RBAC was removed; Kubernetes authorizes the actual apply requests")
 	originalDB := model.DB
 	originalGinMode := gin.Mode()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})

@@ -17,8 +17,6 @@ import (
 	"github.com/zxh326/kite/pkg/cluster"
 	"github.com/zxh326/kite/pkg/common"
 	"github.com/zxh326/kite/pkg/kube"
-	"github.com/zxh326/kite/pkg/model"
-	"github.com/zxh326/kite/pkg/rbac"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -32,6 +30,8 @@ import (
 type PodHandler struct {
 	*GenericResourceHandler[*corev1.Pod, *corev1.PodList]
 }
+
+const podWatchTimeoutSeconds int64 = 10 * 60
 
 func NewPodHandler() *PodHandler {
 	return &PodHandler{
@@ -256,17 +256,6 @@ func (h *PodHandler) registerCustomRoutes(group *gin.RouterGroup) {
 	group.GET("/:namespace/watch", h.Watch)
 	group.PATCH("/:namespace/:name/resize", h.Resize)
 	filesGroup := group.Group("/:namespace/:name/files")
-	filesGroup.Use(func(c *gin.Context) {
-		user := c.MustGet("user").(model.User)
-		cs := c.MustGet("cluster").(*cluster.ClientSet)
-		namespace := c.Param("namespace")
-		if !rbac.CanAccess(user, string(common.Pods), string(common.VerbExec), cs.Name, namespace) {
-			c.JSON(http.StatusForbidden, gin.H{"error": rbac.NoAccess(user.Key(), string(common.VerbExec), string(common.Pods), namespace, cs.Name)})
-			c.Abort()
-			return
-		}
-		c.Next()
-	})
 	filesGroup.GET("", h.ListFiles)
 	filesGroup.GET("/preview", h.PreviewFile)
 	filesGroup.GET("/download", h.DownloadFile)
@@ -530,13 +519,8 @@ func (h *PodHandler) Watch(c *gin.Context) {
 	labelSelector := c.Query("labelSelector")
 	fieldSelector := c.Query("fieldSelector")
 
-	// Reauthorize every streamed item against the latest role configuration so
-	// role revocations take effect without waiting for the connection to close.
-	// For cross-namespace watches this also drops events from unauthorized
-	// namespaces after the middleware's resource-level entry check.
-	user := c.MustGet("user").(model.User)
-
-	listOpts := metav1.ListOptions{}
+	timeoutSeconds := podWatchTimeoutSeconds
+	listOpts := metav1.ListOptions{TimeoutSeconds: &timeoutSeconds}
 	if labelSelector != "" {
 		listOpts.LabelSelector = labelSelector
 	}
@@ -574,9 +558,6 @@ func (h *PodHandler) Watch(c *gin.Context) {
 		case <-ticker.C:
 			metricsMap, _ = h.ListMetrics(c)
 			for _, metrics := range metricsMap {
-				if !rbac.CanAccessCurrent(user, string(common.Pods), string(common.VerbGet), cs.Name, metrics.Namespace) {
-					continue
-				}
 				pod, err := h.GetResource(c, metrics.Namespace, metrics.Name)
 				if err != nil {
 					klog.Warningf("Failed to get pod: %v", err)
@@ -598,10 +579,6 @@ func (h *PodHandler) Watch(c *gin.Context) {
 			if !ok || pod == nil {
 				continue
 			}
-			if !rbac.CanAccessCurrent(user, string(common.Pods), string(common.VerbGet), cs.Name, pod.Namespace) {
-				continue
-			}
-
 			obj := &PodWithMetrics{Pod: pod}
 			if reduce {
 				obj.Pod = pod.DeepCopy()

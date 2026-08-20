@@ -7,21 +7,21 @@ import (
 	"github.com/zxh326/kite/pkg/model"
 )
 
-func TestUserRESTConfigUsesOnlyOIDCIdentity(t *testing.T) {
+func TestBaseRESTConfigContainsOnlyClusterConnectionMetadata(t *testing.T) {
 	manager := &ClusterManager{}
 	ca := "-----BEGIN CERTIFICATE-----\ntest\n-----END CERTIFICATE-----"
-	config, err := manager.userRESTConfig(&model.Cluster{
+	config, generation, err := manager.baseRESTConfig(&model.Cluster{
 		Name:           "production",
 		APIServerURL:   "https://api.example.com:6443",
 		CABundle:       base64.StdEncoding.EncodeToString([]byte(ca)),
 		TLSServerName:  "api.internal",
 		ConnectionMode: "direct",
 		Config:         model.SecretString("legacy-secret-that-must-not-be-used"),
-	}, "oidc-id-token")
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if config.Host != "https://api.example.com:6443" || config.BearerToken != "oidc-id-token" {
+	if config.Host != "https://api.example.com:6443" || config.BearerToken != "" || generation != 0 {
 		t.Fatalf("unexpected config: %#v", config)
 	}
 	if string(config.CAData) != ca || config.ServerName != "api.internal" {

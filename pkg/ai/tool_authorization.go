@@ -3,177 +3,11 @@ package ai
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/zxh326/kite/pkg/cluster"
-	"github.com/zxh326/kite/pkg/common"
 	pkgmodel "github.com/zxh326/kite/pkg/model"
-	"github.com/zxh326/kite/pkg/rbac"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	k8stypes "k8s.io/apimachinery/pkg/types"
 )
-
-type toolPermission struct {
-	Resource  string
-	Verb      string
-	Namespace string
-}
-
-func permissionNamespace(resource resourceInfo, namespace string) string {
-	if resource.ClusterScoped {
-		return ""
-	}
-	namespace = strings.TrimSpace(namespace)
-	if namespace == "" {
-		return common.AllNamespaces
-	}
-	return namespace
-}
-
-func requiredToolPermissions(ctx context.Context, cs *cluster.ClientSet, toolName string, args map[string]interface{}) ([]toolPermission, error) {
-	switch toolName {
-	case "get_resource", "describe_resource":
-		kind, err := getRequiredString(args, "kind")
-		if err != nil {
-			return nil, err
-		}
-		namespace, _ := args["namespace"].(string)
-		resource := resolveResourceInfo(ctx, cs, kind)
-		return []toolPermission{{
-			Resource:  common.HistoryResourceType(resource.Resource, resource.Group),
-			Verb:      string(common.VerbGet),
-			Namespace: permissionNamespace(resource, namespace),
-		}}, nil
-	case "list_resources":
-		kind, err := getRequiredString(args, "kind")
-		if err != nil {
-			return nil, err
-		}
-		namespace, _ := args["namespace"].(string)
-		resource := resolveResourceInfo(ctx, cs, kind)
-		return []toolPermission{{
-			Resource:  common.HistoryResourceType(resource.Resource, resource.Group),
-			Verb:      string(common.VerbGet),
-			Namespace: permissionNamespace(resource, namespace),
-		}}, nil
-	case "get_pod_logs":
-		if _, err := getRequiredString(args, "name"); err != nil {
-			return nil, err
-		}
-		namespace, err := getRequiredString(args, "namespace")
-		if err != nil {
-			return nil, err
-		}
-		return []toolPermission{{
-			Resource:  string(common.Pods),
-			Verb:      string(common.VerbLog),
-			Namespace: namespace,
-		}}, nil
-	case "exec_in_pod":
-		options, err := parseExecInPodOptions(args)
-		if err != nil {
-			return nil, err
-		}
-		return []toolPermission{{
-			Resource:  string(common.Pods),
-			Verb:      string(common.VerbExec),
-			Namespace: options.Namespace,
-		}}, nil
-	case "get_cluster_overview":
-		return []toolPermission{
-			{Resource: string(common.Nodes), Verb: string(common.VerbGet), Namespace: ""},
-			{Resource: string(common.Pods), Verb: string(common.VerbGet), Namespace: common.AllNamespaces},
-			{Resource: string(common.Namespaces), Verb: string(common.VerbGet), Namespace: ""},
-			{Resource: string(common.Services), Verb: string(common.VerbGet), Namespace: common.AllNamespaces},
-		}, nil
-	case "create_resource":
-		obj, err := parseResourceYAML(args)
-		if err != nil {
-			return nil, err
-		}
-		resource := resolveResourceInfoForObject(ctx, cs, obj)
-		return []toolPermission{{
-			Resource:  common.HistoryResourceType(resource.Resource, resource.Group),
-			Verb:      string(common.VerbCreate),
-			Namespace: permissionNamespace(resource, obj.GetNamespace()),
-		}}, nil
-	case "apply_resource":
-		obj, err := parseResourceYAML(args)
-		if err != nil {
-			return nil, err
-		}
-		resource := resolveResourceInfoForObject(ctx, cs, obj)
-		existing := buildObjectForResource(resource)
-		err = cs.K8sClient.Get(ctx, k8stypes.NamespacedName{
-			Name:      obj.GetName(),
-			Namespace: normalizeNamespace(resource, obj.GetNamespace()),
-		}, existing)
-		verb := common.VerbUpdate
-		if apierrors.IsNotFound(err) {
-			verb = common.VerbCreate
-		} else if err != nil {
-			return nil, err
-		}
-		return []toolPermission{{
-			Resource:  common.HistoryResourceType(resource.Resource, resource.Group),
-			Verb:      string(verb),
-			Namespace: permissionNamespace(resource, obj.GetNamespace()),
-		}}, nil
-	case "update_resource":
-		obj, err := parseResourceYAML(args)
-		if err != nil {
-			return nil, err
-		}
-		resource := resolveResourceInfoForObject(ctx, cs, obj)
-		return []toolPermission{{
-			Resource:  common.HistoryResourceType(resource.Resource, resource.Group),
-			Verb:      string(common.VerbUpdate),
-			Namespace: permissionNamespace(resource, obj.GetNamespace()),
-		}}, nil
-	case "patch_resource":
-		kind, err := getRequiredString(args, "kind")
-		if err != nil {
-			return nil, err
-		}
-		if _, err := getRequiredString(args, "name"); err != nil {
-			return nil, err
-		}
-		namespace, _ := args["namespace"].(string)
-		resource := resolveResourceInfo(ctx, cs, kind)
-		return []toolPermission{{
-			Resource:  common.HistoryResourceType(resource.Resource, resource.Group),
-			Verb:      string(common.VerbUpdate),
-			Namespace: permissionNamespace(resource, namespace),
-		}}, nil
-	case "delete_resource":
-		kind, err := getRequiredString(args, "kind")
-		if err != nil {
-			return nil, err
-		}
-		if _, err := getRequiredString(args, "name"); err != nil {
-			return nil, err
-		}
-		namespace, _ := args["namespace"].(string)
-		resource := resolveResourceInfo(ctx, cs, kind)
-		return []toolPermission{{
-			Resource:  common.HistoryResourceType(resource.Resource, resource.Group),
-			Verb:      string(common.VerbDelete),
-			Namespace: permissionNamespace(resource, namespace),
-		}}, nil
-	case "query_prometheus":
-		// Prometheus queries can access metrics from any namespace
-		// Require at least read permission on pods in all namespaces
-		// This ensures users can only query metrics if they have cluster-wide read access
-		return []toolPermission{{
-			Resource:  string(common.Pods),
-			Verb:      string(common.VerbGet),
-			Namespace: common.AllNamespaces,
-		}}, nil
-	default:
-		return nil, nil
-	}
-}
 
 func currentUserFromGin(c *gin.Context) (pkgmodel.User, bool) {
 	rawUser, ok := c.Get("user")
@@ -191,21 +25,8 @@ func AuthorizeTool(c *gin.Context, cs *cluster.ClientSet, toolName string, args 
 	if cs == nil {
 		return "Error: cluster client is required", true
 	}
-	user, ok := currentUserFromGin(c)
-	if !ok {
+	if _, ok := currentUserFromGin(c); !ok {
 		return "Error: authenticated user not found in context", true
-	}
-
-	permissions, err := requiredToolPermissions(c.Request.Context(), cs, toolName, args)
-	if err != nil {
-		return "Error: " + err.Error(), true
-	}
-
-	for _, permission := range permissions {
-		if rbac.CanAccess(user, permission.Resource, permission.Verb, cs.Name, permission.Namespace) {
-			continue
-		}
-		return "Forbidden: " + rbac.NoAccess(user.Key(), permission.Verb, permission.Resource, permission.Namespace, cs.Name), true
 	}
 	return "", false
 }

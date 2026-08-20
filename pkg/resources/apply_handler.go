@@ -11,7 +11,6 @@ import (
 	"github.com/zxh326/kite/pkg/cluster"
 	"github.com/zxh326/kite/pkg/common"
 	"github.com/zxh326/kite/pkg/model"
-	"github.com/zxh326/kite/pkg/rbac"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -83,23 +82,10 @@ func (h *ResourceApplyHandler) ApplyResource(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		authorizationNamespace := obj.GetNamespace()
 		if mapping.Scope.Name() == meta.RESTScopeNameRoot {
-			authorizationNamespace = common.AllNamespaces
 			obj.SetNamespace("")
 		}
 		resource := common.HistoryResourceType(mapping.Resource.Resource, mapping.Resource.Group)
-		canCreate := rbac.CanAccess(user, resource, string(common.VerbCreate), cs.Name, authorizationNamespace)
-		canUpdate := false
-		if !canCreate {
-			canUpdate = rbac.CanAccess(user, resource, string(common.VerbUpdate), cs.Name, authorizationNamespace)
-		}
-		if !canCreate && !canUpdate {
-			c.JSON(http.StatusForbidden, gin.H{
-				"error": rbac.NoAccess(user.Key(), string(common.VerbCreate), resource, authorizationNamespace, cs.Name)})
-			return
-		}
-
 		existingObj := &unstructured.Unstructured{}
 		existingObj.SetGroupVersionKind(obj.GetObjectKind().GroupVersionKind())
 		existingObj.SetName(obj.GetName())
@@ -114,25 +100,12 @@ func (h *ResourceApplyHandler) ApplyResource(c *gin.Context) {
 		switch {
 		case apierrors.IsNotFound(err):
 			operation = "create"
-			if !canCreate {
-				c.JSON(http.StatusForbidden, gin.H{
-					"error": rbac.NoAccess(user.Key(), string(common.VerbCreate), resource, authorizationNamespace, cs.Name)})
-				return
-			}
 			err = cs.K8sClient.Create(ctx, obj)
 			if err != nil {
 				klog.Errorf("Failed to create resource: %v", err)
 			}
 		case err == nil:
 			operation = "update"
-			if !canUpdate {
-				canUpdate = rbac.CanAccess(user, resource, string(common.VerbUpdate), cs.Name, authorizationNamespace)
-			}
-			if !canUpdate {
-				c.JSON(http.StatusForbidden, gin.H{
-					"error": rbac.NoAccess(user.Key(), string(common.VerbUpdate), resource, authorizationNamespace, cs.Name)})
-				return
-			}
 			obj.SetResourceVersion(existingObj.GetResourceVersion())
 			err = cs.K8sClient.Update(ctx, obj)
 			if err != nil {

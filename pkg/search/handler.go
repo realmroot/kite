@@ -15,7 +15,6 @@ import (
 	"github.com/zxh326/kite/pkg/common"
 	"github.com/zxh326/kite/pkg/middleware"
 	"github.com/zxh326/kite/pkg/model"
-	"github.com/zxh326/kite/pkg/rbac"
 	"github.com/zxh326/kite/pkg/resources"
 	"github.com/zxh326/kite/pkg/utils"
 	"golang.org/x/sync/errgroup"
@@ -121,7 +120,6 @@ func (h *SearchHandler) Search(c *gin.Context, query string, limit int) ([]commo
 	}
 	user := c.MustGet("user").(model.User)
 	clusterName := getSearchClusterName(c)
-	allResults = filterSearchResultsByAccess(user, clusterName, allResults)
 
 	queryLower := strings.ToLower(q)
 	sortResults(allResults, queryLower)
@@ -144,10 +142,6 @@ func (h *SearchHandler) Search(c *gin.Context, query string, limit int) ([]commo
 func (h *SearchHandler) GlobalSearch(c *gin.Context) {
 	user := c.MustGet("user").(model.User)
 	clusterName := getSearchClusterName(c)
-	if !rbac.CanAccessCluster(user, clusterName) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
-		return
-	}
 
 	query := normalizeSearchQuery(c.Query("q"))
 	if query == "" {
@@ -166,7 +160,6 @@ func (h *SearchHandler) GlobalSearch(c *gin.Context) {
 	cacheKey := h.createCacheKey(clusterName, user.Key(), query, limit)
 
 	if cachedResults, found := h.cache.Get(cacheKey); found {
-		cachedResults = filterSearchResultsByAccess(user, clusterName, cachedResults)
 		klog.V(4).Infof("search: query=%q cache=exact results=%d", query, len(cachedResults))
 		response := SearchResponse{
 			Results: cachedResults,
@@ -177,7 +170,6 @@ func (h *SearchHandler) GlobalSearch(c *gin.Context) {
 	}
 
 	if cachedResults, found := h.searchCachedPrefix(clusterName, user.Key(), query, limit); found {
-		cachedResults = filterSearchResultsByAccess(user, clusterName, cachedResults)
 		klog.V(4).Infof("search: query=%q cache=prefix results=%d", query, len(cachedResults))
 		h.cache.Add(cacheKey, cachedResults)
 		response := SearchResponse{
@@ -200,27 +192,6 @@ func (h *SearchHandler) GlobalSearch(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, response)
-}
-
-func filterSearchResultsByAccess(user model.User, clusterName string, results []common.SearchResult) []common.SearchResult {
-	filtered := make([]common.SearchResult, 0, len(results))
-	for _, result := range results {
-		if result.ResourceType == string(common.Namespaces) {
-			if !rbac.CanAccessNamespace(user, clusterName, result.Name) {
-				continue
-			}
-		} else {
-			namespace := result.Namespace
-			if namespace == "" {
-				namespace = common.AllNamespaces
-			}
-			if !rbac.CanAccess(user, result.ResourceType, string(common.VerbGet), clusterName, namespace) {
-				continue
-			}
-		}
-		filtered = append(filtered, result)
-	}
-	return filtered
 }
 
 func (h *SearchHandler) searchCachedPrefix(clusterName, userKey, query string, limit int) ([]common.SearchResult, bool) {

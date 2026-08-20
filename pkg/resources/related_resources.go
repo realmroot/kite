@@ -10,8 +10,6 @@ import (
 	"github.com/zxh326/kite/pkg/cluster"
 	"github.com/zxh326/kite/pkg/common"
 	"github.com/zxh326/kite/pkg/kube"
-	"github.com/zxh326/kite/pkg/model"
-	"github.com/zxh326/kite/pkg/rbac"
 	"golang.org/x/sync/errgroup"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
@@ -384,13 +382,9 @@ func getStorageClassRelatedResources(c *gin.Context) {
 		return
 	}
 
-	user := c.MustGet("user").(model.User)
 	result := make([]common.RelatedResource, 0)
 	for _, pvc := range pvcList.Items {
 		if pvc.Spec.StorageClassName == nil || *pvc.Spec.StorageClassName != name {
-			continue
-		}
-		if !rbac.CanAccess(user, string(common.PersistentVolumeClaims), string(common.VerbGet), cs.Name, pvc.Namespace) {
 			continue
 		}
 		result = append(result, common.RelatedResource{
@@ -416,7 +410,7 @@ func getPersistentVolumeClaimRelatedResources(pvc *corev1.PersistentVolumeClaim)
 	})
 }
 
-func GetRelatedResources(c *gin.Context) { //nolint:gocyclo // resource-specific discovery is intentionally centralized
+func GetRelatedResources(c *gin.Context) {
 	cs := c.MustGet("cluster").(*cluster.ClientSet)
 	namespace := c.Param("namespace")
 	name := c.Param("name")
@@ -544,23 +538,7 @@ func GetRelatedResources(c *gin.Context) { //nolint:gocyclo // resource-specific
 		}
 	}
 
-	user := c.MustGet("user").(model.User)
-	filtered := result[:0]
-	for _, related := range result {
-		namespace := related.Namespace
-		if namespace == "" {
-			namespace = common.AllNamespaces
-		}
-		group := ""
-		if separator := strings.IndexByte(related.APIVersion, '/'); separator >= 0 {
-			group = related.APIVersion[:separator]
-		}
-		resourceType := common.HistoryResourceType(related.Type, group)
-		if rbac.CanAccess(user, resourceType, string(common.VerbGet), cs.Name, namespace) {
-			filtered = append(filtered, related)
-		}
-	}
-	c.JSON(http.StatusOK, filtered)
+	c.JSON(http.StatusOK, result)
 }
 
 func getHTTPRouteRelatedResouces(res *gatewayapiv1.HTTPRoute, namespace string) []common.RelatedResource {

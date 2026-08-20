@@ -47,7 +47,6 @@ func ClusterMiddleware(cm clusterClientSetProvider) gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		defer cluster.K8sClient.Stop(cluster.Name)
 		c.Set("cluster", cluster)
 		c.Set(ClusterNameKey, cluster.Name)
 		c.Next()

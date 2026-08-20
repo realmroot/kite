@@ -45,7 +45,7 @@ func TestMergeUsageDataPointsSum(t *testing.T) {
 	}
 }
 
-func TestGetPodMetricsRBAC(t *testing.T) {
+func TestGetPodMetricsDefersAuthorizationToKubernetes(t *testing.T) {
 	originalGinMode := gin.Mode()
 	gin.SetMode(gin.TestMode)
 	t.Cleanup(func() {
@@ -97,7 +97,7 @@ func TestGetPodMetricsRBAC(t *testing.T) {
 			wantCalls:  1,
 		},
 		{
-			name: "denies a different namespace",
+			name: "application roles do not deny a different namespace",
 			roles: []common.Role{{
 				Name:       "team-reader",
 				Clusters:   []string{"prod"},
@@ -105,10 +105,11 @@ func TestGetPodMetricsRBAC(t *testing.T) {
 				Resources:  []string{"pods"},
 				Verbs:      []string{"get"},
 			}},
-			wantStatus: http.StatusForbidden,
+			wantStatus: http.StatusOK,
+			wantCalls:  1,
 		},
 		{
-			name: "does not combine dimensions across roles",
+			name: "application roles do not participate in authorization",
 			roles: []common.Role{
 				{
 					Name:       "prod-deployment-reader",
@@ -125,7 +126,8 @@ func TestGetPodMetricsRBAC(t *testing.T) {
 					Verbs:      []string{"get"},
 				},
 			},
-			wantStatus: http.StatusForbidden,
+			wantStatus: http.StatusOK,
+			wantCalls:  1,
 		},
 	}
 

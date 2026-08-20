@@ -1,18 +1,21 @@
 package cluster
 
 import (
+	"crypto/sha256"
 	"encoding/base64"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 
 	"github.com/zxh326/kite/pkg/clusteragent"
 	"github.com/zxh326/kite/pkg/kube"
 	"github.com/zxh326/kite/pkg/model"
 	"github.com/zxh326/kite/pkg/prometheus"
 	"k8s.io/client-go/rest"
+	kubetransport "k8s.io/client-go/transport"
 )
 
 type ClientSet struct {
@@ -27,13 +30,22 @@ type ClientSet struct {
 
 type ClusterManager struct {
 	clusterAgentManager *clusteragent.Manager
+	runtimeMu           sync.Mutex
+	runtimes            map[uint]*clusterRuntime
+	transportFor        func(*rest.Config) (http.RoundTripper, error)
+}
+
+type clusterRuntime struct {
+	signature string
+	config    *rest.Config
+	transport http.RoundTripper
 }
 
 func isClusterLocalURL(urlStr string) bool {
 	return strings.Contains(urlStr, ".svc.cluster.local") || strings.Contains(urlStr, ".svc:")
 }
 
-func createK8sProxyTransport(k8sConfig *rest.Config, prometheusURL string) (*k8sProxyTransport, error) {
+func createK8sProxyTransport(k8sConfig *rest.Config, transport http.RoundTripper, prometheusURL string) (*k8sProxyTransport, error) {
 	parsedURL, err := url.Parse(prometheusURL)
 	if err != nil {
 		return nil, err
@@ -46,9 +58,8 @@ func createK8sProxyTransport(k8sConfig *rest.Config, prometheusURL string) (*k8s
 	svcName := parts[0]
 	namespace := parts[1]
 
-	transport, err := rest.TransportFor(k8sConfig)
-	if err != nil {
-		return nil, err
+	if transport == nil {
+		return nil, errors.New("kubernetes transport is required")
 	}
 
 	transportWrapper := &k8sProxyTransport{
@@ -118,30 +129,70 @@ func (cm *ClusterManager) GetClientSet(clusterName, idToken string) (*ClientSet,
 	if err != nil || !cluster.Enable {
 		return nil, fmt.Errorf("cluster not found: %s", clusterName)
 	}
-	config, err := cm.userRESTConfig(cluster, idToken)
+	runtime, err := cm.runtimeForCluster(cluster)
 	if err != nil {
 		return nil, err
 	}
-	return newUserClientSet(cluster.Name, config, cluster.PrometheusURL)
+	httpClient := &http.Client{
+		Transport: kubetransport.NewBearerAuthRoundTripper(idToken, runtime.transport),
+	}
+	return newUserClientSet(cluster.Name, runtime.config, httpClient, cluster.PrometheusURL)
 }
 
-func (cm *ClusterManager) userRESTConfig(cluster *model.Cluster, idToken string) (*rest.Config, error) {
+func (cm *ClusterManager) runtimeForCluster(cluster *model.Cluster) (*clusterRuntime, error) {
+	config, generation, err := cm.baseRESTConfig(cluster)
+	if err != nil {
+		return nil, err
+	}
+	kube.PrepareConfig(config)
+	signature := clusterRuntimeSignature(cluster, config, generation)
+
+	cm.runtimeMu.Lock()
+	defer cm.runtimeMu.Unlock()
+	if cm.runtimes == nil {
+		cm.runtimes = make(map[uint]*clusterRuntime)
+	}
+	if existing := cm.runtimes[cluster.ID]; existing != nil && existing.signature == signature {
+		return existing, nil
+	}
+	transportFor := cm.transportFor
+	if transportFor == nil {
+		transportFor = rest.TransportFor
+	}
+	transport, err := transportFor(config)
+	if err != nil {
+		return nil, fmt.Errorf("create shared Kubernetes transport: %w", err)
+	}
+	runtime := &clusterRuntime{
+		signature: signature,
+		config:    rest.CopyConfig(config),
+		transport: transport,
+	}
+	if existing := cm.runtimes[cluster.ID]; existing != nil {
+		closeIdleConnections(existing.transport)
+	}
+	cm.runtimes[cluster.ID] = runtime
+	return runtime, nil
+}
+
+func (cm *ClusterManager) baseRESTConfig(cluster *model.Cluster) (*rest.Config, uint64, error) {
 	var config *rest.Config
+	var generation uint64
 	if cluster.ClusterAgent || cluster.ConnectionMode == "tunnel" {
 		var err error
-		config, _, err = cm.clusterAgentManager.RESTConfig(cluster.ID)
+		config, generation, err = cm.clusterAgentManager.RESTConfig(cluster.ID)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 	} else {
 		if cluster.APIServerURL == "" {
-			return nil, errors.New("cluster API server URL is missing")
+			return nil, 0, errors.New("cluster API server URL is missing")
 		}
 		caData := []byte(cluster.CABundle)
 		if cluster.CABundle != "" && !strings.Contains(cluster.CABundle, "BEGIN CERTIFICATE") {
 			decoded, err := base64.StdEncoding.DecodeString(cluster.CABundle)
 			if err != nil {
-				return nil, errors.New("cluster CA bundle must be PEM or base64-encoded PEM")
+				return nil, 0, errors.New("cluster CA bundle must be PEM or base64-encoded PEM")
 			}
 			caData = decoded
 		}
@@ -154,7 +205,7 @@ func (cm *ClusterManager) userRESTConfig(cluster *model.Cluster, idToken string)
 		}
 	}
 	config = rest.CopyConfig(config)
-	config.BearerToken = idToken
+	config.BearerToken = ""
 	config.BearerTokenFile = ""
 	config.Username = ""
 	config.Password = ""
@@ -162,32 +213,63 @@ func (cm *ClusterManager) userRESTConfig(cluster *model.Cluster, idToken string)
 	config.KeyData = nil
 	config.CertFile = ""
 	config.KeyFile = ""
-	return config, nil
+	return config, generation, nil
 }
 
-func newUserClientSet(name string, config *rest.Config, prometheusURL string) (*ClientSet, error) {
-	k8sClient, err := kube.NewDirectClient(config)
+func clusterRuntimeSignature(cluster *model.Cluster, config *rest.Config, generation uint64) string {
+	payload := fmt.Sprintf("%d\x00%s\x00%s\x00%s\x00%t\x00%d\x00%x",
+		cluster.ID,
+		cluster.ConnectionMode,
+		config.Host,
+		config.ServerName,
+		config.Insecure,
+		generation,
+		config.CAData,
+	)
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(payload)))
+}
+
+func closeIdleConnections(transport http.RoundTripper) {
+	if closer, ok := transport.(interface{ CloseIdleConnections() }); ok {
+		closer.CloseIdleConnections()
+	}
+}
+
+func (cm *ClusterManager) invalidateRuntime(clusterID uint) {
+	cm.runtimeMu.Lock()
+	defer cm.runtimeMu.Unlock()
+	runtime := cm.runtimes[clusterID]
+	if runtime == nil {
+		return
+	}
+	delete(cm.runtimes, clusterID)
+	closeIdleConnections(runtime.transport)
+}
+
+func newUserClientSet(name string, config *rest.Config, httpClient *http.Client, prometheusURL string) (*ClientSet, error) {
+	k8sClient, err := kube.NewDirectClient(config, httpClient)
 	if err != nil {
 		return nil, err
 	}
 	clientSet := &ClientSet{Name: name, K8sClient: k8sClient, prometheusURL: prometheusURL}
-	if version, err := k8sClient.ClientSet.Discovery().ServerVersion(); err == nil {
-		clientSet.Version = version.String()
-	}
-	if prometheusURL != "" {
-		transport := http.DefaultTransport
-		if isClusterLocalURL(prometheusURL) {
-			if proxyTransport, err := createK8sProxyTransport(config, prometheusURL); err == nil {
-				transport = proxyTransport
-			}
+	if prometheusURL != "" && isClusterLocalURL(prometheusURL) {
+		proxyTransport, err := createK8sProxyTransport(config, httpClient.Transport, prometheusURL)
+		if err != nil {
+			return nil, fmt.Errorf("create Kubernetes-authorized Prometheus transport: %w", err)
 		}
-		clientSet.PromClient, _ = prometheus.NewClientWithRoundTripper(prometheusURL, transport)
+		clientSet.PromClient, err = prometheus.NewClientWithRoundTripper(prometheusURL, proxyTransport)
+		if err != nil {
+			return nil, fmt.Errorf("create Prometheus client: %w", err)
+		}
 	}
 	return clientSet, nil
 }
 
 func NewClusterManager() (*ClusterManager, error) {
-	cm := new(ClusterManager)
+	cm := &ClusterManager{
+		runtimes:     make(map[uint]*clusterRuntime),
+		transportFor: rest.TransportFor,
+	}
 	cm.clusterAgentManager = clusteragent.NewManager(func() {})
 	return cm, nil
 }

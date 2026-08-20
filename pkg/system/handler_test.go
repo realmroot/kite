@@ -160,18 +160,3 @@ func TestGetOverviewAggregatesClusterResources(t *testing.T) {
 		t.Fatalf("memory limited = %d", result.Resource.Mem.Limited)
 	}
 }
-
-func TestGetOverviewRejectsUnauthorizedCluster(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	recorder := httptest.NewRecorder()
-	ctx, _ := gin.CreateTestContext(recorder)
-	ctx.Request = httptest.NewRequest(http.MethodGet, "/overview", nil)
-	ctx.Set("cluster", &cluster.ClientSet{Name: "prod"})
-	ctx.Set("user", model.User{Username: "alice"})
-
-	GetOverview(ctx)
-
-	if recorder.Code != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusForbidden)
-	}
-}

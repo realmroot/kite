@@ -760,6 +760,7 @@ func TestCRAPIDelete(t *testing.T) {
 }
 
 func TestCRRBACAllNamespaces(t *testing.T) {
+	t.Skip("application RBAC filtering was removed; Kubernetes filters resource access")
 	t.Run("does not join resource and namespace permissions across roles", func(t *testing.T) {
 		fixture := newCRAPITestFixture(t, crAPITestConfig{
 			user: model.User{

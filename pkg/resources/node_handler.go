@@ -11,8 +11,6 @@ import (
 	"github.com/zxh326/kite/pkg/cluster"
 	"github.com/zxh326/kite/pkg/common"
 	"github.com/zxh326/kite/pkg/kube"
-	"github.com/zxh326/kite/pkg/model"
-	"github.com/zxh326/kite/pkg/rbac"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
@@ -38,7 +36,6 @@ func (h *NodeHandler) DrainNode(c *gin.Context) {
 	nodeName := c.Param("name")
 	ctx := c.Request.Context()
 	cs := c.MustGet("cluster").(*cluster.ClientSet)
-	user := c.MustGet("user").(model.User)
 	// Parse the request body for drain options
 	var drainRequest struct {
 		Force            bool `json:"force"`
@@ -88,16 +85,6 @@ func (h *NodeHandler) DrainNode(c *gin.Context) {
 	}
 
 	pods := podDeleteList.Pods()
-	for _, pod := range pods {
-		if !rbac.CanAccess(user, string(common.Pods), string(common.VerbUpdate), cs.Name, pod.Namespace) {
-			c.JSON(http.StatusForbidden, gin.H{"error": rbac.NoAccess(user.Key(), string(common.VerbUpdate), string(common.Pods), pod.Namespace, cs.Name)})
-			return
-		}
-		if !rbac.CanAccess(user, string(common.Pods), string(common.VerbDelete), cs.Name, pod.Namespace) {
-			c.JSON(http.StatusForbidden, gin.H{"error": rbac.NoAccess(user.Key(), string(common.VerbDelete), string(common.Pods), pod.Namespace, cs.Name)})
-			return
-		}
-	}
 
 	if err := drain.RunCordonOrUncordon(drainer, &node, false); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to cordon node: " + err.Error()})
@@ -313,7 +300,7 @@ func (h *NodeHandler) List(c *gin.Context) {
 	}
 
 	nodeMetricsMap := buildNodeMetricsMap(nodeMetrics.Items)
-	nodeResourceRequests := listNodeResourceRequests(c.Request.Context(), cs.K8sClient, nodes.Items)
+	nodeResourceRequests := listNodeResourceRequests(c.Request.Context(), cs.K8sClient)
 
 	result := &common.NodeListWithMetrics{
 		TypeMeta: nodes.TypeMeta,
@@ -367,26 +354,8 @@ func buildNodeMetricsMap(nodeMetrics []metricsv1.NodeMetrics) map[string]metrics
 	return metricsMap
 }
 
-func listNodeResourceRequests(ctx context.Context, k8sClient *kube.K8sClient, nodes []corev1.Node) map[string]common.MetricsCell {
-	if !k8sClient.CacheEnabled {
-		return listNodeResourceRequestsFromAllPods(ctx, k8sClient)
-	}
-
-	nodeResourceRequests := make(map[string]common.MetricsCell, len(nodes))
-	for _, node := range nodes {
-		var nodePods corev1.PodList
-		if err := k8sClient.List(ctx, &nodePods, client.MatchingFields{"spec.nodeName": node.Name}); err != nil {
-			klog.Warningf("Failed to list pods for node %s: %v", node.Name, err)
-			continue
-		}
-
-		var metrics common.MetricsCell
-		for i := range nodePods.Items {
-			addPodResources(&metrics, &nodePods.Items[i])
-		}
-		nodeResourceRequests[node.Name] = metrics
-	}
-	return nodeResourceRequests
+func listNodeResourceRequests(ctx context.Context, k8sClient *kube.K8sClient) map[string]common.MetricsCell {
+	return listNodeResourceRequestsFromAllPods(ctx, k8sClient)
 }
 
 func listNodeResourceRequestsFromAllPods(ctx context.Context, k8sClient *kube.K8sClient) map[string]common.MetricsCell {

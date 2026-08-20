@@ -43,25 +43,13 @@ func (cm *ClusterManager) GetClusters(c *gin.Context) {
 		return
 	}
 	result := make([]common.ClusterInfo, 0, len(clusters))
-	idToken := c.GetString("oidc-id-token")
 	for _, cluster := range clusters {
 		if !cluster.Enable {
 			continue
 		}
-		version := ""
-		errorMessage := ""
-		clientSet, err := cm.GetClientSet(cluster.Name, idToken)
-		if err != nil {
-			errorMessage = err.Error()
-		} else {
-			version = clientSet.Version
-			clientSet.K8sClient.Stop(cluster.Name)
-		}
 		result = append(result, common.ClusterInfo{
 			Name:      cluster.Name,
-			Version:   version,
 			IsDefault: cluster.IsDefault,
-			Error:     errorMessage,
 		})
 	}
 	sort.Slice(result, func(i, j int) bool {
@@ -277,6 +265,7 @@ func (cm *ClusterManager) UpdateCluster(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	cm.invalidateRuntime(cluster.ID)
 
 	c.JSON(http.StatusOK, gin.H{"message": "cluster updated successfully"})
 }
@@ -313,6 +302,7 @@ func (cm *ClusterManager) DeleteCluster(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	cm.invalidateRuntime(cluster.ID)
 	if cluster.ClusterAgent {
 		cm.clusterAgentManager.Disconnect(cluster.ID)
 	}

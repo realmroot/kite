@@ -14,7 +14,6 @@ import (
 	"github.com/zxh326/kite/pkg/common"
 	"github.com/zxh326/kite/pkg/helmutil"
 	"github.com/zxh326/kite/pkg/model"
-	"github.com/zxh326/kite/pkg/rbac"
 	"github.com/zxh326/kite/pkg/scheduler"
 	"gorm.io/gorm"
 	"helm.sh/helm/v4/pkg/action"
@@ -428,7 +427,6 @@ func (h *HelmReleaseHandler) recordHistory(c *gin.Context, opType, name, namespa
 
 func (h *HelmReleaseHandler) list(c *gin.Context, namespace string, details bool) (*helmutil.HelmReleaseList, error) {
 	cs := c.MustGet("cluster").(*cluster.ClientSet)
-	user := c.MustGet("user").(model.User)
 	allNamespaces := namespace == "" || namespace == common.AllNamespaces
 	cfg, err := h.actionConfigForClientSet(cs, helmutil.StorageNamespace(namespace))
 	if err != nil {
@@ -441,9 +439,6 @@ func (h *HelmReleaseHandler) list(c *gin.Context, namespace string, details bool
 
 	items := make([]helmutil.HelmRelease, 0, len(releases))
 	for _, rel := range releases {
-		if allNamespaces && !rbac.CanAccess(user, string(common.HelmReleases), string(common.VerbGet), cs.Name, rel.Namespace) {
-			continue
-		}
 		items = append(items, helmutil.ToHelmRelease(rel, details))
 	}
 	return &helmutil.HelmReleaseList{TypeMeta: metav1.TypeMeta{Kind: "HelmReleaseList", APIVersion: "v1"}, Items: items}, nil

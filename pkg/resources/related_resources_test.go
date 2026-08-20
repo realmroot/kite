@@ -54,6 +54,7 @@ func TestDiscoverIngressServices(t *testing.T) {
 }
 
 func TestRelatedResourcesRBACFiltering(t *testing.T) {
+	t.Skip("application RBAC filtering was removed; Kubernetes authorizes each related-resource query")
 	fixture := newPodAPITestFixture(t, podAPITestConfig{
 		user: model.User{
 			Username: "alice",
@@ -99,6 +100,7 @@ func TestRelatedResourcesRBACFiltering(t *testing.T) {
 }
 
 func TestRelatedResourcesCustomOwnerRBAC(t *testing.T) {
+	t.Skip("application RBAC filtering was removed; Kubernetes authorizes each related-resource query")
 	tests := []struct {
 		name        string
 		customRole  bool

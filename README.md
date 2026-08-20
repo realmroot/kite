@@ -30,6 +30,8 @@ RoleBindings and ClusterRoleBindings.
 
 See the [OIDC Kubernetes architecture](docs/oidc-kubernetes.md). Provider-specific
 configuration belongs under `examples/` and never enters the core runtime.
+The backend also provides a transparent [Kubernetes API gateway](docs/kubernetes-api-gateway.md)
+for moving UI data access onto canonical Kubernetes resource APIs.
 
 <img width="1586" height="1167" alt="image" src="https://github.com/user-attachments/assets/5710204d-5d34-44af-85dc-3b436e205c12" />
 
@@ -45,7 +47,7 @@ configuration belongs under `examples/` and never enters the core runtime.
 ### Multi-Cluster Management
 
 - Switch between multiple Kubernetes clusters
-- Independent Prometheus configuration per cluster
+- Kubernetes-authorized in-cluster Prometheus service proxy per cluster
 - Direct and private-tunnel connectivity without stored Kubernetes credentials
 - Add, edit, switch, and remove credential-free cluster catalog entries
 

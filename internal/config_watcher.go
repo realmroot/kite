@@ -9,7 +9,6 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/zxh326/kite/pkg/common"
-	"github.com/zxh326/kite/pkg/rbac"
 	"k8s.io/klog/v2"
 )
 
@@ -133,9 +132,6 @@ func reloadConfigFileIfChanged(path string, lastHash [sha256.Size]byte, hasHash 
 }
 
 func notifyConfigReload(sections AppliedSections) {
-	if sections["rbac"] || sections["superUser"] {
-		rbac.TriggerSync()
-	}
 }
 
 func isConfigFileEvent(configPath string, event fsnotify.Event) bool {

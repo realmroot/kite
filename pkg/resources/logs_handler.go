@@ -8,8 +8,6 @@ import (
 	"github.com/zxh326/kite/pkg/cluster"
 	"github.com/zxh326/kite/pkg/common"
 	"github.com/zxh326/kite/pkg/kube"
-	"github.com/zxh326/kite/pkg/model"
-	"github.com/zxh326/kite/pkg/rbac"
 	"github.com/zxh326/kite/pkg/wsutil"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -31,16 +29,10 @@ func (h *LogsHandler) HandleLogsWebSocket(c *gin.Context) {
 	wsutil.Serve(c.Writer, c.Request, func(ws *wsutil.Session) {
 		ctx := ws.Context
 		cs := c.MustGet("cluster").(*cluster.ClientSet)
-		user := c.MustGet("user").(model.User)
 		namespace := c.Param("namespace")
 		podName := c.Param("podName")
 		if namespace == "" || podName == "" {
 			ws.SendErrorMessage("namespace and podName are required")
-			return
-		}
-
-		if !rbac.CanAccess(user, string(common.Pods), "log", cs.Name, namespace) {
-			ws.SendErrorMessage(rbac.NoAccess(user.Key(), string(common.VerbLog), string(common.Pods), namespace, cs.Name))
 			return
 		}
 

@@ -18,9 +18,7 @@ var errInvalidCredentials = errors.New("invalid credentials")
 
 func NewAuthHandler() *AuthHandler {
 	return &AuthHandler{
-		manager: NewOAuthManager(),
-		oidc:    &oidcAuthenticator{},
-		ldap:    NewLDAPAuthenticator(),
+		oidc: &oidcAuthenticator{},
 	}
 }
 

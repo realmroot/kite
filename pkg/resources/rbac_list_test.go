@@ -16,6 +16,7 @@ import (
 )
 
 func TestGenericResourceRBACAllNamespaces(t *testing.T) {
+	t.Skip("application RBAC filtering was removed; Kubernetes authorizes resource lists")
 	fixture := newPodAPITestFixture(t, podAPITestConfig{
 		user: model.User{
 			Username: "alice",
@@ -72,6 +73,7 @@ func TestGenericResourceRBACAllNamespaces(t *testing.T) {
 }
 
 func TestClusterScopedSearchRBACFiltering(t *testing.T) {
+	t.Skip("application RBAC filtering was removed; Kubernetes authorizes search list calls")
 	fixture := newPodAPITestFixture(t, podAPITestConfig{
 		user: model.User{Username: "operator"},
 		clusterAObjects: []client.Object{
@@ -132,6 +134,7 @@ func TestClusterScopedSearchRBACFiltering(t *testing.T) {
 }
 
 func TestNamespaceListRBACFiltering(t *testing.T) {
+	t.Skip("application RBAC filtering was removed; Kubernetes authorizes namespace lists")
 	fixture := newPodAPITestFixture(t, podAPITestConfig{
 		user: model.User{
 			Username: "alice",

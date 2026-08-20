@@ -58,8 +58,7 @@ func newFakeClientSet(t *testing.T, objs ...client.Object) *cluster.ClientSet {
 
 	return &cluster.ClientSet{
 		K8sClient: &kube.K8sClient{
-			Client:       fakeClient,
-			CacheEnabled: true,
+			Client: fakeClient,
 		},
 	}
 }
@@ -80,8 +79,7 @@ func newFakeClientSetUncached(t *testing.T, objs ...client.Object) *cluster.Clie
 
 	return &cluster.ClientSet{
 		K8sClient: &kube.K8sClient{
-			Client:       fakeClient,
-			CacheEnabled: false,
+			Client: fakeClient,
 		},
 	}
 }

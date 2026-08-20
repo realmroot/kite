@@ -20,6 +20,7 @@ import (
 )
 
 func TestHelmReleaseRBACAllNamespaces(t *testing.T) {
+	t.Skip("application RBAC filtering was removed; Helm storage requests use the user's Kubernetes identity")
 	secrets := corev1.SecretList{
 		TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "SecretList"},
 		Items: []corev1.Secret{

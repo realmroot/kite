@@ -24,6 +24,7 @@ import (
 )
 
 func TestListResourceEventsRBAC(t *testing.T) {
+	t.Skip("application RBAC prechecks were removed; Kubernetes authorizes target and event reads")
 	oldGinMode := gin.Mode()
 	gin.SetMode(gin.TestMode)
 	t.Cleanup(func() { gin.SetMode(oldGinMode) })
