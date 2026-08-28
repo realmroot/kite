@@ -50,10 +50,7 @@ var (
 	OIDCPictureClaim      = "picture"
 	PlatformAdminGroups   []string
 	PlatformAdminSubjects []string
-	ResourceServerURL     = ""
-	ResourceServerIssuer  = ""
-	ResourceServerClients []string
-	ResourceServerJWTAlgs = []string{"RS256"}
+	ClusterGatewayURL     = ""
 	DBType                = "sqlite"
 	DBDSN                 = "dev.db?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)"
 
@@ -143,7 +140,7 @@ func LoadEnvs() {
 
 	ClusterAgentImage = strings.TrimSpace(os.Getenv("CLUSTER_AGENT_IMAGE"))
 	loadOIDCEnvs()
-	loadResourceServerEnvs()
+	ClusterGatewayURL = strings.TrimRight(strings.TrimSpace(os.Getenv("CLUSTER_GATEWAY_URL")), "/")
 	loadDatabaseEnvs()
 
 	if key := os.Getenv("KITE_ENCRYPT_KEY"); key != "" {
@@ -201,20 +198,6 @@ func LoadEnvs() {
 		}
 	}
 	klog.Infof("Trusted proxies configured: %v", TrustedProxies)
-}
-
-func loadResourceServerEnvs() {
-	ResourceServerURL = strings.TrimRight(strings.TrimSpace(os.Getenv("RESOURCE_SERVER_URL")), "/")
-	ResourceServerIssuer = strings.TrimRight(strings.TrimSpace(os.Getenv("RESOURCE_SERVER_ISSUER")), "/")
-	ResourceServerClients = splitConfigList(os.Getenv("RESOURCE_SERVER_AUTHORIZED_CLIENT_IDS"))
-	ResourceServerJWTAlgs = []string{"RS256"}
-	if algorithms := splitConfigList(os.Getenv("RESOURCE_SERVER_JWT_ALGORITHMS")); len(algorithms) != 0 {
-		ResourceServerJWTAlgs = algorithms
-	}
-}
-
-func ResourceServerEnabled() bool {
-	return ResourceServerURL != ""
 }
 
 func AnalyticsConfigured() bool {

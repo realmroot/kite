@@ -19,7 +19,6 @@ type: Opaque
 stringData:
   # Replace every placeholder before applying this manifest.
   OIDC_CLIENT_ID: replace-me
-  OIDC_CLIENT_SECRET: replace-me
   KITE_ENCRYPT_KEY: replace-with-an-independent-random-secret
   JWT_SECRET: replace-with-another-independent-random-secret
 ---
@@ -93,13 +92,9 @@ spec:
               value: groups
             - name: PLATFORM_ADMIN_GROUPS
               value: kite-platform-admins
-            # Optional standards-based Resource Server for external tools.
-            - name: RESOURCE_SERVER_URL
-              value: https://kite.example.com/api/agent/v1
-            - name: RESOURCE_SERVER_ISSUER
-              value: https://identity.example.com
-            - name: RESOURCE_SERVER_AUTHORIZED_CLIENT_IDS
-              value: agent-protocol-client
+            # Shared credential-free cluster catalog and Kubernetes gateway.
+            - name: CLUSTER_GATEWAY_URL
+              value: https://clusters.example.com
             - name: HOST
               value: https://kite.example.com
             - name: DB_TYPE

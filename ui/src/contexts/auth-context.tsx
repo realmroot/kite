@@ -38,7 +38,10 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
-const defaultCapabilities: BootstrapCapabilities = { kubectlEnabled: false }
+const defaultCapabilities: BootstrapCapabilities = {
+  kubectlEnabled: false,
+  clusterGatewayEnabled: false,
+}
 
 export function useAuth() {
   const context = useContext(AuthContext)

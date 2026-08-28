@@ -3,10 +3,10 @@
 Status: normative for this fork.
 
 This fork is a Kubernetes client. It does not own human identity, Kubernetes
-authorization, or an AI agent runtime. A standards-based OAuth Resource Server
-for external tools is a later architecture stage, not part of the current
-browser-product contract. Implementation, migrations, tests, documentation,
-and shipped UI must follow the decisions below.
+authorization, an AI agent runtime, or an OAuth Resource Server. Cluster Access
+Gateway owns the shared cluster directory, Agent Resource Server, and
+Agent-attributed Kubernetes execution. Implementation, migrations, tests,
+documentation, and shipped UI must follow the decisions below.
 
 ## Product scope
 
@@ -30,28 +30,27 @@ and compatibility validation, not a product rewrite or a new hard-coded model.
    PKCE. Issuer-specific claims or proprietary provider behavior are forbidden
    in the browser authentication path.
 2. Kite keeps an opaque browser session and encrypted upstream tokens. It sends
-   the signed-in user's ID token to the selected Kubernetes API server. It never
+   the signed-in user's ID token through the selected Gateway access URL to the
+   Kubernetes API server. It never
    replaces that identity with a shared kubeconfig, bearer token, client
    certificate, ServiceAccount, or Kubernetes impersonation headers.
 3. Kubernetes authenticates the OIDC token and is the sole authority for
    Kubernetes API permissions. A RoleBinding may target either an exact OIDC
    username/subject or a group; Kite does not require group-only authorization
    and does not reproduce Kubernetes RBAC in its database.
-4. Kite-owned objects (cluster connection metadata, templates, Helm repository
+4. Kite-owned objects (cluster projection metadata, templates, Helm repository
    metadata, UI preferences, and audit records) are not Kubernetes objects.
    Their management policy is deliberately separate from Kubernetes resource
    authorization. Platform-management access is derived from standard OIDC
    claims configured by the operator and may never grant additional Kubernetes
    permissions.
-5. Direct clusters store a display name, API server URL, optional CA bundle,
-   optional Prometheus URL, connection mode, and presentation metadata only.
-   Tunnel clusters additionally store transport registration material. They do
-   not store Kubernetes credentials. The tunnel agent only transports bytes;
-   the user's token remains the Kubernetes request credential.
-6. Machine and Agent access uses a separate standards-based OAuth Resource
-   Server surface with RFC 9728 metadata, OpenAPI, DPoP verification, RFC 8693
-   actor attribution, and explicit operation scopes. Kite API keys and embedded
-   agent loops remain forbidden.
+5. Cluster Access Gateway owns direct and tunnel connection metadata. Kite keeps
+   a credential-free local projection only to preserve stable resource-history
+   keys and UI state. The user's token remains the Kubernetes request
+   credential.
+6. Machine and Agent access uses the Gateway's standards-based OAuth Resource
+   Server. Kite contains no DPoP verifier, replay store, Agent execution
+   credential, API key, or embedded Agent loop.
 
 ## Explicitly removed now
 
@@ -71,6 +70,8 @@ documentation, except for migration notes that explicitly state their removal:
 - Cluster kubeconfig import that retains credentials, shared bearer tokens,
   client certificates, privileged ServiceAccounts, and Kubernetes
   impersonation.
+- Kite-local OAuth Resource Server routes, DPoP replay state, Agent access-token
+  verification, and Agent Kubernetes execution.
 
 No other original product capability belongs in this list by inference. Moving
 an existing capability here requires an explicit product decision and a
@@ -101,19 +102,11 @@ Kubernetes-native, but they must not be removed as architectural cleanup.
 
 ## External tools
 
-Kite is a standards-based OAuth Resource Server so external tools can operate
-Kubernetes resources without an embedded Agent loop. The approved contract is:
-
-- the exact protected Resource is configured per deployment and ends at the
-  versioned `/api/agent/v1` boundary;
-- `clusters:read`, `kubernetes:read`, and `kubernetes:write` form the operation
-  scope vocabulary and never grant authority denied by Kubernetes RBAC;
-- the token `sub` is the controlling subject and RFC 8693 `act` is the stable
-  Agent actor recorded by Kite;
-- the exact Resource exposes RFC 9728 metadata and a linked OpenAPI contract.
-
-The implementation must remain authorization-server-neutral. Provider names,
-issuer-specific claims, or proprietary token behavior do not belong in Kite.
+External tools discover and call Cluster Access Gateway directly. Kite can
+display the Gateway's Agent audit events but does not terminate Agent OAuth
+tokens or proxy Agent traffic. The dashboards and Agents share Cluster
+Inventory and canonical Kubernetes resource identity without sharing an
+authentication credential.
 
 ## Preserve pending review
 
@@ -164,7 +157,7 @@ A release is blocked until all of the following pass:
 - Documentation and deployment examples describe only the shipped architecture
   and do not instruct operators to provide Kite with cluster-admin credentials.
 
-When the external-tools milestone is approved for a release, its acceptance
-gate additionally includes Resource Server metadata, OpenAPI/scopes, token
-validation, DPoP and replay rejection, actor attribution, and negative
-authorization conformance tests.
+The system acceptance suite additionally verifies the Gateway's Resource Server
+metadata, OpenAPI/scopes, token validation, DPoP replay rejection, actor
+attribution, Kubernetes impersonation boundary, and negative authorization
+paths.

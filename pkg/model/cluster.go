@@ -4,6 +4,9 @@ import "gorm.io/gorm"
 
 type Cluster struct {
 	Model
+	CatalogSource          string       `json:"-" gorm:"type:varchar(32);uniqueIndex:idx_cluster_catalog_identity,priority:1,where:catalog_source <> ''"`
+	CatalogID              string       `json:"-" gorm:"type:varchar(63);uniqueIndex:idx_cluster_catalog_identity,priority:2,where:catalog_source <> ''"`
+	CatalogResourceVersion uint64       `json:"-" gorm:"not null;default:0"`
 	Name                   string       `json:"name" gorm:"type:varchar(100);uniqueIndex;not null"`
 	Description            string       `json:"description" gorm:"type:text"`
 	APIServerURL           string       `json:"apiServerUrl" gorm:"type:text"`

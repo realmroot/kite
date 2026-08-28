@@ -28,7 +28,9 @@
       "jumpToBottom": "跳到底部",
       "moveDown": "下移",
       "moveUp": "上移",
+      "next": "下一页",
       "patch": "Patch",
+      "previous": "上一页",
       "refresh": "刷新",
       "remove": "移除",
       "restart": "重启",
@@ -56,6 +58,7 @@
       "allocatable": "Allocatable",
       "annotations": "注解",
       "architecture": "架构",
+      "actor": "执行主体",
       "auditLogs": "审计日志",
       "available": "可用",
       "availableReplicas": "可用副本",
@@ -654,6 +657,11 @@
       "clusters": "集群",
       "templates": "模板",
       "audit": "审计"
+    },
+    "gatewayAudit": {
+      "title": "Gateway 访问审计",
+      "description": "查看 Cluster Access Gateway 记录的用户与 Agent 请求",
+      "empty": "暂无 Gateway 访问事件"
     }
   },
   "generalManagement": {

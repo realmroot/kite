@@ -9,8 +9,8 @@ Chart 部署的 Kite 不挂载 ServiceAccount token，也不会为 Dashboard 的
 | --- | --- |
 | `image.repository` | 从源码渲染 Chart 时必须显式设置的镜像仓库 |
 | `oidc.issuer` | 标准 OpenID Connect issuer URL |
-| `oidc.clientId` | 机密 Web Client ID |
-| `oidc.clientSecret` | Client Secret |
+| `oidc.clientId` | 公开 PKCE 或机密 Client ID |
+| `oidc.clientSecret` | 可选的机密 Client Secret；公开 PKCE Client 留空 |
 | `platformAdminGroups` | 可管理 Kite 自有共享数据的 group；group 含空格、逗号或其他标点时使用 JSON 字符串数组 |
 | `platformAdminSubjects` | 具有相同平台权限的精确 OIDC `sub`；同样支持 JSON 字符串数组 |
 | `encryptKey` | 加密服务端提供方 token 的随机密钥 |
@@ -25,8 +25,8 @@ Chart 部署的 Kite 不挂载 ServiceAccount token，也不会为 Dashboard 的
 只读方式挂载，并自动设置 `OIDC_CA_FILE`。
 
 生产环境建议使用 `secret.create=false` 和 `secret.existingSecret`。已有
-Secret 必须包含 `OIDC_CLIENT_ID`、`OIDC_CLIENT_SECRET`、
-`KITE_ENCRYPT_KEY`、`JWT_SECRET`，以及需要的数据库配置。
+Secret 必须包含 `OIDC_CLIENT_ID`、`KITE_ENCRYPT_KEY`、`JWT_SECRET`，以及需要的
+数据库配置。只有机密客户端才需要 `OIDC_CLIENT_SECRET`。
 
 ## 运行与暴露
 

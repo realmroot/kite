@@ -11,13 +11,30 @@ import (
 	"testing"
 	"time"
 
+	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"github.com/zxh326/kite/pkg/common"
 	"github.com/zxh326/kite/pkg/model"
+	"golang.org/x/oauth2"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
+
+func TestOIDCConfiguredSupportsPublicPKCEClient(t *testing.T) {
+	previousIssuer, previousID, previousSecret := common.OIDCIssuer, common.OIDCClientID, common.OIDCClientSecret
+	common.OIDCIssuer, common.OIDCClientID, common.OIDCClientSecret = "https://identity.example.com", "public-client", ""
+	t.Cleanup(func() {
+		common.OIDCIssuer, common.OIDCClientID, common.OIDCClientSecret = previousIssuer, previousID, previousSecret
+	})
+	if !oidcConfigured() {
+		t.Fatal("public Authorization Code + PKCE client should be configured without a secret")
+	}
+	config := oidcOAuthConfig(&oidc.Provider{}, "http://localhost/callback")
+	if config.Endpoint.AuthStyle != oauth2.AuthStyleInParams {
+		t.Fatalf("public client auth style = %v", config.Endpoint.AuthStyle)
+	}
+}
 
 func TestOIDCCustomCATrustsPrivateIssuer(t *testing.T) {
 	server := httptest.NewTLSServer(nil)

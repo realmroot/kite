@@ -647,6 +647,33 @@ export interface Cluster {
   error?: string
 }
 
+export interface GatewayAuditEvent {
+  id: number
+  createdAt: string
+  requestId: string
+  tokenId?: string
+  principalType: 'user' | 'agent'
+  controllerSubject?: string
+  agentIssuer?: string
+  agentSubject?: string
+  userSubject?: string
+  clientId?: string
+  scopes?: string
+  clusterId: string
+  method: string
+  path: string
+  status: number
+  durationMillis: number
+}
+
+export interface GatewayAuditPage {
+  items: GatewayAuditEvent[]
+  pagination: {
+    pageSize: number
+    nextPageToken?: string
+  }
+}
+
 // Resource History types
 export interface ResourceHistory {
   id: number

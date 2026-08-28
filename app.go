@@ -18,7 +18,6 @@ import (
 	"github.com/zxh326/kite/pkg/common"
 	"github.com/zxh326/kite/pkg/middleware"
 	"github.com/zxh326/kite/pkg/model"
-	"github.com/zxh326/kite/pkg/resourceapi"
 	"github.com/zxh326/kite/pkg/scheduler"
 	"github.com/zxh326/kite/pkg/templates"
 	"k8s.io/klog/v2"
@@ -26,19 +25,15 @@ import (
 )
 
 type application struct {
-	clusters    *cluster.ClusterManager
-	auth        *auth.AuthHandler
-	resourceAPI *resourceapi.Server
-	ready       atomic.Bool
+	clusters *cluster.ClusterManager
+	auth     *auth.AuthHandler
+	ready    atomic.Bool
 }
 
 func initializeApp(ctx context.Context) (*application, error) {
 	common.LoadEnvs()
 	controllerlog.SetLogger(klog.NewKlogr())
 	if err := validateOIDCConfiguration(); err != nil {
-		return nil, err
-	}
-	if err := validateResourceServerConfiguration(); err != nil {
 		return nil, err
 	}
 	if err := validateAnalyticsConfiguration(); err != nil {
@@ -80,39 +75,10 @@ func initializeApp(ctx context.Context) (*application, error) {
 		klog.Warningf("Failed to watch config file: %v", err)
 	}
 	authHandler := auth.NewAuthHandler()
-	var resourceAPI *resourceapi.Server
-	if common.ResourceServerEnabled() {
-		resourceAPI, err = resourceapi.New(ctx, common.ResourceServerURL, common.ResourceServerIssuer, common.ResourceServerClients, common.ResourceServerJWTAlgs, cm, model.DB)
-		if err != nil {
-			return nil, err
-		}
-	}
 	scheduler.Start(ctx, cm, authHandler)
-	app := &application{clusters: cm, auth: authHandler, resourceAPI: resourceAPI}
+	app := &application{clusters: cm, auth: authHandler}
 	app.ready.Store(true)
 	return app, nil
-}
-
-func validateResourceServerConfiguration() error {
-	if !common.ResourceServerEnabled() {
-		return nil
-	}
-	if common.ResourceServerIssuer == "" {
-		return errors.New("RESOURCE_SERVER_ISSUER is required when RESOURCE_SERVER_URL is set")
-	}
-	if len(common.ResourceServerClients) == 0 {
-		return errors.New("RESOURCE_SERVER_AUTHORIZED_CLIENT_IDS is required when RESOURCE_SERVER_URL is set")
-	}
-	if len(common.ResourceServerJWTAlgs) == 0 {
-		return errors.New("RESOURCE_SERVER_JWT_ALGORITHMS must contain at least one signing algorithm")
-	}
-	if err := validateExternalURL("RESOURCE_SERVER_URL", common.ResourceServerURL, true); err != nil {
-		return err
-	}
-	if err := validateExternalURL("RESOURCE_SERVER_ISSUER", common.ResourceServerIssuer, true); err != nil {
-		return err
-	}
-	return nil
 }
 
 func validateAnalyticsConfiguration() error {
@@ -133,8 +99,8 @@ func validateAnalyticsConfiguration() error {
 }
 
 func validateOIDCConfiguration() error {
-	if common.OIDCIssuer == "" || common.OIDCClientID == "" || common.OIDCClientSecret == "" {
-		return errors.New("OIDC_ISSUER, OIDC_CLIENT_ID, and OIDC_CLIENT_SECRET are required")
+	if common.OIDCIssuer == "" || common.OIDCClientID == "" {
+		return errors.New("OIDC_ISSUER and OIDC_CLIENT_ID are required")
 	}
 	if len(common.PlatformAdminGroups) == 0 && len(common.PlatformAdminSubjects) == 0 {
 		return errors.New("PLATFORM_ADMIN_GROUPS or PLATFORM_ADMIN_SUBJECTS must grant cluster catalog administration")
@@ -224,10 +190,6 @@ func buildEngine(app *application) *gin.Engine {
 	r.Use(gin.Recovery())
 	r.Use(middleware.Logger())
 	r.Use(middleware.DevCORS(common.CORSAllowedOrigins))
-	if app.resourceAPI != nil {
-		app.resourceAPI.Register(r)
-	}
-
 	base := r.Group(common.Base)
 	setupAPIRouter(base, app)
 	setupStatic(r)

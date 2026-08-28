@@ -1,13 +1,13 @@
 # OpenID Connect setup
 
-Kite is a confidential browser application using OpenID Connect Authorization
-Code with PKCE. Configure one issuer per deployment; there is no provider CRUD
-in the dashboard.
+Kite uses OpenID Connect Authorization Code with PKCE and supports both public
+and confidential clients. Configure one issuer per deployment; there is no
+provider CRUD in the dashboard.
 
 ## Register the client
 
-Create a confidential web client at any standards-compliant provider and
-register this exact redirect URI:
+Prefer a public client that requires PKCE at any standards-compliant provider,
+then register this exact redirect URI:
 
 ```text
 https://kite.example.com/api/auth/callback
@@ -21,7 +21,7 @@ not depend on forwarded headers.
 ```text
 OIDC_ISSUER=https://identity.example.com
 OIDC_CLIENT_ID=kite
-OIDC_CLIENT_SECRET=<secret>
+# OIDC_CLIENT_SECRET is omitted for a public PKCE client.
 OIDC_PROVIDER_NAME=Corporate Identity
 OIDC_SCOPES=openid profile email groups offline_access
 OIDC_USERNAME_CLAIM=email
@@ -39,6 +39,9 @@ The issuer must expose standard discovery metadata. `OIDC_SCOPES` must include
 refresh grant. `HOST` is a required HTTPS origin and is never inferred from
 forwarded request headers. The configured claim names are ordinary top-level
 ID-token claims; Kite contains no provider-specific claim logic.
+
+Set `OIDC_CLIENT_SECRET` only when the registered application is a confidential
+client. PKCE, state, and nonce are enforced in either mode.
 
 `PLATFORM_ADMIN_GROUPS` controls only Kite-owned shared metadata. Login is not
 restricted to those groups, and membership does not grant Kubernetes access.

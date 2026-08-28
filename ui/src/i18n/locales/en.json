@@ -28,7 +28,9 @@
       "jumpToBottom": "Jump to bottom",
       "moveDown": "Move down",
       "moveUp": "Move up",
+      "next": "Next",
       "patch": "Patch",
+      "previous": "Previous",
       "refresh": "Refresh",
       "remove": "Remove",
       "restart": "Restart",
@@ -56,6 +58,7 @@
       "allocatable": "Allocatable",
       "annotations": "Annotations",
       "architecture": "Architecture",
+      "actor": "Actor",
       "auditLogs": "Audit Logs",
       "available": "Available",
       "availableReplicas": "Available Replicas",
@@ -649,6 +652,11 @@
       "clusters": "Cluster",
       "templates": "Templates",
       "audit": "Audit"
+    },
+    "gatewayAudit": {
+      "title": "Gateway access audit",
+      "description": "Review user and Agent requests recorded by Cluster Access Gateway",
+      "empty": "No Gateway access events recorded"
     }
   },
   "generalManagement": {

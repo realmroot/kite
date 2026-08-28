@@ -81,6 +81,20 @@ for pattern in 'name: OIDC_CA_FILE' 'secretName: private-issuer-ca' 'mountPath: 
   fi
 done
 
+public_values=("${common_values[@]}")
+public_values+=(--set oidc.clientSecret=)
+helm template kite "$chart" --namespace kite-system "${public_values[@]}" >"$rendered"
+if rg -q 'OIDC_CLIENT_SECRET' "$rendered"; then
+  echo "public PKCE client unexpectedly rendered OIDC_CLIENT_SECRET" >&2
+  exit 1
+fi
+for pattern in 'name: OIDC_ISSUER' 'OIDC_CLIENT_ID:'; do
+  if ! rg -q "$pattern" "$rendered"; then
+    echo "public PKCE client is missing required OIDC wiring: $pattern" >&2
+    exit 1
+  fi
+done
+
 helm template kite "$chart" --namespace kite-system "${common_values[@]}" \
   --set secret.create=false \
   --set secret.existingSecret=kite-runtime \

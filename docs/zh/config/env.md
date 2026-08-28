@@ -4,7 +4,8 @@ Kite 默认支持一些环境变量，来改变一些配置项的默认值。
 
 - **KITE_CONFIG_FILE**：可选的无凭据集群目录配置文件路径。
 - **OIDC_ISSUER**：必填的 OpenID Connect issuer URL，Kite 使用标准 Discovery 获取端点和 JWKS。
-- **OIDC_CLIENT_ID** / **OIDC_CLIENT_SECRET**：必填的机密 Web 应用凭据。
+- **OIDC_CLIENT_ID**：必填的应用 Client ID；支持公开的 Authorization Code + PKCE 客户端。
+- **OIDC_CLIENT_SECRET**：可选的机密客户端 Secret；公开 PKCE 客户端不设置。
 - **OIDC_PROVIDER_NAME**：登录页显示名称，默认为 `OpenID Connect`。
 - **OIDC_SCOPES**：空格或逗号分隔的 Scope，必须包含 `openid` 和 `offline_access`；Helm 定时任务使用用户的 Refresh Grant。
 - **OIDC_USERNAME_CLAIM** / **OIDC_GROUPS_CLAIM**：映射用户名和 Kubernetes Group 的 Claim 名称，默认分别为 `email` 和 `groups`。

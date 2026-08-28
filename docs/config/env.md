@@ -4,17 +4,17 @@ Kite supports several environment variables by default to change the default val
 
 - **KITE_CONFIG_FILE**: Optional path to a credential-free cluster catalog configuration file.
 - **OIDC_ISSUER**: Required OpenID Connect issuer URL. Kite uses standard provider discovery.
-- **OIDC_CLIENT_ID** / **OIDC_CLIENT_SECRET**: Required confidential web application credentials.
+- **OIDC_CLIENT_ID**: Required application client ID. Public Authorization Code + PKCE clients are supported.
+- **OIDC_CLIENT_SECRET**: Optional confidential-client secret. Leave unset for a public PKCE client.
 - **OIDC_PROVIDER_NAME**: Login-page display name. Defaults to `OpenID Connect`.
 - **OIDC_SCOPES**: Space- or comma-separated scopes. Must contain `openid` and `offline_access`; scheduled Helm operations use the user's refresh grant.
 - **OIDC_USERNAME_CLAIM** / **OIDC_GROUPS_CLAIM**: Claims mapped to the local display identity and Kubernetes groups. Defaults to `email` and `groups`.
 - **OIDC_NAME_CLAIM** / **OIDC_PICTURE_CLAIM**: Optional profile claim names. Defaults to `name` and `picture`.
 - **PLATFORM_ADMIN_GROUPS**: Groups allowed to manage Kite-owned shared metadata. Comma/space-separated values remain supported; use a JSON string array such as `["operators,west","platform admins"]` to preserve claim values containing separators. This does not grant Kubernetes access.
 - **PLATFORM_ADMIN_SUBJECTS**: Exact OIDC `sub` values with the same platform access. It accepts the same legacy-list or JSON-array syntax and is useful when the issuer does not emit groups.
-- **RESOURCE_SERVER_URL**: Optional exact protected Resource identifier, for example `https://kite.example.com/api/agent/v1`. Setting it enables the external-tool API, RFC 9728 metadata, and OpenAPI discovery.
-- **RESOURCE_SERVER_ISSUER**: Authorization-server issuer accepted for Resource access tokens. Required when `RESOURCE_SERVER_URL` is set.
-- **RESOURCE_SERVER_AUTHORIZED_CLIENT_IDS**: Space- or comma-separated OAuth client IDs allowed to present delegated Resource tokens. Required when the Resource Server is enabled.
-- **RESOURCE_SERVER_JWT_ALGORITHMS**: Accepted access-token signing algorithms. Defaults to `RS256`.
+- **CLUSTER_GATEWAY_URL**: Optional Cluster Access Gateway root URL. When set,
+  the Gateway is the cluster directory and Kubernetes access endpoint. Kite
+  retains only a local metadata projection for resource-history identity.
 
 - **JWT_SECRET**: Secret key used for signing and verifying JWT
 - **KITE_ENCRYPT_KEY**: Secret key used to encrypt server-side OIDC tokens.

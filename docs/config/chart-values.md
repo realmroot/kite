@@ -10,8 +10,8 @@ bind users/groups in every target cluster separately.
 | --- | --- |
 | `image.repository` | Container repository; required when rendering the chart from source |
 | `oidc.issuer` | Standard OpenID Connect issuer URL |
-| `oidc.clientId` | Confidential web client ID |
-| `oidc.clientSecret` | Confidential web client secret |
+| `oidc.clientId` | Public PKCE or confidential client ID |
+| `oidc.clientSecret` | Optional confidential-client secret; empty for a public PKCE client |
 | `platformAdminGroups` | Groups allowed to manage Kite-owned shared metadata; use a JSON string array when a group contains spaces, commas, or other punctuation |
 | `platformAdminSubjects` | Exact OIDC `sub` values with the same platform access; accepts the same JSON string-array form |
 | `encryptKey` | Random key used to encrypt server-side provider tokens |
@@ -26,8 +26,9 @@ For a private issuer CA, create a Secret containing the PEM certificate and set
 read-only and configures `OIDC_CA_FILE`.
 
 For production, prefer `secret.create=false` and `secret.existingSecret`.
-The existing Secret must contain `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`,
-`KITE_ENCRYPT_KEY`, `JWT_SECRET`, and database keys when applicable.
+The existing Secret must contain `OIDC_CLIENT_ID`, `KITE_ENCRYPT_KEY`,
+`JWT_SECRET`, and database keys when applicable. Add `OIDC_CLIENT_SECRET` only
+for a confidential client.
 
 ## Runtime and exposure
 

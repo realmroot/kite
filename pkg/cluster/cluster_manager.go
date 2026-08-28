@@ -1,6 +1,7 @@
 package cluster
 
 import (
+	"context"
 	"crypto/sha256"
 	"errors"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/zxh326/kite/pkg/clusteragent"
+	"github.com/zxh326/kite/pkg/common"
 	"github.com/zxh326/kite/pkg/kube"
 	"github.com/zxh326/kite/pkg/model"
 	"github.com/zxh326/kite/pkg/prometheus"
@@ -31,6 +33,7 @@ type ClientSet struct {
 
 type ClusterManager struct {
 	clusterAgentManager *clusteragent.Manager
+	gatewayCatalog      *gatewayCatalog
 	runtimeMu           sync.Mutex
 	runtimes            map[uint]*clusterRuntime
 	transportFor        func(*rest.Config) (http.RoundTripper, error)
@@ -157,11 +160,19 @@ func (cm *ClusterManager) GetClientSet(clusterName, idToken string) (*ClientSet,
 		return nil, errors.New("OIDC ID token is required")
 	}
 	if clusterName == "" {
+		if cm.gatewayCatalog != nil {
+			if _, err := cm.syncGatewayCatalog(context.Background(), idToken); err != nil {
+				return nil, err
+			}
+		}
 		clusters, err := model.ListClusters()
 		if err != nil {
 			return nil, err
 		}
 		for _, candidate := range clusters {
+			if cm.gatewayCatalog != nil && candidate.CatalogSource != gatewayCatalogSource {
+				continue
+			}
 			if candidate.Enable && (clusterName == "" || candidate.IsDefault) {
 				clusterName = candidate.Name
 				if candidate.IsDefault {
@@ -173,9 +184,27 @@ func (cm *ClusterManager) GetClientSet(clusterName, idToken string) (*ClientSet,
 	if clusterName == "" {
 		return nil, errors.New("no clusters available")
 	}
-	cluster, err := model.GetClusterByName(clusterName)
+	var cluster *model.Cluster
+	var err error
+	if cm.gatewayCatalog != nil {
+		var projected model.Cluster
+		err = model.DB.Where("catalog_source = ? AND name = ?", gatewayCatalogSource, clusterName).First(&projected).Error
+		cluster = &projected
+	} else {
+		cluster, err = model.GetClusterByName(clusterName)
+	}
 	if err != nil || !cluster.Enable {
 		return nil, fmt.Errorf("cluster not found: %s", clusterName)
+	}
+	if cm.gatewayCatalog != nil && cluster.CatalogSource == gatewayCatalogSource {
+		remote, err := cm.gatewayCatalog.Get(context.Background(), idToken, cluster.CatalogID)
+		if err != nil {
+			return nil, err
+		}
+		cluster, err = cm.projectGatewayCluster(remote)
+		if err != nil {
+			return nil, err
+		}
 	}
 	runtime, err := cm.runtimeForCluster(cluster)
 	if err != nil {
@@ -338,6 +367,13 @@ func NewClusterManager() (*ClusterManager, error) {
 	cm := &ClusterManager{
 		runtimes:     make(map[uint]*clusterRuntime),
 		transportFor: rest.TransportFor,
+	}
+	if common.ClusterGatewayURL != "" {
+		catalog, err := newGatewayCatalog(common.ClusterGatewayURL)
+		if err != nil {
+			return nil, err
+		}
+		cm.gatewayCatalog = catalog
 	}
 	cm.clusterAgentManager = clusteragent.NewManager(func() {})
 	return cm, nil

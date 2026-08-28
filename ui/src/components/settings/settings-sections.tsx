@@ -3,6 +3,7 @@ import type { TFunction } from 'i18next'
 
 import { AuditLog } from './audit-log'
 import { ClusterManagement } from './cluster-management'
+import { GatewayAuditLog } from './gateway-audit-log'
 import { GeneralManagement } from './general-management'
 import { TemplateManagement } from './template-management'
 
@@ -11,6 +12,15 @@ export interface SettingsSectionDefinition {
   labelKey: string
   defaultLabel: string
   render: () => ReactNode
+}
+
+function renderAuditSection() {
+  return (
+    <div className="space-y-6">
+      <GatewayAuditLog />
+      <AuditLog />
+    </div>
+  )
 }
 
 function createSettingsSectionDefinition(
@@ -46,12 +56,12 @@ export const settingsSectionRegistry: SettingsSectionDefinition[] = [
     'Templates',
     TemplateManagement
   ),
-  createSettingsSectionDefinition(
-    'audit',
-    'settings.tabs.audit',
-    'Audit',
-    AuditLog
-  ),
+  {
+    value: 'audit',
+    labelKey: 'settings.tabs.audit',
+    defaultLabel: 'Audit',
+    render: renderAuditSection,
+  },
 ]
 
 export function createSettingsTabs(t: TFunction) {

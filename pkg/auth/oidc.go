@@ -118,7 +118,7 @@ func (a *oidcAuthenticator) discoveredProvider(ctx context.Context) (*oidc.Provi
 }
 
 func oidcConfigured() bool {
-	return common.OIDCIssuer != "" && common.OIDCClientID != "" && common.OIDCClientSecret != ""
+	return common.OIDCIssuer != "" && common.OIDCClientID != ""
 }
 
 func oidcRedirectURL() string {
@@ -126,10 +126,15 @@ func oidcRedirectURL() string {
 }
 
 func oidcOAuthConfig(provider *oidc.Provider, redirectURL string) oauth2.Config {
+	endpoint := provider.Endpoint()
+	if common.OIDCClientSecret == "" {
+		// Public PKCE clients authenticate with client_id in the token request body.
+		endpoint.AuthStyle = oauth2.AuthStyleInParams
+	}
 	return oauth2.Config{
 		ClientID:     common.OIDCClientID,
 		ClientSecret: common.OIDCClientSecret,
-		Endpoint:     provider.Endpoint(),
+		Endpoint:     endpoint,
 		RedirectURL:  redirectURL,
 		Scopes:       append([]string(nil), common.OIDCScopes...),
 	}

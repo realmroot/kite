@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 
-import { AuditLogResponse, Cluster } from '@/types/api'
+import { AuditLogResponse, Cluster, GatewayAuditPage } from '@/types/api'
 
 import { apiClient } from '../api-client'
 import { fetchAPI } from './shared'
@@ -42,6 +42,28 @@ export const useClusterList = (options?: {
     queryFn: fetchClusterList,
     staleTime: options?.staleTime ?? 30000, // 30 seconds cache
     refetchInterval: options?.refetchInterval,
+  })
+}
+
+export const fetchGatewayAuditEvents = (
+  pageToken = '',
+  pageSize = 20
+): Promise<GatewayAuditPage> => {
+  const params = new URLSearchParams({ pageSize: String(pageSize) })
+  if (pageToken) params.set('pageToken', pageToken)
+  return fetchAPI<GatewayAuditPage>(
+    `/admin/agent-audit-events?${params.toString()}`
+  )
+}
+
+export const useGatewayAuditEvents = (
+  pageToken = '',
+  options?: { enabled?: boolean }
+) => {
+  return useQuery({
+    queryKey: ['gateway-audit-events', pageToken],
+    queryFn: () => fetchGatewayAuditEvents(pageToken),
+    enabled: options?.enabled ?? true,
   })
 }
 

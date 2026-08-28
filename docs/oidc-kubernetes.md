@@ -37,8 +37,8 @@ used by the existing UI follow the same per-request identity rule.
 
 ```text
 OIDC_ISSUER=https://identity.example.com
-OIDC_CLIENT_ID=<confidential web application client ID>
-OIDC_CLIENT_SECRET=<client secret>
+OIDC_CLIENT_ID=<public PKCE or confidential client ID>
+# OIDC_CLIENT_SECRET=<optional confidential-client secret>
 OIDC_PROVIDER_NAME=Corporate Identity
 OIDC_SCOPES=openid profile email groups offline_access
 OIDC_USERNAME_CLAIM=email

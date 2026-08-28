@@ -98,15 +98,9 @@ spec:
               value: {{ .Values.platformAdminGroups | quote }}
             - name: PLATFORM_ADMIN_SUBJECTS
               value: {{ .Values.platformAdminSubjects | quote }}
-            {{- if .Values.resourceServer.enabled }}
-            - name: RESOURCE_SERVER_URL
-              value: {{ required "resourceServer.url is required when the Resource Server is enabled" .Values.resourceServer.url | quote }}
-            - name: RESOURCE_SERVER_ISSUER
-              value: {{ required "resourceServer.issuer is required when the Resource Server is enabled" .Values.resourceServer.issuer | quote }}
-            - name: RESOURCE_SERVER_AUTHORIZED_CLIENT_IDS
-              value: {{ required "resourceServer.authorizedClientIds is required when the Resource Server is enabled" .Values.resourceServer.authorizedClientIds | quote }}
-            - name: RESOURCE_SERVER_JWT_ALGORITHMS
-              value: {{ .Values.resourceServer.jwtAlgorithms | quote }}
+            {{- if .Values.clusterGateway.url }}
+            - name: CLUSTER_GATEWAY_URL
+              value: {{ .Values.clusterGateway.url | quote }}
             {{- end }}
             - name: DB_TYPE
               value: {{ .Values.db.type | quote }}

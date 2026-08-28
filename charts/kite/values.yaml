@@ -107,14 +107,10 @@ platformAdminGroups: ""
 # legacy-list or JSON string-array syntax is accepted. Configure either or both.
 platformAdminSubjects: ""
 
-resourceServer:
-  # Enable standards-based Agent/tool access. The URL is the exact protected
-  # resource identifier and must be reachable over HTTPS for discovery.
-  enabled: false
+clusterGateway:
+  # Shared cluster catalog and Kubernetes access gateway. Leave empty to use
+  # Kite's embedded credential-free catalog during migration.
   url: ""
-  issuer: ""
-  authorizedClientIds: ""
-  jwtAlgorithms: "RS256"
 
 # Secret handling
 # By default the chart will create a Kubernetes Secret containing sensitive values.
@@ -122,11 +118,11 @@ secret:
   # Create the Secret from chart values (true) or reference an existing Secret (false)
   create: true
   # If set, the deployment will use this existing secret name instead of the generated one (ignored when `create: true`).
-  # must contain all required keys.
+  # must contain all required keys. OIDC_CLIENT_SECRET is optional for public PKCE clients.
   #  JWT_SECRET
   #  KITE_ENCRYPT_KEY
   #  OIDC_CLIENT_ID
-  #  OIDC_CLIENT_SECRET
+  #  OIDC_CLIENT_SECRET (confidential clients only)
   #  DB_DSN (required when db.type is postgres or mysql)
   existingSecret: ""
 

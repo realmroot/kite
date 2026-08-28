@@ -1,11 +1,11 @@
 # OpenID Connect 配置
 
-Kite 是使用 Authorization Code + PKCE 的 OIDC 机密 Web 应用。每个部署配置一个
-issuer，Dashboard 内不提供 Provider CRUD。
+Kite 使用 OIDC Authorization Code + PKCE，同时支持公开客户端和机密客户端。
+每个部署配置一个 issuer，Dashboard 内不提供 Provider CRUD。
 
 ## 注册 Client
 
-在任意符合标准的 OIDC 提供方创建机密 Web Client，并注册精确回调地址：
+优先在任意符合标准的 OIDC 提供方创建强制 PKCE 的公开 Client，并注册精确回调地址：
 
 ```text
 https://kite.example.com/api/auth/callback
@@ -18,7 +18,7 @@ https://kite.example.com/api/auth/callback
 ```text
 OIDC_ISSUER=https://identity.example.com
 OIDC_CLIENT_ID=kite
-OIDC_CLIENT_SECRET=<secret>
+# 公开 PKCE Client 不设置 OIDC_CLIENT_SECRET。
 OIDC_PROVIDER_NAME=Corporate Identity
 OIDC_SCOPES=openid profile email groups offline_access
 OIDC_USERNAME_CLAIM=email
@@ -35,6 +35,9 @@ Issuer 必须提供标准 Discovery Metadata，`OIDC_SCOPES` 必须包含 `openi
 `offline_access`；Helm 定时任务需要用户的 Refresh Grant。`HOST` 是必填的
 HTTPS Origin，不会从转发请求头推断。Claim 名称都是普通的 ID Token 顶层
 Claim；Kite 不包含身份提供方定制逻辑。
+
+仅在注册为机密客户端时设置 `OIDC_CLIENT_SECRET`。两种模式都会校验 PKCE、
+state 与 nonce。
 
 `PLATFORM_ADMIN_GROUPS` 只控制 Kite 自有共享数据。登录不要求属于这些 group，
 这些 group 也不会授予 Kubernetes 权限。

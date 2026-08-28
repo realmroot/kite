@@ -9,7 +9,8 @@ frontend. The backend serves API routes, embeds the built frontend from
 `static/`, keeps product metadata through GORM, and talks to Kubernetes clusters
 through controller-runtime/client-go clients. The frontend is a Vite React app
 that renders resource lists, detail pages, settings, terminals, Helm views,
-metrics, and global search. Kite must not embed an AI or Agent runtime.
+metrics, and global search. Kite must not embed an AI runtime or an OAuth Agent
+Resource Server.
 
 Keep changes narrow. Do not add tests, refactors, helpers, feature flags, broad
 validation, compatibility shims, comments, or docs unless the current task
@@ -77,7 +78,8 @@ The backend package layout is feature-oriented:
 - `pkg/model` is the GORM layer. `InitDB` auto-migrates all models and supports
   sqlite, mysql, and postgres. Sensitive persisted strings use `SecretString`.
 - `pkg/cluster` owns `ClusterManager`, Kubernetes client creation, Prometheus
-  discovery, and cluster sync.
+  discovery, and the credential-free projection of Cluster Access Gateway
+  inventory.
 - `pkg/kube` wraps controller-runtime/client-go clients and owns the shared
   runtime scheme.
 - `pkg/resources` owns Kubernetes resource APIs. Most resources use
@@ -104,6 +106,12 @@ Most protected API calls go through:
 
 The selected Kubernetes API server performs native authentication and RBAC.
 Kite does not evaluate a parallel resource permission model.
+
+When `CLUSTER_GATEWAY_URL` is configured, the Gateway is the cluster directory
+and Kubernetes access boundary. Kite keeps only a local projection for stable
+resource-history keys and forwards the current user's OIDC token to the
+Gateway. Agent Resource Server discovery, DPoP verification, impersonated
+Kubernetes execution, and Agent audit storage belong to the Gateway.
 
 The current cluster is passed as `x-cluster-name`. The frontend writes it to
 localStorage and a cookie in `ui/src/lib/current-cluster.ts`, and the API client

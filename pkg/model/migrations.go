@@ -34,6 +34,18 @@ var schemaMigrations = []migration{
 	{id: "20260820_rebind_scheduled_task_actors", run: rebindScheduledTaskActors},
 	{id: "20260820_bind_resource_history_clusters", run: bindResourceHistoryClusters},
 	{id: "20260820_encode_oidc_groups_as_json", run: encodeOIDCGroupsAsJSON},
+	{id: "20260828_remove_embedded_resource_server", run: removeEmbeddedResourceServer},
+}
+
+func removeEmbeddedResourceServer(db *gorm.DB) error {
+	for _, table := range []string{"resource_access_audits", "d_po_p_proofs"} {
+		if db.Migrator().HasTable(table) {
+			if err := db.Migrator().DropTable(table); err != nil {
+				return fmt.Errorf("drop obsolete embedded Resource Server table %s: %w", table, err)
+			}
+		}
+	}
+	return nil
 }
 
 func encodeOIDCGroupsAsJSON(db *gorm.DB) error {

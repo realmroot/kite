@@ -117,8 +117,6 @@ func InitDB() {
 		OIDCSession{},
 		HelmRepository{},
 		ScheduledTask{},
-		DPoPProof{},
-		ResourceAccessAudit{},
 	}
 	for _, model := range models {
 		err = DB.AutoMigrate(model)
