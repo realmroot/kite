@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
+import { useAuth } from '@/contexts/auth-context'
 import {
   IconCopy,
   IconEdit,
@@ -48,6 +49,7 @@ import { ClusterDialog } from './cluster-dialog'
 
 export function ClusterManagement() {
   const { t } = useTranslation()
+  const { capabilities } = useAuth()
   const queryClient = useQueryClient()
 
   const {
@@ -96,6 +98,16 @@ export function ClusterManagement() {
               })}
             </TooltipContent>
           </Tooltip>
+        )
+      }
+      if (cluster.connectionMode === 'connector') {
+        return (
+          <Badge
+            variant="outline"
+            className="border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/20 dark:text-blue-300"
+          >
+            {t('clusterManagement.type.connector', 'Connector')}
+          </Badge>
         )
       }
       return (
@@ -367,6 +379,10 @@ export function ClusterManagement() {
           apiServerUrl: clusterData.apiServerUrl,
           caBundle: clusterData.caBundle,
           tlsServerName: clusterData.tlsServerName,
+          connectionMode:
+            clusterData.connectionMode === 'connector' ? 'connector' : 'direct',
+          connectorId: clusterData.connectorId,
+          connectorUrl: clusterData.connectorUrl,
           prometheusURL: clusterData.prometheusURL,
           isDefault: clusterData.isDefault,
           enabled: clusterData.enabled,
@@ -458,6 +474,8 @@ export function ClusterManagement() {
         }}
         cluster={editingCluster}
         onSubmit={handleSubmitCluster}
+        gatewayEnabled={capabilities.clusterGatewayEnabled}
+        isSubmitting={createMutation.isPending || updateMutation.isPending}
       />
 
       <Dialog

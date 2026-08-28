@@ -20,7 +20,8 @@ func TestGatewayCatalogProjectsCredentialFreeClusters(t *testing.T) {
 		apiVersion = r.Header.Get("API-Version")
 		cluster := gatewayCluster{
 			ID: "development", DisplayName: "Development", Description: "Local kind",
-			APIServerURL: "https://kubernetes.example.test", CABundle: "catalog-ca", Enabled: true, Default: true, ResourceVersion: 7,
+			APIServerURL: "", AccessMode: "connector",
+			ConnectorID: "development", ConnectorURL: "https://connector.example.test", Enabled: true, Default: true, ResourceVersion: 7,
 		}
 		switch r.URL.Path {
 		case "/api/catalog/clusters":
@@ -62,7 +63,7 @@ func TestGatewayCatalogProjectsCredentialFreeClusters(t *testing.T) {
 	if clusters[0].APIServerURL != server.URL+"/clusters/development/kubernetes" || clusters[0].CABundle != "" {
 		t.Fatalf("projection contains wrong gateway connection metadata: %#v", clusters[0])
 	}
-	if details["development"].APIServerURL != "https://kubernetes.example.test" || details["development"].CABundle != "catalog-ca" {
+	if details["development"].APIServerURL != "" || details["development"].AccessMode != "connector" {
 		t.Fatalf("catalog details were not preserved for management UI: %#v", details)
 	}
 	if authorization != "Bearer user-id-token" || apiVersion != gatewayAPIVersion {
@@ -103,8 +104,31 @@ func TestGatewayCatalogPutUsesResourceInputRepresentation(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := catalog.Put(context.Background(), "user-id-token", gatewayCluster{
-		ID: "development", DisplayName: "Development", APIServerURL: "https://kubernetes.example.test", Enabled: true,
+		ID: "development", DisplayName: "Development", APIServerURL: "https://kubernetes.example.test", AccessMode: "connector",
+		ConnectorID: "development", ConnectorURL: "https://connector.example.test", Enabled: true,
 	}, true); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestValidateGatewayAccessModes(t *testing.T) {
+	if err := validateGatewayAccess("direct", "development", "https://api.example.test", "", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateGatewayAccess("connector", "development", "", "", "development", "https://connector.example.test"); err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		name, mode, connectorID, connectorURL string
+	}{
+		{name: "connector API server", mode: "connector", connectorID: "development", connectorURL: "https://connector.example.test"},
+		{name: "connector mismatched ID", mode: "connector", connectorID: "another-cluster", connectorURL: "https://connector.example.test"},
+		{name: "connector insecure URL", mode: "connector", connectorID: "development", connectorURL: "http://connector.example.test"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if err := validateGatewayAccess(test.mode, "development", "https://api.example.test", "", test.connectorID, test.connectorURL); err == nil {
+				t.Fatal("expected validation error")
+			}
+		})
 	}
 }

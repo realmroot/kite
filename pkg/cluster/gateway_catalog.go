@@ -12,7 +12,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode"
 
 	"github.com/gin-gonic/gin"
 	"github.com/zxh326/kite/pkg/model"
@@ -22,7 +21,7 @@ import (
 
 const (
 	gatewayCatalogSource = "cluster-gateway"
-	gatewayAPIVersion    = "2026-08-27"
+	gatewayAPIVersion    = "2026-08-28"
 )
 
 type gatewayCatalog struct {
@@ -35,9 +34,10 @@ type gatewayCluster struct {
 	DisplayName     string    `json:"displayName"`
 	Description     string    `json:"description"`
 	APIServerURL    string    `json:"apiServerUrl"`
-	CABundle        string    `json:"caBundle"`
-	TLSServerName   string    `json:"tlsServerName"`
 	PrometheusURL   string    `json:"prometheusUrl"`
+	AccessMode      string    `json:"accessMode"`
+	ConnectorID     string    `json:"connectorId"`
+	ConnectorURL    string    `json:"connectorUrl"`
 	Enabled         bool      `json:"enabled"`
 	Default         bool      `json:"default"`
 	ResourceVersion uint64    `json:"resourceVersion"`
@@ -49,9 +49,10 @@ type gatewayClusterInput struct {
 	DisplayName   string `json:"displayName"`
 	Description   string `json:"description"`
 	APIServerURL  string `json:"apiServerUrl"`
-	CABundle      string `json:"caBundle"`
-	TLSServerName string `json:"tlsServerName"`
 	PrometheusURL string `json:"prometheusUrl"`
+	AccessMode    string `json:"accessMode"`
+	ConnectorID   string `json:"connectorId"`
+	ConnectorURL  string `json:"connectorUrl"`
 	Enabled       bool   `json:"enabled"`
 	Default       bool   `json:"default"`
 }
@@ -133,8 +134,8 @@ func (g *gatewayCatalog) Put(ctx context.Context, token string, cluster gatewayC
 	}
 	input := gatewayClusterInput{
 		DisplayName: cluster.DisplayName, Description: cluster.Description,
-		APIServerURL: cluster.APIServerURL, CABundle: cluster.CABundle,
-		TLSServerName: cluster.TLSServerName, PrometheusURL: cluster.PrometheusURL,
+		APIServerURL: cluster.APIServerURL, PrometheusURL: cluster.PrometheusURL,
+		AccessMode: cluster.AccessMode, ConnectorID: cluster.ConnectorID, ConnectorURL: cluster.ConnectorURL,
 		Enabled: cluster.Enabled, Default: cluster.Default,
 	}
 	var stored gatewayCluster
@@ -277,11 +278,8 @@ func (cm *ClusterManager) projectGatewayCluster(remote *gatewayCluster) (*model.
 }
 
 func (cm *ClusterManager) createGatewayCluster(c *gin.Context, req createClusterRequest) {
-	if req.ConnectionMode != "direct" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Cluster Gateway currently accepts direct cluster metadata; tunnel enrollment belongs to the Gateway"})
-		return
-	}
-	if err := ValidateDirectClusterMetadata(req.APIServerURL, req.CABundle, req.TLSServerName, req.PrometheusURL); err != nil {
+	clusterID := gatewayClusterID(req.Name)
+	if err := validateGatewayAccess(req.ConnectionMode, clusterID, req.APIServerURL, req.PrometheusURL, req.ConnectorID, req.ConnectorURL); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -290,9 +288,9 @@ func (cm *ClusterManager) createGatewayCluster(c *gin.Context, req createCluster
 		enabled = *req.Enabled
 	}
 	remote := gatewayCluster{
-		ID: gatewayClusterID(req.Name), DisplayName: strings.TrimSpace(req.Name), Description: req.Description,
-		APIServerURL: strings.TrimSpace(req.APIServerURL), CABundle: strings.TrimSpace(req.CABundle),
-		TLSServerName: strings.TrimSpace(req.TLSServerName), PrometheusURL: strings.TrimSpace(req.PrometheusURL),
+		ID: clusterID, DisplayName: strings.TrimSpace(req.Name), Description: req.Description,
+		APIServerURL: gatewayAPIServerURL(req.ConnectionMode, req.APIServerURL), PrometheusURL: strings.TrimSpace(req.PrometheusURL),
+		AccessMode: req.ConnectionMode, ConnectorID: connectorID(req.ConnectionMode, clusterID), ConnectorURL: strings.TrimRight(strings.TrimSpace(req.ConnectorURL), "/"),
 		Enabled: enabled, Default: req.IsDefault,
 	}
 	stored, err := cm.gatewayCatalog.Put(c.Request.Context(), c.GetString("oidc-id-token"), remote, true)
@@ -314,14 +312,24 @@ func (cm *ClusterManager) updateGatewayCluster(c *gin.Context, cluster *model.Cl
 		c.JSON(http.StatusBadRequest, gin.H{"error": "name is required"})
 		return
 	}
-	if err := ValidateDirectClusterMetadata(req.APIServerURL, req.CABundle, req.TLSServerName, req.PrometheusURL); err != nil {
+	current, err := cm.gatewayCatalog.Get(c.Request.Context(), c.GetString("oidc-id-token"), cluster.CatalogID)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+		return
+	}
+	if req.ConnectionMode == "" {
+		req.ConnectionMode = current.AccessMode
+		req.ConnectorID = current.ConnectorID
+		req.ConnectorURL = current.ConnectorURL
+	}
+	if err := validateGatewayAccess(req.ConnectionMode, cluster.CatalogID, req.APIServerURL, req.PrometheusURL, req.ConnectorID, req.ConnectorURL); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	remote := gatewayCluster{
 		ID: cluster.CatalogID, DisplayName: req.Name, Description: req.Description,
-		APIServerURL: strings.TrimSpace(req.APIServerURL), CABundle: strings.TrimSpace(req.CABundle),
-		TLSServerName: strings.TrimSpace(req.TLSServerName), PrometheusURL: strings.TrimSpace(req.PrometheusURL),
+		APIServerURL: gatewayAPIServerURL(req.ConnectionMode, req.APIServerURL), PrometheusURL: strings.TrimSpace(req.PrometheusURL),
+		AccessMode: req.ConnectionMode, ConnectorID: connectorID(req.ConnectionMode, cluster.CatalogID), ConnectorURL: strings.TrimRight(strings.TrimSpace(req.ConnectorURL), "/"),
 		Enabled: req.Enabled, Default: req.IsDefault, ResourceVersion: cluster.CatalogResourceVersion,
 	}
 	stored, err := cm.gatewayCatalog.Put(c.Request.Context(), c.GetString("oidc-id-token"), remote, false)
@@ -334,6 +342,60 @@ func (cm *ClusterManager) updateGatewayCluster(c *gin.Context, cluster *model.Cl
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "cluster updated successfully"})
+}
+
+func validateGatewayAccess(mode, clusterID, apiServerURL, prometheusURL, requestedConnectorID, connectorURL string) error {
+	if mode != "direct" && mode != "connector" {
+		return errors.New("connectionMode must be direct or connector")
+	}
+	if mode == "direct" {
+		if err := ValidateDirectClusterMetadata(apiServerURL, "", "", prometheusURL); err != nil {
+			return err
+		}
+		parsedAPIServer, _ := url.Parse(strings.TrimSpace(apiServerURL))
+		if parsedAPIServer.Path != "" && parsedAPIServer.Path != "/" {
+			return errors.New("API server URL must not contain a path")
+		}
+		if strings.TrimSpace(requestedConnectorID) != "" || strings.TrimSpace(connectorURL) != "" {
+			return errors.New("direct mode cannot include Connector settings")
+		}
+		return nil
+	}
+	if strings.TrimSpace(apiServerURL) != "" {
+		return errors.New("API server URL is only valid in direct mode; the Connector owns its Kubernetes endpoint")
+	}
+	if strings.TrimSpace(prometheusURL) != "" {
+		if _, err := parseClusterLocalPrometheusURL(strings.TrimSpace(prometheusURL)); err != nil {
+			return err
+		}
+	}
+	if requested := strings.TrimSpace(requestedConnectorID); requested != "" && requested != clusterID {
+		return errors.New("connectorId must equal the stable cluster id")
+	}
+	parsed, err := url.Parse(strings.TrimSpace(connectorURL))
+	validScheme := parsed.Scheme == "https" || parsed.Scheme == "http" && isLoopbackHost(parsed.Hostname())
+	if err != nil || parsed.Host == "" || !validScheme || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return errors.New("connectorUrl must be absolute HTTPS; HTTP is allowed only for loopback development")
+	}
+	return nil
+}
+
+func gatewayAPIServerURL(mode, value string) string {
+	if mode == "direct" {
+		return strings.TrimSpace(value)
+	}
+	return ""
+}
+
+func connectorID(mode, clusterID string) string {
+	if mode == "connector" {
+		return clusterID
+	}
+	return ""
+}
+
+func isLoopbackHost(host string) bool {
+	return host == "localhost" || host == "127.0.0.1" || host == "::1"
 }
 
 func (cm *ClusterManager) deleteGatewayCluster(c *gin.Context, cluster *model.Cluster) {
@@ -371,7 +433,7 @@ func gatewayClusterID(name string) string {
 	var result strings.Builder
 	lastHyphen := false
 	for _, value := range strings.ToLower(strings.TrimSpace(name)) {
-		if unicode.IsLetter(value) || unicode.IsDigit(value) {
+		if value >= 'a' && value <= 'z' || value >= '0' && value <= '9' {
 			result.WriteRune(value)
 			lastHyphen = false
 		} else if !lastHyphen && result.Len() != 0 {

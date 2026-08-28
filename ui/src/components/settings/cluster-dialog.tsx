@@ -29,6 +29,8 @@ interface ClusterDialogProps {
   onOpenChange: (open: boolean) => void
   cluster?: Cluster | null
   onSubmit: (clusterData: ClusterCreateRequest) => void
+  gatewayEnabled: boolean
+  isSubmitting?: boolean
 }
 
 function createClusterFormData(cluster?: Cluster | null): ClusterCreateRequest {
@@ -39,10 +41,23 @@ function createClusterFormData(cluster?: Cluster | null): ClusterCreateRequest {
     caBundle: cluster?.caBundle || '',
     tlsServerName: cluster?.tlsServerName || '',
     connectionMode: cluster?.connectionMode || 'direct',
+    connectorId: cluster?.connectorId || '',
+    connectorUrl: cluster?.connectorUrl || '',
     prometheusURL: cluster?.prometheusURL || '',
     enabled: cluster?.enabled ?? true,
     isDefault: cluster?.isDefault ?? false,
   }
+}
+
+function clusterIdFromName(name: string): string {
+  const id = name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 63)
+    .replace(/-$/g, '')
+  return id || 'cluster'
 }
 
 export function ClusterDialog({
@@ -50,6 +65,8 @@ export function ClusterDialog({
   onOpenChange,
   cluster,
   onSubmit,
+  gatewayEnabled,
+  isSubmitting,
 }: ClusterDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -59,6 +76,8 @@ export function ClusterDialog({
           cluster={cluster}
           onOpenChange={onOpenChange}
           onSubmit={onSubmit}
+          gatewayEnabled={gatewayEnabled}
+          isSubmitting={isSubmitting}
         />
       ) : null}
     </Dialog>
@@ -69,6 +88,8 @@ function ClusterDialogContent({
   cluster,
   onOpenChange,
   onSubmit,
+  gatewayEnabled,
+  isSubmitting,
 }: Omit<ClusterDialogProps, 'open'>) {
   const { t } = useTranslation()
   const isEditMode = Boolean(cluster)
@@ -78,9 +99,14 @@ function ClusterDialogContent({
     value: ClusterCreateRequest[K]
   ) => setFormData((current) => ({ ...current, [key]: value }))
   const direct = formData.connectionMode === 'direct'
+  const connector = formData.connectionMode === 'connector'
   const canSubmit =
     formData.name.trim() !== '' &&
-    (!direct || formData.apiServerUrl?.trim() !== '')
+    (formData.connectionMode === 'tunnel' ||
+      (direct && formData.apiServerUrl?.trim() !== '') ||
+      (connector &&
+        formData.connectorId?.trim() !== '' &&
+        formData.connectorUrl?.trim() !== ''))
 
   return (
     <DialogContent className="sm:max-w-[640px]">
@@ -112,32 +138,70 @@ function ClusterDialogContent({
             <Input
               id="cluster-name"
               value={formData.name}
-              onChange={(event) => change('name', event.target.value)}
+              onChange={(event) => {
+                const name = event.target.value
+                setFormData((current) => ({
+                  ...current,
+                  name,
+                  ...(!isEditMode && current.connectionMode === 'connector'
+                    ? { connectorId: clusterIdFromName(name) }
+                    : {}),
+                }))
+              }}
               placeholder="production"
               required
             />
           </div>
           <div className="space-y-2">
-            <Label>
+            <Label htmlFor="cluster-connection-mode">
               {t('clusterManagement.dialog.connectionMode', 'Connection Mode')}
             </Label>
             <Select
               value={formData.connectionMode}
-              disabled={isEditMode}
-              onValueChange={(value: 'direct' | 'tunnel') =>
-                change('connectionMode', value)
-              }
+              disabled={isEditMode && !gatewayEnabled}
+              onValueChange={(value: 'direct' | 'tunnel' | 'connector') => {
+                setFormData((current) => ({
+                  ...current,
+                  connectionMode: value,
+                  ...(value === 'direct' && gatewayEnabled
+                    ? {
+                        caBundle: '',
+                        tlsServerName: '',
+                        connectorId: '',
+                        connectorUrl: '',
+                      }
+                    : {}),
+                  ...(value === 'connector' && gatewayEnabled
+                    ? {
+                        apiServerUrl: '',
+                        caBundle: '',
+                        tlsServerName: '',
+                      }
+                    : {}),
+                  ...(value === 'connector' && !current.connectorId
+                    ? {
+                        connectorId: clusterIdFromName(current.name),
+                      }
+                    : {}),
+                }))
+              }}
             >
-              <SelectTrigger>
+              <SelectTrigger id="cluster-connection-mode">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="direct">
                   {t('clusterManagement.type.direct', 'Direct')}
                 </SelectItem>
-                <SelectItem value="tunnel">
-                  {t('clusterManagement.type.tunnel', 'Private Tunnel')}
-                </SelectItem>
+                {gatewayEnabled ? (
+                  <SelectItem value="connector">
+                    {t('clusterManagement.type.connector', 'Connector')}
+                  </SelectItem>
+                ) : (
+                  <SelectItem value="tunnel">
+                    {t('clusterManagement.type.tunnel', 'Private Tunnel')}
+                  </SelectItem>
+                )}
               </SelectContent>
             </Select>
           </div>
@@ -155,57 +219,93 @@ function ClusterDialogContent({
           />
         </div>
 
-        {direct ? (
+        {direct || connector ? (
           <>
-            <div className="space-y-2">
-              <Label htmlFor="api-server">
-                {t(
-                  'clusterManagement.dialog.apiServerUrl',
-                  'Kubernetes API Server URL'
-                )}{' '}
-                *
-              </Label>
-              <Input
-                id="api-server"
-                type="url"
-                value={formData.apiServerUrl}
-                onChange={(event) => change('apiServerUrl', event.target.value)}
-                placeholder="https://api.cluster.example:6443"
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="ca-bundle">
-                {t('clusterManagement.dialog.caBundle', 'CA Bundle')}
-              </Label>
-              <Textarea
-                id="ca-bundle"
-                value={formData.caBundle}
-                onChange={(event) => change('caBundle', event.target.value)}
-                placeholder="PEM or base64-encoded PEM"
-                rows={5}
-                className="font-mono text-xs"
-              />
+            {direct ? (
+              <div className="space-y-2">
+                <Label htmlFor="api-server">
+                  {t(
+                    'clusterManagement.dialog.apiServerUrl',
+                    'Kubernetes API Server URL'
+                  )}{' '}
+                  *
+                </Label>
+                <Input
+                  id="api-server"
+                  type="url"
+                  value={formData.apiServerUrl}
+                  onChange={(event) =>
+                    change('apiServerUrl', event.target.value)
+                  }
+                  placeholder="https://api.cluster.example:6443"
+                  required
+                />
+              </div>
+            ) : null}
+            {connector ? (
+              <>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="connector-id">
+                      {t(
+                        'clusterManagement.dialog.connectorId',
+                        'Connector ID'
+                      )}{' '}
+                      *
+                    </Label>
+                    <Input
+                      id="connector-id"
+                      value={formData.connectorId}
+                      readOnly
+                      aria-describedby="connector-id-description"
+                      placeholder="production"
+                      required
+                    />
+                    <p
+                      id="connector-id-description"
+                      className="text-xs text-muted-foreground"
+                    >
+                      {t(
+                        'clusterManagement.dialog.connectorIdDescription',
+                        'Generated from the cluster name and used by the Connector deployment.'
+                      )}
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="connector-url">
+                      {t(
+                        'clusterManagement.dialog.connectorUrl',
+                        'Connector URL'
+                      )}{' '}
+                      *
+                    </Label>
+                    <Input
+                      id="connector-url"
+                      type="url"
+                      value={formData.connectorUrl}
+                      onChange={(event) =>
+                        change('connectorUrl', event.target.value)
+                      }
+                      placeholder="https://connector.cluster.example"
+                      required
+                    />
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {t(
+                    'clusterManagement.dialog.connectorDescription',
+                    'Deploy one Connector for this cluster. The control plane stores only its HTTPS address and never stores Kubernetes credentials.'
+                  )}
+                </p>
+              </>
+            ) : gatewayEnabled ? (
               <p className="text-xs text-muted-foreground">
                 {t(
-                  'clusterManagement.dialog.noCredentials',
-                  'Only TLS trust metadata is stored. Never paste a token, client certificate, or kubeconfig.'
+                  'clusterManagement.dialog.directDescription',
+                  'Direct mode requires a publicly reachable API server with a publicly trusted TLS certificate.'
                 )}
               </p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="tls-server-name">
-                {t('clusterManagement.dialog.tlsServerName', 'TLS Server Name')}
-              </Label>
-              <Input
-                id="tls-server-name"
-                value={formData.tlsServerName}
-                onChange={(event) =>
-                  change('tlsServerName', event.target.value)
-                }
-                placeholder="Optional certificate name override"
-              />
-            </div>
+            ) : null}
           </>
         ) : (
           <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-700 dark:border-blue-800 dark:bg-blue-950/20 dark:text-blue-300">
@@ -263,10 +363,12 @@ function ClusterDialogContent({
           >
             {t('common.actions.cancel', 'Cancel')}
           </Button>
-          <Button type="submit" disabled={!canSubmit}>
-            {isEditMode
-              ? t('common.actions.saveChanges', 'Save Changes')
-              : t('clusterManagement.actions.add', 'Add Cluster')}
+          <Button type="submit" disabled={!canSubmit || isSubmitting}>
+            {isSubmitting
+              ? t('common.messages.saving', 'Saving...')
+              : isEditMode
+                ? t('common.actions.saveChanges', 'Save Changes')
+                : t('clusterManagement.actions.add', 'Add Cluster')}
           </Button>
         </DialogFooter>
       </form>

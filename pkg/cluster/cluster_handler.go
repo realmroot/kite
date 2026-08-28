@@ -25,20 +25,25 @@ type createClusterRequest struct {
 	CABundle       string `json:"caBundle"`
 	TLSServerName  string `json:"tlsServerName"`
 	ConnectionMode string `json:"connectionMode" binding:"required"`
+	ConnectorID    string `json:"connectorId"`
+	ConnectorURL   string `json:"connectorUrl"`
 	PrometheusURL  string `json:"prometheusURL"`
 	IsDefault      bool   `json:"isDefault"`
 	Enabled        *bool  `json:"enabled"`
 }
 
 type updateClusterRequest struct {
-	Name          string `json:"name"`
-	Description   string `json:"description"`
-	APIServerURL  string `json:"apiServerUrl"`
-	CABundle      string `json:"caBundle"`
-	TLSServerName string `json:"tlsServerName"`
-	PrometheusURL string `json:"prometheusURL"`
-	IsDefault     bool   `json:"isDefault"`
-	Enabled       bool   `json:"enabled"`
+	Name           string `json:"name"`
+	Description    string `json:"description"`
+	APIServerURL   string `json:"apiServerUrl"`
+	CABundle       string `json:"caBundle"`
+	TLSServerName  string `json:"tlsServerName"`
+	ConnectionMode string `json:"connectionMode"`
+	ConnectorID    string `json:"connectorId"`
+	ConnectorURL   string `json:"connectorUrl"`
+	PrometheusURL  string `json:"prometheusURL"`
+	IsDefault      bool   `json:"isDefault"`
+	Enabled        bool   `json:"enabled"`
 }
 
 func clusterAgentServerURL() string {
@@ -102,13 +107,17 @@ func (cm *ClusterManager) GetClusterList(c *gin.Context) {
 		caBundle := cluster.CABundle
 		tlsServerName := cluster.TLSServerName
 		prometheusURL := cluster.PrometheusURL
+		connectorID := ""
+		connectorURL := ""
 		if cluster.CatalogSource == gatewayCatalogSource {
-			connectionMode = "direct"
 			remote := gatewayDetails[cluster.CatalogID]
+			connectionMode = remote.AccessMode
 			apiServerURL = remote.APIServerURL
-			caBundle = remote.CABundle
-			tlsServerName = remote.TLSServerName
+			caBundle = ""
+			tlsServerName = ""
 			prometheusURL = remote.PrometheusURL
+			connectorID = remote.ConnectorID
+			connectorURL = remote.ConnectorURL
 		}
 		clusterInfo := gin.H{
 			"id":             cluster.ID,
@@ -124,6 +133,8 @@ func (cm *ClusterManager) GetClusterList(c *gin.Context) {
 			"connected":      cluster.ClusterAgent && cm.clusterAgentManager.Connected(cluster.ID),
 			"isDefault":      cluster.IsDefault,
 			"prometheusURL":  prometheusURL,
+			"connectorId":    connectorID,
+			"connectorUrl":   connectorURL,
 		}
 		if cluster.ClusterAgent {
 			clusterInfo["clusterAgentVersion"] = cm.clusterAgentManager.Version(cluster.ID)
@@ -151,6 +162,8 @@ func (cm *ClusterManager) CreateCluster(c *gin.Context) {
 	req.APIServerURL = strings.TrimSpace(req.APIServerURL)
 	req.CABundle = strings.TrimSpace(req.CABundle)
 	req.TLSServerName = strings.TrimSpace(req.TLSServerName)
+	req.ConnectorID = strings.TrimSpace(req.ConnectorID)
+	req.ConnectorURL = strings.TrimSpace(req.ConnectorURL)
 	req.PrometheusURL = strings.TrimSpace(req.PrometheusURL)
 	if cm.gatewayCatalog != nil {
 		cm.createGatewayCluster(c, req)
