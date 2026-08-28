@@ -155,13 +155,13 @@ func (t *k8sProxyTransport) RoundTrip(req *http.Request) (*http.Response, error)
 	return t.transport.RoundTrip(req)
 }
 
-func (cm *ClusterManager) GetClientSet(clusterName, idToken string) (*ClientSet, error) {
+func (cm *ClusterManager) GetClientSet(clusterName, idToken, catalogToken string) (*ClientSet, error) {
 	if idToken == "" {
 		return nil, errors.New("OIDC ID token is required")
 	}
 	if clusterName == "" {
 		if cm.gatewayCatalog != nil {
-			if _, err := cm.syncGatewayCatalog(context.Background(), idToken); err != nil {
+			if _, err := cm.syncGatewayCatalog(context.Background(), catalogToken); err != nil {
 				return nil, err
 			}
 		}
@@ -197,7 +197,7 @@ func (cm *ClusterManager) GetClientSet(clusterName, idToken string) (*ClientSet,
 		return nil, fmt.Errorf("cluster not found: %s", clusterName)
 	}
 	if cm.gatewayCatalog != nil && cluster.CatalogSource == gatewayCatalogSource {
-		remote, err := cm.gatewayCatalog.Get(context.Background(), idToken, cluster.CatalogID)
+		remote, err := cm.gatewayCatalog.Get(context.Background(), catalogToken, cluster.CatalogID)
 		if err != nil {
 			return nil, err
 		}

@@ -107,11 +107,12 @@ Most protected API calls go through:
 The selected Kubernetes API server performs native authentication and RBAC.
 Kite does not evaluate a parallel resource permission model.
 
-When `CLUSTER_GATEWAY_URL` is configured, the Gateway is the cluster directory
-and Kubernetes access boundary. Kite keeps only a local projection for stable
-resource-history keys and forwards the current user's OIDC token to the
-Gateway. Agent Resource Server discovery, DPoP verification, impersonated
-Kubernetes execution, and Agent audit storage belong to the Gateway.
+When `CLUSTER_GATEWAY_URL` is configured, Kube Cluster Hub is the cluster
+directory and Kubernetes access boundary. Kite keeps only a local projection
+for stable resource-history keys. It uses the session Access Token for the
+OAuth-protected catalog and the session ID Token for Kubernetes passthrough;
+the two token boundaries must not be merged. Agent Resource Server discovery,
+DPoP verification, impersonated execution, and Agent audit belong to the Hub.
 
 The current cluster is passed as `x-cluster-name`. The frontend writes it to
 localStorage and a cookie in `ui/src/lib/current-cluster.ts`, and the API client

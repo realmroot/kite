@@ -293,7 +293,7 @@ func (cm *ClusterManager) createGatewayCluster(c *gin.Context, req createCluster
 		AccessMode: req.ConnectionMode, ConnectorID: connectorID(req.ConnectionMode, clusterID), ConnectorURL: strings.TrimRight(strings.TrimSpace(req.ConnectorURL), "/"),
 		Enabled: enabled, Default: req.IsDefault,
 	}
-	stored, err := cm.gatewayCatalog.Put(c.Request.Context(), c.GetString("oidc-id-token"), remote, true)
+	stored, err := cm.gatewayCatalog.Put(c.Request.Context(), c.GetString("oidc-access-token"), remote, true)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 		return
@@ -312,7 +312,7 @@ func (cm *ClusterManager) updateGatewayCluster(c *gin.Context, cluster *model.Cl
 		c.JSON(http.StatusBadRequest, gin.H{"error": "name is required"})
 		return
 	}
-	current, err := cm.gatewayCatalog.Get(c.Request.Context(), c.GetString("oidc-id-token"), cluster.CatalogID)
+	current, err := cm.gatewayCatalog.Get(c.Request.Context(), c.GetString("oidc-access-token"), cluster.CatalogID)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 		return
@@ -332,7 +332,7 @@ func (cm *ClusterManager) updateGatewayCluster(c *gin.Context, cluster *model.Cl
 		AccessMode: req.ConnectionMode, ConnectorID: connectorID(req.ConnectionMode, cluster.CatalogID), ConnectorURL: strings.TrimRight(strings.TrimSpace(req.ConnectorURL), "/"),
 		Enabled: req.Enabled, Default: req.IsDefault, ResourceVersion: cluster.CatalogResourceVersion,
 	}
-	stored, err := cm.gatewayCatalog.Put(c.Request.Context(), c.GetString("oidc-id-token"), remote, false)
+	stored, err := cm.gatewayCatalog.Put(c.Request.Context(), c.GetString("oidc-access-token"), remote, false)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 		return
@@ -399,7 +399,7 @@ func isLoopbackHost(host string) bool {
 }
 
 func (cm *ClusterManager) deleteGatewayCluster(c *gin.Context, cluster *model.Cluster) {
-	if err := cm.gatewayCatalog.Delete(c.Request.Context(), c.GetString("oidc-id-token"), cluster.CatalogID, cluster.CatalogResourceVersion); err != nil {
+	if err := cm.gatewayCatalog.Delete(c.Request.Context(), c.GetString("oidc-access-token"), cluster.CatalogID, cluster.CatalogResourceVersion); err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 		return
 	}
@@ -421,7 +421,7 @@ func (cm *ClusterManager) GetGatewayAuditEvents(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "pageSize must be between 1 and 100"})
 		return
 	}
-	page, err := cm.gatewayCatalog.AuditEvents(c.Request.Context(), c.GetString("oidc-id-token"), c.Query("pageToken"), pageSize)
+	page, err := cm.gatewayCatalog.AuditEvents(c.Request.Context(), c.GetString("oidc-access-token"), c.Query("pageToken"), pageSize)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 		return

@@ -70,7 +70,7 @@ func TestGatewayCatalogProjectsCredentialFreeClusters(t *testing.T) {
 		t.Fatalf("gateway request headers authorization=%q apiVersion=%q", authorization, apiVersion)
 	}
 
-	clientSet, err := manager.GetClientSet("Development", "user-id-token")
+	clientSet, err := manager.GetClientSet("Development", "user-id-token", "catalog-access-token")
 	if err != nil {
 		t.Fatal(err)
 	}

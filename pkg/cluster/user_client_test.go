@@ -37,7 +37,7 @@ func TestBaseRESTConfigContainsOnlyClusterConnectionMetadata(t *testing.T) {
 
 func TestUserRESTConfigRequiresOIDCIdentity(t *testing.T) {
 	manager := &ClusterManager{}
-	_, err := manager.GetClientSet("production", "")
+	_, err := manager.GetClientSet("production", "", "")
 	if err == nil || err.Error() != "OIDC ID token is required" {
 		t.Fatalf("error = %v", err)
 	}

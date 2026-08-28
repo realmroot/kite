@@ -26,9 +26,10 @@ import (
 )
 
 const (
-	sessionCookieName = "kite_session"
-	idTokenContextKey = "oidc-id-token"
-	sessionLockShards = 64
+	sessionCookieName     = "kite_session"
+	idTokenContextKey     = "oidc-id-token"
+	accessTokenContextKey = "oidc-access-token"
+	sessionLockShards     = 64
 )
 
 type oidcClaims struct {
@@ -140,6 +141,15 @@ func oidcOAuthConfig(provider *oidc.Provider, redirectURL string) oauth2.Config 
 	}
 }
 
+func oidcResourceOptions() []oauth2.AuthCodeOption {
+	if common.ClusterGatewayURL == "" {
+		return nil
+	}
+	return []oauth2.AuthCodeOption{
+		oauth2.SetAuthURLParam("resource", common.ClusterGatewayURL+"/api/catalog"),
+	}
+}
+
 func (a *oidcAuthenticator) authorizationURL(c *gin.Context) (string, error) {
 	provider, err := a.discoveredProvider(c.Request.Context())
 	if err != nil {
@@ -161,11 +171,13 @@ func (a *oidcAuthenticator) authorizationURL(c *gin.Context) (string, error) {
 	setCookieSecure(c, "oauth_nonce", nonce, 600)
 	setCookieSecure(c, "oauth_pkce", verifier, 600)
 	config := oidcOAuthConfig(provider, oidcRedirectURL())
-	return config.AuthCodeURL(state,
+	options := []oauth2.AuthCodeOption{
 		oauth2.AccessTypeOffline,
 		oidc.Nonce(nonce),
 		oauth2.S256ChallengeOption(verifier),
-	), nil
+	}
+	options = append(options, oidcResourceOptions()...)
+	return config.AuthCodeURL(state, options...), nil
 }
 
 func clearLoginCookies(c *gin.Context) {
@@ -191,7 +203,9 @@ func (a *oidcAuthenticator) exchange(c *gin.Context, code, state string) (*oauth
 		return nil, nil, err
 	}
 	config := oidcOAuthConfig(provider, oidcRedirectURL())
-	token, err := config.Exchange(oidcContext, code, oauth2.VerifierOption(verifier))
+	options := []oauth2.AuthCodeOption{oauth2.VerifierOption(verifier)}
+	options = append(options, oidcResourceOptions()...)
+	token, err := config.Exchange(oidcContext, code, options...)
 	if err != nil {
 		return nil, nil, fmt.Errorf("exchange authorization code: %w", err)
 	}
@@ -384,6 +398,7 @@ func (a *oidcAuthenticator) authenticatedSession(c *gin.Context) (*model.User, s
 	if err != nil {
 		return nil, "", 0, err
 	}
+	c.Set(accessTokenContextKey, string(session.AccessToken))
 	return user, idToken, session.ID, nil
 }
 

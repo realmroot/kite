@@ -52,7 +52,7 @@ func clusterAgentServerURL() string {
 
 func (cm *ClusterManager) GetClusters(c *gin.Context) {
 	if cm.gatewayCatalog != nil {
-		if _, err := cm.syncGatewayCatalog(c.Request.Context(), c.GetString("oidc-id-token")); err != nil {
+		if _, err := cm.syncGatewayCatalog(c.Request.Context(), c.GetString("oidc-access-token")); err != nil {
 			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 			return
 		}
@@ -85,7 +85,7 @@ func (cm *ClusterManager) GetClusterList(c *gin.Context) {
 	var gatewayDetails map[string]gatewayCluster
 	if cm.gatewayCatalog != nil {
 		var err error
-		_, gatewayDetails, err = cm.syncGatewayCatalogWithDetails(c.Request.Context(), c.GetString("oidc-id-token"))
+		_, gatewayDetails, err = cm.syncGatewayCatalogWithDetails(c.Request.Context(), c.GetString("oidc-access-token"))
 		if err != nil {
 			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 			return

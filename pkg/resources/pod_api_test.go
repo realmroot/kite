@@ -54,7 +54,7 @@ type podAPITestFixture struct {
 
 type podAPITestClusterProvider map[string]*cluster.ClientSet
 
-func (p podAPITestClusterProvider) GetClientSet(clusterName, _ string) (*cluster.ClientSet, error) {
+func (p podAPITestClusterProvider) GetClientSet(clusterName, _, _ string) (*cluster.ClientSet, error) {
 	if clusterName == "" {
 		clusterName = "cluster-a"
 	}

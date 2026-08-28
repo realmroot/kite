@@ -18,6 +18,12 @@ not a Kubernetes identity provider or authorization proxy.
 5. The Kubernetes API server authenticates the token and authorizes the
    configured username and group claims through native RBAC.
 
+When `CLUSTER_GATEWAY_URL` is configured, Kite also requests the Hub catalog
+as an RFC 8707 resource. The resulting resource-audience Access Token is used
+only for catalog CRUD and audit. The ID Token remains the only credential sent
+through the Hub's Kubernetes path. Both stay inside the encrypted server-side
+session.
+
 `PLATFORM_ADMIN_GROUPS` controls only who may maintain Kite's shared cluster
 catalog, templates, and audit view. It does not grant access to Kubernetes
 resources. Kubernetes RoleBindings and ClusterRoleBindings remain authoritative.

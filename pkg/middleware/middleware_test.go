@@ -218,3 +218,35 @@ func TestClusterMiddlewareNoClusters(t *testing.T) {
 		t.Fatalf("response body = %q, want error message", rec.Body.String())
 	}
 }
+
+type tokenBoundaryProvider struct {
+	idToken     string
+	accessToken string
+}
+
+func (p *tokenBoundaryProvider) GetClientSet(_ string, idToken, accessToken string) (*cluster.ClientSet, error) {
+	p.idToken = idToken
+	p.accessToken = accessToken
+	return &cluster.ClientSet{Name: "cluster-a"}, nil
+}
+
+func TestClusterMiddlewareKeepsKubernetesAndCatalogTokensSeparate(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	provider := &tokenBoundaryProvider{}
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		c.Set("oidc-id-token", "id-token")
+		c.Set("oidc-access-token", "catalog-access-token")
+		c.Next()
+	}, ClusterMiddleware(provider))
+	router.GET("/api/v1/pods", func(c *gin.Context) { c.Status(http.StatusNoContent) })
+
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/pods", nil))
+	if recorder.Code != http.StatusNoContent {
+		t.Fatalf("status = %d", recorder.Code)
+	}
+	if provider.idToken != "id-token" || provider.accessToken != "catalog-access-token" {
+		t.Fatalf("tokens = id:%q access:%q", provider.idToken, provider.accessToken)
+	}
+}

@@ -17,7 +17,7 @@ const (
 )
 
 type clusterClientSetProvider interface {
-	GetClientSet(string, string) (*cluster.ClientSet, error)
+	GetClientSet(string, string, string) (*cluster.ClientSet, error)
 }
 
 // ClusterMiddleware selects a cluster from the path, header, or query and injects its clients into context.
@@ -45,7 +45,7 @@ func ClusterMiddleware(cm clusterClientSetProvider) gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		cluster, err := cm.GetClientSet(clusterName, credential)
+		cluster, err := cm.GetClientSet(clusterName, credential, c.GetString("oidc-access-token"))
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 			c.Abort()
