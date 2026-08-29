@@ -11,7 +11,6 @@ export interface ClusterCreateRequest {
   apiServerUrl?: string
   caBundle?: string
   tlsServerName?: string
-  connectionMode: 'direct' | 'tunnel'
   prometheusURL?: string
   isDefault?: boolean
   enabled?: boolean
@@ -23,7 +22,6 @@ export interface ClusterUpdateRequest {
   apiServerUrl?: string
   caBundle?: string
   tlsServerName?: string
-  connectionMode?: 'direct' | 'tunnel'
   prometheusURL?: string
   isDefault?: boolean
   enabled?: boolean
@@ -49,22 +47,11 @@ export const useClusterList = (options?: {
 // Create cluster
 export const createCluster = async (
   clusterData: ClusterCreateRequest
-): Promise<{
-  id: number
-  message: string
-  clusterAgentServer?: string
-  clusterAgentToken?: string
-  clusterAgentPublicKey?: string
-  clusterAgentManifestURL?: string
-}> => {
-  return await apiClient.post<{
-    id: number
-    message: string
-    clusterAgentServer?: string
-    clusterAgentToken?: string
-    clusterAgentPublicKey?: string
-    clusterAgentManifestURL?: string
-  }>('/admin/clusters/', clusterData)
+): Promise<{ id: number; message: string }> => {
+  return await apiClient.post<{ id: number; message: string }>(
+    '/admin/clusters/',
+    clusterData
+  )
 }
 
 // Update cluster
@@ -167,7 +154,6 @@ export interface GeneralSetting {
   kubectlEnabled: boolean
   kubectlImage: string
   nodeTerminalImage: string
-  clusterAgentImage: string
   enableAnalytics: boolean
   analyticsConfigured: boolean
   enableVersionCheck: boolean
@@ -178,7 +164,6 @@ export interface GeneralSettingUpdateRequest {
   kubectlEnabled?: boolean
   kubectlImage?: string
   nodeTerminalImage?: string
-  clusterAgentImage?: string
   enableAnalytics?: boolean
   enableVersionCheck?: boolean
   loginPrompt?: string

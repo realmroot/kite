@@ -28,6 +28,7 @@ for path in \
   pkg/scheduler \
   pkg/model/scheduled_task.go \
   pkg/proxy/handler.go \
+  pkg/clusteragent \
   pkg/kube/proxy.go \
   pkg/resources/event_handler.go \
   pkg/resources/generic_resource_handler_write.go \
@@ -97,6 +98,17 @@ for path in \
     exit 1
   fi
 done
+
+if rg -n '(clusterAgent|ClusterAgent|connectionMode|ConnectionMode|JWT_SECRET|JwtSecret|remotedialer)' \
+  --glob '!pkg/model/migrations.go' \
+  --glob '!pkg/model/migrations_test.go' \
+  --glob '!docs/architecture/product-decisions.md' \
+  --glob '!scripts/verify-architecture.sh' \
+  --glob '!**/.git/**' \
+  .; then
+  echo "removed private tunnel contract remains" >&2
+  exit 1
+fi
 
 if rg -n -i \
   '(github\.com/(casbin|go-ldap|pquerna/otp)|duo-labs/webauthn|golang\.org/x/crypto/bcrypt)' \

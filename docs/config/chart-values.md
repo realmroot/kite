@@ -15,7 +15,6 @@ bind users/groups in every target cluster separately.
 | `platformAdminGroups` | Groups allowed to manage Kite-owned shared metadata; use a JSON string array when a group contains spaces, commas, or other punctuation |
 | `platformAdminSubjects` | Exact OIDC `sub` values with the same platform access; accepts the same JSON string-array form |
 | `encryptKey` | Random key used to encrypt server-side provider tokens |
-| `jwtSecret` | Independent random secret for short-lived tunnel enrollment grants |
 
 Optional OIDC mappings are `oidc.providerName`, `oidc.scopes`,
 `oidc.usernameClaim`, `oidc.groupsClaim`, `oidc.nameClaim`, and
@@ -27,7 +26,7 @@ read-only and configures `OIDC_CA_FILE`.
 
 For production, prefer `secret.create=false` and `secret.existingSecret`.
 The existing Secret must contain `OIDC_CLIENT_ID`, `KITE_ENCRYPT_KEY`,
-`JWT_SECRET`, and database keys when applicable. Add `OIDC_CLIENT_SECRET` only
+and database keys when applicable. Add `OIDC_CLIENT_SECRET` only
 for a confidential client.
 
 ## Runtime and exposure
@@ -48,7 +47,6 @@ for a confidential client.
 | `terminalImages.kubectl` | `alpine/kubectl:1.36.3` | Versioned shell + kubectl terminal image |
 | `terminalImages.node` | `busybox:1.37.0` | Versioned node terminal image |
 | `imageRegistryHosts` | empty | Additional comma-separated registry `host[:port]` values allowed for image-tag lookup |
-| `clusterAgentImage` | current Kite image | Optional separate Cluster Agent image |
 | `releaseAPIURL` | empty | Optional GitHub-compatible update API; empty disables outbound checks |
 | `analytics.enabled` | `false` | Load the configured operator-owned analytics script |
 | `analytics.scriptURL` | empty | HTTPS Umami-compatible script URL; configure together with `analytics.websiteID` |

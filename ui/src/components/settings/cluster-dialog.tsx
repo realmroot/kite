@@ -14,13 +14,6 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 
@@ -39,7 +32,6 @@ function createClusterFormData(cluster?: Cluster | null): ClusterCreateRequest {
     apiServerUrl: cluster?.apiServerUrl || '',
     caBundle: cluster?.caBundle || '',
     tlsServerName: cluster?.tlsServerName || '',
-    connectionMode: cluster?.connectionMode || 'direct',
     prometheusURL: cluster?.prometheusURL || '',
     enabled: cluster?.enabled ?? true,
     isDefault: cluster?.isDefault ?? false,
@@ -81,11 +73,8 @@ function ClusterDialogContent({
     key: K,
     value: ClusterCreateRequest[K]
   ) => setFormData((current) => ({ ...current, [key]: value }))
-  const direct = formData.connectionMode === 'direct'
   const canSubmit =
-    formData.name.trim() !== '' &&
-    (formData.connectionMode === 'tunnel' ||
-      (direct && formData.apiServerUrl?.trim() !== ''))
+    formData.name.trim() !== '' && formData.apiServerUrl?.trim() !== ''
 
   return (
     <DialogContent className="sm:max-w-[640px]">
@@ -109,7 +98,7 @@ function ClusterDialogContent({
           onSubmit(formData)
         }}
       >
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="space-y-2">
           <div className="space-y-2">
             <Label htmlFor="cluster-name">
               {t('clusterManagement.dialog.name', 'Cluster Name')} *
@@ -121,30 +110,6 @@ function ClusterDialogContent({
               placeholder="production"
               required
             />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="cluster-connection-mode">
-              {t('clusterManagement.dialog.connectionMode', 'Connection Mode')}
-            </Label>
-            <Select
-              value={formData.connectionMode}
-              disabled={isEditMode}
-              onValueChange={(value: 'direct' | 'tunnel') =>
-                change('connectionMode', value)
-              }
-            >
-              <SelectTrigger id="cluster-connection-mode">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="direct">
-                  {t('clusterManagement.type.direct', 'Direct')}
-                </SelectItem>
-                <SelectItem value="tunnel">
-                  {t('clusterManagement.type.tunnel', 'Private Tunnel')}
-                </SelectItem>
-              </SelectContent>
-            </Select>
           </div>
         </div>
 
@@ -160,34 +125,23 @@ function ClusterDialogContent({
           />
         </div>
 
-        {direct ? (
-          <>
-            <div className="space-y-2">
-              <Label htmlFor="api-server">
-                {t(
-                  'clusterManagement.dialog.apiServerUrl',
-                  'Kubernetes API Server URL'
-                )}{' '}
-                *
-              </Label>
-              <Input
-                id="api-server"
-                type="url"
-                value={formData.apiServerUrl}
-                onChange={(event) => change('apiServerUrl', event.target.value)}
-                placeholder="https://api.cluster.example:6443"
-                required
-              />
-            </div>
-          </>
-        ) : (
-          <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-700 dark:border-blue-800 dark:bg-blue-950/20 dark:text-blue-300">
+        <div className="space-y-2">
+          <Label htmlFor="api-server">
             {t(
-              'clusterManagement.dialog.tunnelDescription',
-              'After creation, install the generated transport-only agent. It receives no Kubernetes ServiceAccount or RBAC permissions; user ID tokens pass through the tunnel to the API server.'
-            )}
-          </div>
-        )}
+              'clusterManagement.dialog.apiServerUrl',
+              'Kubernetes API Server URL'
+            )}{' '}
+            *
+          </Label>
+          <Input
+            id="api-server"
+            type="url"
+            value={formData.apiServerUrl}
+            onChange={(event) => change('apiServerUrl', event.target.value)}
+            placeholder="https://api.cluster.example:6443"
+            required
+          />
+        </div>
 
         <div className="space-y-2">
           <Label htmlFor="prometheus-url">

@@ -12,7 +12,6 @@ kubeconfig、身份提供方或 Kite RBAC 配置不会被静默接受。
 clusters:
   - name: production
     description: 生产集群
-    connectionMode: direct
     apiServerUrl: https://api.production.example:6443
     caBundle: |
       -----BEGIN CERTIFICATE-----
@@ -27,7 +26,6 @@ clusters:
 | --- | --- | --- |
 | `name` | 是 | 唯一展示名称 |
 | `description` | 否 | 人类可读说明 |
-| `connectionMode` | 否 | `direct`（默认）；隧道注册通过管理 UI/API 创建 |
 | `apiServerUrl` | 是 | 不含凭据的 Kubernetes HTTPS API 地址 |
 | `caBundle` | 否 | PEM 或 base64 编码的 PEM 信任链 |
 | `tlsServerName` | 否 | 私网地址的 TLS 名称覆盖 |
@@ -37,13 +35,9 @@ clusters:
 该文件不得包含 kubeconfig、bearer token、客户端证书/私钥、ServiceAccount
 token、OAuth client secret、用户、LDAP 设置或角色映射。
 
-声明式文件不接受隧道集群，因为系统生成的注册密钥和 Token 必须恰好一次返回给
-管理员。请通过 **设置 > 集群** 或管理 API 添加隧道集群，再在目标集群应用生成
-的 Agent 清单。
-
 存在 `clusters` 时，该文件是集群目录的权威来源，对应 UI 变为只读。Kite 会
 监听文件并以事务方式应用有效变更；同名集群原地更新，因此稳定集群身份及资源
-历史不会因重启或热更新丢失。从文件移除集群会删除目录记录及其 Helm 定时任务，
+历史不会因重启或热更新丢失。从文件移除集群会删除目录记录，
 但不会修改该集群中的 Kubernetes 资源。启动时配置无效会阻止 Kite 就绪；热更新
 无效时继续使用上一份有效目录和连接，修正文件后再重试。
 

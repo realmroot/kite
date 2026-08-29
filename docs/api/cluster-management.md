@@ -11,8 +11,7 @@ Kubernetes resource access.
 | --- | --- |
 | `name` | Unique display name |
 | `description` | Optional context |
-| `connectionMode` | `direct` or `tunnel` |
-| `apiServerUrl` | HTTPS Kubernetes endpoint for direct mode |
+| `apiServerUrl` | HTTPS Kubernetes endpoint reachable from Kite |
 | `caBundle` | Optional PEM or base64-encoded PEM trust bundle |
 | `tlsServerName` | Optional TLS name override |
 | `prometheusURL` | Optional Prometheus Service URL |
@@ -28,9 +27,8 @@ ServiceAccount fields are not accepted. Unknown JSON fields are rejected.
 GET /api/v1/admin/clusters/
 ```
 
-The response includes the fields above plus `id`, tunnel connection status,
-and tunnel-agent version where applicable. It never returns enrollment secrets
-or Kubernetes credentials.
+The response includes the fields above plus `id`. It never returns Kubernetes
+credentials.
 
 Authenticated users list selectable names with:
 
@@ -45,13 +43,10 @@ POST /api/v1/admin/clusters/
 Content-Type: application/json
 ```
 
-Direct example:
-
 ```json
 {
   "name": "production",
   "description": "Production cluster",
-  "connectionMode": "direct",
   "apiServerUrl": "https://api.production.example:6443",
   "caBundle": "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----",
   "tlsServerName": "api.production.example",
@@ -60,24 +55,8 @@ Direct example:
 }
 ```
 
-`apiServerUrl` must be HTTPS. The direct endpoint must be reachable from Kite.
-
-Tunnel example:
-
-```json
-{
-  "name": "private",
-  "description": "Private network cluster",
-  "connectionMode": "tunnel",
-  "isDefault": false
-}
-```
-
-The tunnel response contains a short-lived encrypted
-`clusterAgentManifestURL`. Download and apply it promptly. The URL grant
-expires and is not returned by later list calls. The generated agent is
-transport-only and has no mounted ServiceAccount
-token or Kubernetes RBAC grant.
+`apiServerUrl` must be HTTPS and reachable from Kite. Private network routing,
+DNS, and any tunnel are deployment infrastructure, not a Kite protocol.
 
 ## Update and delete
 
@@ -87,8 +66,7 @@ DELETE /api/v1/admin/clusters/:id
 ```
 
 Update accepts `name`, `description`, `apiServerUrl`, `caBundle`,
-`tlsServerName`, `prometheusURL`, `isDefault`, and `enabled`. Connection
-mode is immutable; replace the catalog entry to change direct versus tunnel.
+`tlsServerName`, `prometheusURL`, `isDefault`, and `enabled`.
 The default entry cannot be deleted until another entry becomes default.
 Deleting a non-default cluster releases the catalog name for reuse. Historical
 audit metadata is retained under the stable cluster identity recorded when the

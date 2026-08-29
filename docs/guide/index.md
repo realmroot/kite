@@ -17,7 +17,7 @@ Kite is a lightweight, modern Kubernetes dashboard for real-time observability a
 
 - Switch between multiple Kubernetes clusters
 - Kubernetes-authorized Prometheus integration per cluster
-- Credential-free direct and private-tunnel connections
+- Credential-free HTTPS Kubernetes API connections
 - Add, edit, switch, and remove cluster catalog entries
 
 ### Resource Management

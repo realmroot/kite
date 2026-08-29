@@ -14,7 +14,6 @@ silently.
 clusters:
   - name: production
     description: Production cluster
-    connectionMode: direct
     apiServerUrl: https://api.production.example:6443
     caBundle: |
       -----BEGIN CERTIFICATE-----
@@ -29,7 +28,6 @@ clusters:
 | --- | --- | --- |
 | `name` | Yes | Unique display name |
 | `description` | No | Human-readable context |
-| `connectionMode` | No | `direct` (default); tunnel enrollment is created through the admin UI/API |
 | `apiServerUrl` | Yes | Credential-free Kubernetes HTTPS API endpoint |
 | `caBundle` | No | PEM or base64-encoded PEM trust bundle |
 | `tlsServerName` | No | TLS name override for private endpoints |
@@ -39,11 +37,6 @@ clusters:
 The file must not contain kubeconfig data, bearer tokens, client certificates,
 client keys, ServiceAccount tokens, OAuth client secrets, users, LDAP settings,
 or role mappings.
-
-Tunnel clusters are deliberately not accepted in the declarative file because
-their generated enrollment key and token must be returned exactly once to an
-administrator. Add them through **Settings > Clusters** or the admin API, then
-apply the generated agent manifest in the target cluster.
 
 When `clusters` is present, the file is authoritative for the cluster catalog
 and the corresponding UI becomes read-only. Kite watches the file and applies

@@ -39,7 +39,7 @@ Kubernetes API Server；用户或 group 直接绑定 RoleBinding/ClusterRoleBind
 
 - 在多个 Kubernetes 集群间切换
 - 每个集群通过 Kubernetes 授权访问集群内 Prometheus
-- 无 Kubernetes 凭据的 Direct 与私网 Tunnel 连接
+- 无 Kubernetes 凭据的 HTTPS API Server 连接
 - 添加、编辑、切换和删除集群目录记录
 
 ### 资源管理

@@ -17,7 +17,7 @@ Kite 是一个轻量级、现代化的 Kubernetes Dashboard，专注于实时可
 
 - 在多个 Kubernetes 集群间切换
 - 每个集群通过 Kubernetes 授权访问 Prometheus
-- 无凭据 Direct 与私网 Tunnel 连接
+- 无凭据 HTTPS Kubernetes API 连接
 - 添加、编辑、切换和删除集群目录记录
 
 ### 资源管理

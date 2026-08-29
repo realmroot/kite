@@ -10,7 +10,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/zxh326/kite/pkg/clusteragent"
 	"github.com/zxh326/kite/pkg/common"
 	"github.com/zxh326/kite/pkg/kube"
 	"github.com/zxh326/kite/pkg/model"
@@ -32,11 +31,10 @@ type ClientSet struct {
 }
 
 type ClusterManager struct {
-	clusterAgentManager *clusteragent.Manager
-	inventoryCatalog    *inventoryCatalog
-	runtimeMu           sync.Mutex
-	runtimes            map[uint]*clusterRuntime
-	transportFor        func(*rest.Config) (http.RoundTripper, error)
+	inventoryCatalog *inventoryCatalog
+	runtimeMu        sync.Mutex
+	runtimes         map[uint]*clusterRuntime
+	transportFor     func(*rest.Config) (http.RoundTripper, error)
 }
 
 type clusterRuntime struct {
@@ -205,12 +203,12 @@ func (cm *ClusterManager) GetClientSet(clusterName, idToken string) (*ClientSet,
 }
 
 func (cm *ClusterManager) runtimeForCluster(cluster *model.Cluster) (*clusterRuntime, error) {
-	config, generation, err := cm.baseRESTConfig(cluster)
+	config, err := cm.baseRESTConfig(cluster)
 	if err != nil {
 		return nil, err
 	}
 	kube.PrepareConfig(config)
-	signature := clusterRuntimeSignature(cluster, config, generation)
+	signature := clusterRuntimeSignature(cluster, config)
 
 	cm.runtimeMu.Lock()
 	defer cm.runtimeMu.Unlock()
@@ -240,33 +238,23 @@ func (cm *ClusterManager) runtimeForCluster(cluster *model.Cluster) (*clusterRun
 	return runtime, nil
 }
 
-func (cm *ClusterManager) baseRESTConfig(cluster *model.Cluster) (*rest.Config, uint64, error) {
-	var config *rest.Config
-	var generation uint64
-	if cluster.ClusterAgent || cluster.ConnectionMode == "tunnel" {
-		var err error
-		config, generation, err = cm.clusterAgentManager.RESTConfig(cluster.ID)
-		if err != nil {
-			return nil, 0, err
-		}
-	} else {
-		if err := validateKubernetesAPIServerURL(cluster.APIServerURL); err != nil {
-			return nil, 0, fmt.Errorf("invalid cluster API server URL: %w", err)
-		}
-		caData, err := kube.NormalizeCABundle(cluster.CABundle)
-		if err != nil {
-			return nil, 0, fmt.Errorf("invalid cluster CA bundle: %w", err)
-		}
-		if err := kube.ValidateTLSServerName(cluster.TLSServerName); err != nil {
-			return nil, 0, err
-		}
-		config = &rest.Config{
-			Host: cluster.APIServerURL,
-			TLSClientConfig: rest.TLSClientConfig{
-				CAData:     caData,
-				ServerName: cluster.TLSServerName,
-			},
-		}
+func (cm *ClusterManager) baseRESTConfig(cluster *model.Cluster) (*rest.Config, error) {
+	if err := validateKubernetesAPIServerURL(cluster.APIServerURL); err != nil {
+		return nil, fmt.Errorf("invalid cluster API server URL: %w", err)
+	}
+	caData, err := kube.NormalizeCABundle(cluster.CABundle)
+	if err != nil {
+		return nil, fmt.Errorf("invalid cluster CA bundle: %w", err)
+	}
+	if err := kube.ValidateTLSServerName(cluster.TLSServerName); err != nil {
+		return nil, err
+	}
+	config := &rest.Config{
+		Host: cluster.APIServerURL,
+		TLSClientConfig: rest.TLSClientConfig{
+			CAData:     caData,
+			ServerName: cluster.TLSServerName,
+		},
 	}
 	config = rest.CopyConfig(config)
 	config.BearerToken = ""
@@ -277,17 +265,15 @@ func (cm *ClusterManager) baseRESTConfig(cluster *model.Cluster) (*rest.Config, 
 	config.KeyData = nil
 	config.CertFile = ""
 	config.KeyFile = ""
-	return config, generation, nil
+	return config, nil
 }
 
-func clusterRuntimeSignature(cluster *model.Cluster, config *rest.Config, generation uint64) string {
-	payload := fmt.Sprintf("%d\x00%s\x00%s\x00%s\x00%t\x00%d\x00%x",
+func clusterRuntimeSignature(cluster *model.Cluster, config *rest.Config) string {
+	payload := fmt.Sprintf("%d\x00%s\x00%s\x00%t\x00%x",
 		cluster.ID,
-		cluster.ConnectionMode,
 		config.Host,
 		config.ServerName,
 		config.Insecure,
-		generation,
 		config.CAData,
 	)
 	return fmt.Sprintf("%x", sha256.Sum256([]byte(payload)))
@@ -317,11 +303,6 @@ func (cm *ClusterManager) InvalidateCatalogRuntimes() {
 		closeIdleConnections(runtime.transport)
 	}
 	cm.runtimeMu.Unlock()
-
-	// Declarative catalog entries are direct-only. A successful reload therefore
-	// removes any tunnel entries that may have existed before the catalog became
-	// managed, so their established transports must be closed as well.
-	cm.clusterAgentManager.DisconnectAll()
 }
 
 func newUserClientSet(name string, config *rest.Config, httpClient *http.Client, prometheusURL, idToken string) (*ClientSet, error) {
@@ -362,6 +343,5 @@ func NewClusterManagerWithContext(ctx context.Context) (*ClusterManager, error) 
 		}
 		cm.inventoryCatalog = catalog
 	}
-	cm.clusterAgentManager = clusteragent.NewManager(func() {})
 	return cm, nil
 }

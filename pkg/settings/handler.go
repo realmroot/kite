@@ -20,7 +20,6 @@ func HandleGetGeneralSetting(c *gin.Context) {
 		"kubectlEnabled":      setting.KubectlEnabled,
 		"kubectlImage":        setting.KubectlImage,
 		"nodeTerminalImage":   setting.NodeTerminalImage,
-		"clusterAgentImage":   setting.ClusterAgentImage,
 		"enableAnalytics":     setting.EnableAnalytics,
 		"analyticsConfigured": common.AnalyticsConfigured(),
 		"enableVersionCheck":  setting.EnableVersionCheck,
@@ -32,7 +31,6 @@ type UpdateGeneralSettingRequest struct {
 	KubectlEnabled     *bool   `json:"kubectlEnabled"`
 	KubectlImage       *string `json:"kubectlImage"`
 	NodeTerminalImage  *string `json:"nodeTerminalImage"`
-	ClusterAgentImage  *string `json:"clusterAgentImage"`
 	EnableAnalytics    *bool   `json:"enableAnalytics"`
 	EnableVersionCheck *bool   `json:"enableVersionCheck"`
 	LoginPrompt        *string `json:"loginPrompt"`
@@ -72,13 +70,6 @@ func HandleUpdateGeneralSetting(c *gin.Context) {
 	if nodeTerminalImage == "" {
 		nodeTerminalImage = model.DefaultGeneralNodeTerminalImageValue()
 	}
-	clusterAgentImage := strings.TrimSpace(currentSetting.ClusterAgentImage)
-	if req.ClusterAgentImage != nil {
-		clusterAgentImage = strings.TrimSpace(*req.ClusterAgentImage)
-	}
-	if clusterAgentImage == "" {
-		clusterAgentImage = model.DefaultGeneralClusterAgentImageValue()
-	}
 
 	updates := map[string]interface{}{}
 	if req.KubectlEnabled != nil {
@@ -89,9 +80,6 @@ func HandleUpdateGeneralSetting(c *gin.Context) {
 	}
 	if req.NodeTerminalImage != nil {
 		updates["node_terminal_image"] = nodeTerminalImage
-	}
-	if req.ClusterAgentImage != nil {
-		updates["cluster_agent_image"] = clusterAgentImage
 	}
 	if req.EnableAnalytics != nil {
 		if *req.EnableAnalytics && !common.AnalyticsConfigured() {
@@ -116,7 +104,6 @@ func HandleUpdateGeneralSetting(c *gin.Context) {
 		"kubectlEnabled":      updated.KubectlEnabled,
 		"kubectlImage":        updated.KubectlImage,
 		"nodeTerminalImage":   updated.NodeTerminalImage,
-		"clusterAgentImage":   updated.ClusterAgentImage,
 		"enableAnalytics":     updated.EnableAnalytics,
 		"analyticsConfigured": common.AnalyticsConfigured(),
 		"enableVersionCheck":  updated.EnableVersionCheck,

@@ -32,9 +32,6 @@ func setupAPIRouter(r *gin.RouterGroup, app *application) {
 
 	registerBaseRoutes(r, app)
 	r.GET("/api/v1/bootstrap", authHandler.Bootstrap)
-	r.GET("/api/v1/cluster-agent/connect", cm.ConnectClusterAgent)
-	r.POST("/api/v1/cluster-agent/register", cm.RegisterClusterAgent)
-	r.GET("/api/v1/cluster-agent/manifest", cm.GetClusterAgentManifest)
 	registerAuthRoutes(r, authHandler)
 	registerUserRoutes(r, authHandler)
 	registerAdminRoutes(r, authHandler, cm, helmChartsHandler)

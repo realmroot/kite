@@ -13,7 +13,7 @@ Confirm that the managed service lets you:
 3. configure or predict the username and groups claims;
 4. create native RoleBindings/ClusterRoleBindings for those identities; and
 5. expose an HTTPS API endpoint reachable directly from Kite or through the
-   transport-only tunnel.
+   operator-managed private network path.
 
 Add the cluster using only its API URL, CA bundle, optional TLS server name, and
 connection mode.

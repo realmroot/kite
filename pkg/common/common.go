@@ -11,8 +11,7 @@ import (
 )
 
 const (
-	JWTExpirationSeconds = 24 * 60 * 60 // 24 hours
-	DefaultJWTSecret     = "kite-default-jwt-secret-key-change-in-production"
+	CookieExpirationSeconds = 48 * 60 * 60
 
 	NodeTerminalPodName    = "kite-node-terminal-agent"
 	KubectlTerminalPodName = "kite-kubectl-agent"
@@ -28,7 +27,6 @@ const (
 var (
 	Port               = "8080"
 	PprofAddress       = ""
-	JwtSecret          = DefaultJWTSecret
 	EnableAnalytics    = false
 	AnalyticsScriptURL = ""
 	AnalyticsWebsiteID = ""
@@ -37,7 +35,6 @@ var (
 
 	NodeTerminalImage             = "busybox:1.37.0"
 	KubectlTerminalImage          = "alpine/kubectl:1.36.3"
-	ClusterAgentImage             = ""
 	OIDCIssuer                    = ""
 	OIDCCAFile                    = ""
 	OIDCClientID                  = ""
@@ -60,8 +57,6 @@ var (
 	KiteEncryptKey = "kite-default-encryption-key-change-in-production"
 
 	AllNamespaces = "_all"
-
-	CookieExpirationSeconds = 2 * JWTExpirationSeconds // double jwt
 
 	DisableGZIP               = true
 	EnableVersionCheck        = true
@@ -117,10 +112,6 @@ func SetManagedSections(sections map[string]bool) {
 }
 
 func LoadEnvs() {
-	if secret := os.Getenv("JWT_SECRET"); secret != "" {
-		JwtSecret = secret
-	}
-
 	if port := os.Getenv("PORT"); port != "" {
 		Port = port
 	}
@@ -141,7 +132,6 @@ func LoadEnvs() {
 		KubectlTerminalImage = kubectlTerminalImage
 	}
 
-	ClusterAgentImage = strings.TrimSpace(os.Getenv("CLUSTER_AGENT_IMAGE"))
 	loadOIDCEnvs()
 	ClusterInventoryEnabled = os.Getenv("CLUSTER_INVENTORY_ENABLED") == "true"
 	ClusterInventoryKubeconfig = strings.TrimSpace(os.Getenv("CLUSTER_INVENTORY_KUBECONFIG"))

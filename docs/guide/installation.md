@@ -173,7 +173,7 @@ If you need to configure Kite through environment variables, please refer to [En
 
 An operator in `PLATFORM_ADMIN_GROUPS` can open **Settings > Clusters** and add
 a direct cluster using only its API server URL, CA bundle, and optional TLS
-server name, or deploy the credential-free tunnel agent for a private API
+server name. Private APIs require operator-managed network connectivity
 server. Kite does not use its Pod ServiceAccount as a cluster credential. The
 cluster API server must trust the same OIDC issuer, and Kubernetes RBAC must
 bind the signed-in users or groups.

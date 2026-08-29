@@ -41,7 +41,7 @@ for moving UI data access onto canonical Kubernetes resource APIs.
 
 - Switch between multiple Kubernetes clusters
 - Kubernetes-authorized in-cluster Prometheus service proxy per cluster
-- Direct and private-tunnel connectivity without stored Kubernetes credentials
+- Credential-free HTTPS Kubernetes endpoint connectivity
 - Add, edit, switch, and remove credential-free cluster catalog entries
 
 ### Resource Management

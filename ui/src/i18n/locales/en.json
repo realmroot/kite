@@ -652,11 +652,6 @@
       "clusters": "Cluster",
       "templates": "Templates",
       "audit": "Audit"
-    },
-    "gatewayAudit": {
-      "title": "Gateway access audit",
-      "description": "Review user and Agent requests recorded by Cluster Access Gateway",
-      "empty": "No Gateway access events recorded"
     }
   },
   "generalManagement": {
@@ -672,13 +667,6 @@
     "nodeTerminal": {
       "title": "Node Terminal",
       "description": "Configure runtime image used for node terminal sessions.",
-      "form": {
-        "image": "Image"
-      }
-    },
-    "clusterAgent": {
-      "title": "Cluster Agent Image",
-      "description": "Container image used when generating the Cluster Agent manifest for Cluster Agent clusters.",
       "form": {
         "image": "Image"
       }
@@ -716,30 +704,6 @@
     "table": {
       "prometheus": "Prometheus"
     },
-    "type": {
-      "clusterAgent": "Cluster Agent",
-      "direct": "Direct",
-      "tunnel": "Private Tunnel"
-    },
-    "status": {
-      "waiting": "Waiting for Cluster Agent",
-      "connected": "Connected"
-    },
-    "clusterAgent": {
-      "title": "Connect Cluster Agent",
-      "version": "Version: {{version}}",
-      "description": "Choose a command or Kubernetes YAML to run inside the target cluster. This connection information is shown only once.",
-      "command": "Command",
-      "commandHint": "Run inside the target cluster and replace the CA file path if needed. The Kubernetes YAML tab is ready to apply without editing.",
-      "yaml": "Kubernetes YAML",
-      "copyCommand": "Copy command",
-      "copyYaml": "Copy YAML",
-      "applyUrl": "Apply directly with URL",
-      "copyApplyCommand": "Copy apply command",
-      "orUseYaml": "Or deploy with YAML",
-      "loadYamlError": "Failed to load YAML from the manifest URL.",
-      "copyError": "Failed to copy. Copy the content manually."
-    },
     "empty": {
       "title": "No clusters configured",
       "description": "Add your first cluster to get started"
@@ -767,13 +731,9 @@
       "prometheusUrl": "Prometheus URL",
       "prometheusUrlPlaceholder": "http://prometheus.monitoring.svc:9090",
       "prometheusUrlDescription": "Optional cluster-local Service URL. Kite accesses it through the Kubernetes Service proxy with the signed-in user's identity.",
-      "clusterAgentDescription": "Create the cluster first, then run the generated command inside the target cluster.",
       "enabled": "Enabled",
       "isDefault": "Set as Default",
-      "connectionMode": "Connection Mode",
-      "apiServerUrl": "API Server URL",
-      "directDescription": "Direct mode requires a publicly reachable API server with a publicly trusted TLS certificate.",
-      "tunnelDescription": "The transport-only agent carries the signed-in user token and has no Kubernetes identity."
+      "apiServerUrl": "API Server URL"
     }
   },
   "resourceHistory": {

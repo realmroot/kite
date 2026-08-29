@@ -23,7 +23,7 @@ features:
     details: 暗色/亮色/彩色主题、全局搜索、响应式设计与国际化支持
   - icon: 🏘
     title: 多集群管理
-    details: 无凭据 Direct/Tunnel 连接，以及经 Kubernetes 授权的 Prometheus
+    details: 无凭据 HTTPS API 连接，以及经 Kubernetes 授权的 Prometheus
   - icon: 🔍
     title: 资源管理
     details: 全资源覆盖、实时 YAML 编辑、资源关系展示、CRD 与 Helm 支持、Kube Proxy 直连访问

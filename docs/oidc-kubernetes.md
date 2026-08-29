@@ -56,7 +56,6 @@ OIDC_NAME_CLAIM=name
 OIDC_PICTURE_CLAIM=picture
 PLATFORM_ADMIN_GROUPS=platform-admins
 KITE_ENCRYPT_KEY=<random secret used for encrypted server sessions>
-JWT_SECRET=<independent random secret used for tunnel enrollment grants>
 HOST=https://kite.example.com
 ```
 
@@ -115,21 +114,18 @@ Disabling Inventory leaves the standalone local source unchanged.
 Each cluster row stores only:
 
 - display name and description;
-- connection mode: `direct` or `tunnel`;
-- HTTPS API server URL for direct mode;
+- HTTPS API server URL reachable from Kite;
 - CA bundle and optional TLS server-name override;
 - optional cluster-local Prometheus service URL;
-- enabled/default flags;
-- tunnel enrollment keys and connection metadata for tunnel mode.
+- enabled/default flags.
 
 It never accepts or returns a kubeconfig, bearer token, client certificate, or
 client key. Existing upstream installations must re-register clusters using
 transport metadata; privileged kubeconfigs are not migrated.
 
-Direct mode requires network reachability from Kite to the API server. Tunnel
-mode deploys a transport-only agent in the cluster. Its manifest has no
-ServiceAccount token, Role, ClusterRole, RoleBinding, or ClusterRoleBinding;
-the end user's token traverses the tunnel to the API server unchanged.
+Kite requires network reachability to the API server. Private routing and any
+tunnel are operator-owned deployment infrastructure; Kite does not implement
+an enrollment protocol or in-cluster connector.
 
 Prometheus is enabled only for `.svc`/`.svc.cluster.local` service URLs. Kite
 reaches that service through the Kubernetes service proxy using the current

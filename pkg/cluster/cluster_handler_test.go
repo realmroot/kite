@@ -76,7 +76,7 @@ func TestCredentialFreeClusterDefaultAndDeletionConstraints(t *testing.T) {
 		t.Fatalf("default delete status = %d, want %d", deleteDefault.Code, http.StatusBadRequest)
 	}
 
-	secondary := &model.Cluster{Name: "secondary", APIServerURL: "https://secondary.example.com", ConnectionMode: "direct", Enable: true}
+	secondary := &model.Cluster{Name: "secondary", APIServerURL: "https://secondary.example.com", Enable: true}
 	if err := model.AddCluster(secondary); err != nil {
 		t.Fatalf("creating secondary cluster: %v", err)
 	}
@@ -107,7 +107,7 @@ func TestCredentialFreeClusterDefaultAndDeletionConstraints(t *testing.T) {
 	if _, err := model.GetClusterByID(secondary.ID); err == nil {
 		t.Fatal("deleted secondary cluster still exists")
 	}
-	recreated := &model.Cluster{Name: "secondary", APIServerURL: "https://replacement.example.com", ConnectionMode: "direct", Enable: true}
+	recreated := &model.Cluster{Name: "secondary", APIServerURL: "https://replacement.example.com", Enable: true}
 	if err := model.AddCluster(recreated); err != nil {
 		t.Fatalf("recreating deleted cluster name: %v", err)
 	}
@@ -125,7 +125,7 @@ func newClusterHandlerTestRouter() *gin.Engine {
 
 func createPrimaryCluster(t *testing.T, router *gin.Engine) *model.Cluster {
 	t.Helper()
-	create := performClusterRequest(router, http.MethodPost, "/clusters", `{"name":"primary","description":"main","connectionMode":"direct","apiServerUrl":"https://k8s.example.com","isDefault":true}`)
+	create := performClusterRequest(router, http.MethodPost, "/clusters", `{"name":"primary","description":"main","apiServerUrl":"https://k8s.example.com","isDefault":true}`)
 	if create.Code != http.StatusCreated {
 		t.Fatalf("create status = %d, want %d: %s", create.Code, http.StatusCreated, create.Body.String())
 	}
@@ -139,7 +139,7 @@ func createPrimaryCluster(t *testing.T, router *gin.Engine) *model.Cluster {
 func TestCreateClusterAcceptsFrontendEnabledField(t *testing.T) {
 	setupClusterHandlerTestDB(t)
 	router := newClusterHandlerTestRouter()
-	response := performClusterRequest(router, http.MethodPost, "/clusters", `{"name":"disabled","connectionMode":"direct","apiServerUrl":"https://k8s.example.com","enabled":false}`)
+	response := performClusterRequest(router, http.MethodPost, "/clusters", `{"name":"disabled","apiServerUrl":"https://k8s.example.com","enabled":false}`)
 	if response.Code != http.StatusCreated {
 		t.Fatalf("create status = %d, want %d: %s", response.Code, http.StatusCreated, response.Body.String())
 	}
@@ -156,8 +156,8 @@ func TestGetClusterListUsesCredentialFreeCatalog(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	setupClusterHandlerTestDB(t)
 	for _, cluster := range []*model.Cluster{
-		{Name: "first", APIServerURL: "https://first.example.com", ConnectionMode: "direct", Enable: true},
-		{Name: "second", APIServerURL: "https://second.example.com", ConnectionMode: "direct", Enable: true, IsDefault: true},
+		{Name: "first", APIServerURL: "https://first.example.com", Enable: true},
+		{Name: "second", APIServerURL: "https://second.example.com", Enable: true, IsDefault: true},
 	} {
 		if err := model.AddCluster(cluster); err != nil {
 			t.Fatal(err)
@@ -192,7 +192,7 @@ func TestClusterMutationsHonorManagedConfiguration(t *testing.T) {
 	router := gin.New()
 	router.POST("/clusters", manager.CreateCluster)
 
-	response := performClusterRequest(router, http.MethodPost, "/clusters", `{"name":"blocked","connectionMode":"direct","apiServerUrl":"https://blocked.example.test"}`)
+	response := performClusterRequest(router, http.MethodPost, "/clusters", `{"name":"blocked","apiServerUrl":"https://blocked.example.test"}`)
 	if response.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want %d", response.Code, http.StatusForbidden)
 	}
@@ -206,7 +206,6 @@ func setupClusterHandlerTestDB(t *testing.T) {
 	t.Helper()
 	originalDB := model.DB
 	originalEncryptKey := common.KiteEncryptKey
-	originalClusterAgentImage := common.ClusterAgentImage
 	originalHost := common.Host
 	originalBase := common.Base
 	originalManagedSections := make(map[string]bool, len(common.ManagedSections))
@@ -214,7 +213,6 @@ func setupClusterHandlerTestDB(t *testing.T) {
 		originalManagedSections[section] = managed
 	}
 	common.KiteEncryptKey = "cluster-handler-test-key"
-	common.ClusterAgentImage = "example.test/kite:test"
 	common.Host = "https://kite.example.test"
 	common.Base = ""
 	common.SetManagedSections(nil)
@@ -234,7 +232,6 @@ func setupClusterHandlerTestDB(t *testing.T) {
 		}
 		model.DB = originalDB
 		common.KiteEncryptKey = originalEncryptKey
-		common.ClusterAgentImage = originalClusterAgentImage
 		common.Host = originalHost
 		common.Base = originalBase
 		common.SetManagedSections(originalManagedSections)

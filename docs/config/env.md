@@ -7,7 +7,7 @@ Kite supports several environment variables by default to change the default val
 - **OIDC_CLIENT_ID**: Required application client ID. Public Authorization Code + PKCE clients are supported.
 - **OIDC_CLIENT_SECRET**: Optional confidential-client secret. Leave unset for a public PKCE client.
 - **OIDC_PROVIDER_NAME**: Login-page display name. Defaults to `OpenID Connect`.
-- **OIDC_SCOPES**: Space- or comma-separated scopes. Must contain `openid` and `offline_access`. Scheduled Helm operations use the user's refresh grant.
+- **OIDC_SCOPES**: Space- or comma-separated scopes. Must contain `openid` and `offline_access` so browser sessions can refresh server-side.
 - **OIDC_USERNAME_CLAIM** / **OIDC_GROUPS_CLAIM**: Claims mapped to the local display identity and Kubernetes groups. Defaults to `email` and `groups`.
 - **OIDC_NAME_CLAIM** / **OIDC_PICTURE_CLAIM**: Optional profile claim names. Defaults to `name` and `picture`.
 - **PLATFORM_ADMIN_GROUPS**: Groups allowed to manage Kite-owned shared metadata. Comma/space-separated values remain supported; use a JSON string array such as `["operators,west","platform admins"]` to preserve claim values containing separators. This does not grant Kubernetes access.
@@ -17,14 +17,12 @@ Kite supports several environment variables by default to change the default val
 - **CLUSTER_INVENTORY_NAMESPACE**: Namespace watched for `ClusterProfile` resources. Defaults to `cluster-inventory`.
 - **CLUSTER_INVENTORY_LABEL_SELECTOR**: Optional Kubernetes label selector limiting discovered profiles.
 
-- **JWT_SECRET**: Secret key used for signing and verifying JWT
 - **KITE_ENCRYPT_KEY**: Secret key used to encrypt server-side OIDC tokens.
 
 - **HOST**: Required public HTTPS origin used for OAuth 2.0 callbacks and secure cookies. It must not contain credentials, a path, query, or fragment. Loopback HTTP is accepted only for local development; use `KITE_BASE` for a path prefix.
 
 - **TRUSTED_PROXIES**: Comma-separated list of reverse proxy, ingress, or load balancer IPs/CIDRs that Kite should trust when reading `X-Forwarded-For` / `X-Real-IP` to determine the client IP. By default, Kite trusts local/private network ranges (`127.0.0.0/8`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `::1`, `fc00::/7`) so common ingress deployments can report real client IPs. Set a narrower value such as `TRUSTED_PROXIES=10.42.0.0/16,192.168.1.10` for production, or `TRUSTED_PROXIES=none` to ignore all client-supplied forwarding headers.
 
-- **CLUSTER_AGENT_IMAGE**: Docker image used when generating the Cluster Agent manifest for Cluster Agent clusters.
 - **KUBECTL_TERMINAL_IMAGE** / **NODE_TERMINAL_IMAGE**: Versioned runtime images for the optional browser terminal workflows.
 - **RELEASE_API_URL**: Optional GitHub-compatible latest-release API. No version-check request is made when it is empty.
 - **KITE_IMAGE_REGISTRY_HOSTS**: Comma-separated additional image registry

@@ -44,7 +44,7 @@ and compatibility validation, not a product rewrite or a new hard-coded model.
    authorization. Platform-management access is derived from standard OIDC
    claims configured by the operator and may never grant additional Kubernetes
    permissions.
-5. Cluster Access Gateway owns direct and tunnel connection metadata. Kite keeps
+5. Kube Cluster Hub owns connection metadata. Kite keeps
    a credential-free local projection only to preserve stable resource-history
    keys and UI state. The user's token remains the Kubernetes request
    credential.
@@ -74,6 +74,8 @@ documentation, except for migration notes that explicitly state their removal:
   verification, and Agent Kubernetes execution.
 - Scheduled Helm auto-upgrade, its scheduler, retained execution credentials,
   configuration UI, and persisted task table.
+- Kite's private reverse-tunnel protocol, Cluster Agent binary, enrollment
+  grants, signing secret, manifests, settings, and connection-mode fields.
 
 No other original product capability belongs in this list by inference. Moving
 an existing capability here requires an explicit product decision and a
@@ -87,8 +89,8 @@ documentation:
 
 - OIDC login, callback, refresh, logout, session revocation, and current-user
   bootstrap.
-- Multi-cluster catalog with create, edit, disable, delete, direct connectivity,
-  and credential-free reverse tunnel connectivity.
+- Multi-cluster catalog with create, edit, disable, delete, and credential-free
+  HTTPS API endpoint connectivity. Private routing is deployment infrastructure.
 - Kubernetes discovery, browsing, YAML view/edit/apply, create/delete, scale,
   restart, rollback, custom resources, and raw API gateway.
 - Pod logs and Pod exec, including streaming lifecycle and disconnect behavior.
@@ -104,11 +106,11 @@ Kubernetes-native, but they must not be removed as architectural cleanup.
 
 ## External tools
 
-External tools discover and call Cluster Access Gateway directly. Kite can
-display the Gateway's Agent audit events but does not terminate Agent OAuth
-tokens or proxy Agent traffic. The dashboards and Agents share Cluster
-Inventory and canonical Kubernetes resource identity without sharing an
-authentication credential.
+External tools discover and call Kube Cluster Hub directly. Hub owns and
+displays its Agent audit events. Kite neither consumes a private Hub audit API
+nor terminates Agent OAuth tokens or proxies Agent traffic. The dashboards and
+Agents share standard Cluster Inventory and canonical Kubernetes resource
+identity without sharing an authentication credential.
 
 ## Preserve pending review
 
@@ -147,13 +149,13 @@ A release is blocked until all of the following pass:
 
 - Repository scans prove removed feature packages, routes, UI imports, settings,
   dependencies, database objects, translations, tests, and documentation are
-  absent. Transport `Cluster Agent`, HTTP `User-Agent`, Kubernetes RBAC resource
-  kinds, and contribution-policy references to coding assistants are not
-  product AI and are explicitly outside that scan.
+  absent. HTTP `User-Agent`, Kubernetes RBAC resource kinds, and
+  contribution-policy references to coding assistants are not product AI and
+  are explicitly outside that scan.
 - Go unit/integration tests, race-sensitive authentication and transport tests,
   frontend typecheck/lint/tests/build, and database migration tests pass.
-- A local end-to-end environment proves OIDC login, direct and tunneled cluster
-  selection, a user-specific allow and deny from Kubernetes RBAC, logs, exec,
+- A local end-to-end environment proves OIDC login, cluster selection, a
+  user-specific allow and deny from Kubernetes RBAC, logs, exec,
   and representative retained operations. The API server audit identity must be
   the actual OIDC user, never Kite or a shared ServiceAccount.
 - Documentation and deployment examples describe only the shipped architecture

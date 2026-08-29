@@ -18,7 +18,6 @@ make build
 export DB_TYPE=sqlite
 export DB_DSN="${DB_PATH}?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)"
 export DISABLE_VERSION_CHECK=true
-export JWT_SECRET="${KITE_E2E_JWT_SECRET:-kite-e2e-jwt-secret}"
 export KITE_ENCRYPT_KEY="${KITE_E2E_ENCRYPT_KEY:-kite-e2e-encryption-key}"
 export OIDC_ISSUER="${KITE_E2E_OIDC_ISSUER:-https://localhost:5556}"
 export OIDC_CA_FILE="${KITE_E2E_OIDC_CA_FILE:-${KITE_E2E_OIDC_CERT_DIR:-${TMPDIR:-/tmp}/kite-e2e-oidc}/ca.crt}"

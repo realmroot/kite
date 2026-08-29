@@ -23,7 +23,7 @@ features:
     details: Dark/light/color themes, global search, responsive design, and i18n support
   - icon: 🏘
     title: Multi-Cluster Management
-    details: Credential-free direct and tunnel connections with Kubernetes-authorized Prometheus
+    details: Credential-free HTTPS API connections with Kubernetes-authorized Prometheus
   - icon: 🔍
     title: Resource Management
     details: Full resource coverage, live YAML editing, relationship view, CRD support, and kube proxy access

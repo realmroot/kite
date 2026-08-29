@@ -153,7 +153,7 @@ indentation, sorted imports. Let the configured formatter handle import order.
 
 Runtime settings are loaded in `pkg/common/common.go` from environment variables
 such as the `OIDC_*` claim/client settings, `PLATFORM_ADMIN_GROUPS`, `HOST`,
-`PORT`, `JWT_SECRET`, `KITE_ENCRYPT_KEY`, `DB_TYPE`, `DB_DSN`, `KITE_BASE`,
+`PORT`, `KITE_ENCRYPT_KEY`, `DB_TYPE`, `DB_DSN`, `KITE_BASE`,
 `KITE_CONFIG_FILE`, `CLUSTER_INVENTORY_*`, and CORS settings.
 
 External config files are parsed in `internal/config.go`. Only the

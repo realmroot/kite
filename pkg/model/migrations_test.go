@@ -217,10 +217,6 @@ func TestReplaceUpstreamImageDefaultsPreservesOperatorOverrides(t *testing.T) {
 		(2, 'operator/kubectl:v1', 'operator/node:v1', 'operator/agent:v1')`).Error; err != nil {
 		t.Fatal(err)
 	}
-	previousAgentImage := common.ClusterAgentImage
-	common.ClusterAgentImage = "registry.example.test/kite:v1.0.0"
-	t.Cleanup(func() { common.ClusterAgentImage = previousAgentImage })
-
 	if err := replaceUpstreamImageDefaults(db); err != nil {
 		t.Fatal(err)
 	}
@@ -238,7 +234,7 @@ func TestReplaceUpstreamImageDefaultsPreservesOperatorOverrides(t *testing.T) {
 	}
 	if rows[0].KubectlImage != DefaultGeneralKubectlImage ||
 		rows[0].NodeTerminalImage != DefaultGeneralNodeTerminalImage ||
-		rows[0].ClusterAgentImage != common.ClusterAgentImage {
+		rows[0].ClusterAgentImage != "ghcr.io/kite-org/kite:latest" {
 		t.Fatalf("legacy defaults were not replaced: %#v", rows[0])
 	}
 	if rows[1].KubectlImage != "operator/kubectl:v1" ||
@@ -421,9 +417,13 @@ func TestRemoveClusterCredentialsMigrationKeepsOnlyConnectionMetadata(t *testing
 		id integer primary key, created_at datetime, updated_at datetime,
 		name varchar(100) not null, description text, config text,
 		prometheus_url text, in_cluster boolean, cluster_agent boolean,
+		cluster_agent_token_hash text,
 		is_default boolean, enable boolean
 	)`).Error; err != nil {
 		t.Fatalf("create legacy clusters: %v", err)
+	}
+	if err := db.Exec(`CREATE INDEX idx_clusters_cluster_agent_token_hash ON clusters(cluster_agent_token_hash)`).Error; err != nil {
+		t.Fatalf("create legacy cluster Agent index: %v", err)
 	}
 
 	oldKey := common.KiteEncryptKey
@@ -486,14 +486,14 @@ users:
 	if direct.APIServerURL != "https://api.example.test:6443" ||
 		direct.CABundle != "test-ca" ||
 		direct.TLSServerName != "api.internal.example.test" ||
-		direct.ConnectionMode != "direct" || !direct.Enable {
+		!direct.Enable {
 		t.Fatalf("direct cluster metadata = %#v", direct)
 	}
 	if clusters[1].Enable {
 		t.Fatal("legacy in-cluster ServiceAccount connection was not disabled")
 	}
-	if clusters[2].ConnectionMode != "tunnel" || !clusters[2].Enable {
-		t.Fatalf("tunnel cluster metadata = %#v", clusters[2])
+	if clusters[2].Enable {
+		t.Fatalf("obsolete tunnel cluster was not disabled: %#v", clusters[2])
 	}
 
 	var leakedCredentials int64
@@ -542,7 +542,7 @@ func TestBindResourceHistoryClustersMigration(t *testing.T) {
 	if err := db.AutoMigrate(&Cluster{}); err != nil {
 		t.Fatal(err)
 	}
-	cluster := Cluster{Name: "prod", ConnectionMode: "direct", APIServerURL: "https://api.example.test", Enable: true}
+	cluster := Cluster{Name: "prod", APIServerURL: "https://api.example.test", Enable: true}
 	if err := db.Create(&cluster).Error; err != nil {
 		t.Fatal(err)
 	}

@@ -24,14 +24,13 @@ type KiteConfig struct {
 type AppliedSections map[string]bool
 
 type ClusterConfig struct {
-	Name           string `yaml:"name"`
-	Description    string `yaml:"description"`
-	APIServerURL   string `yaml:"apiServerUrl"`
-	CABundle       string `yaml:"caBundle"`
-	TLSServerName  string `yaml:"tlsServerName"`
-	ConnectionMode string `yaml:"connectionMode"`
-	PrometheusURL  string `yaml:"prometheusURL"`
-	Default        bool   `yaml:"default"`
+	Name          string `yaml:"name"`
+	Description   string `yaml:"description"`
+	APIServerURL  string `yaml:"apiServerUrl"`
+	CABundle      string `yaml:"caBundle"`
+	TLSServerName string `yaml:"tlsServerName"`
+	PrometheusURL string `yaml:"prometheusURL"`
+	Default       bool   `yaml:"default"`
 }
 
 func LoadConfigFromFile(path string) error {
@@ -92,12 +91,6 @@ func applyClusters(clusters []ClusterConfig) error {
 		value.CABundle = strings.TrimSpace(value.CABundle)
 		value.TLSServerName = strings.TrimSpace(value.TLSServerName)
 		value.PrometheusURL = strings.TrimSpace(value.PrometheusURL)
-		if value.ConnectionMode == "" {
-			value.ConnectionMode = "direct"
-		}
-		if value.ConnectionMode != "direct" {
-			return fmt.Errorf("cluster %q: declarative catalog supports direct mode only; create tunnel clusters through the admin API", value.Name)
-		}
 		if value.Name == "" {
 			return fmt.Errorf("cluster name is required")
 		}
@@ -130,15 +123,14 @@ func applyClusters(clusters []ClusterConfig) error {
 			existing := existingByName[value.Name]
 			if existing == nil {
 				entry := &model.Cluster{
-					Name:           value.Name,
-					Description:    value.Description,
-					APIServerURL:   value.APIServerURL,
-					CABundle:       value.CABundle,
-					TLSServerName:  value.TLSServerName,
-					ConnectionMode: value.ConnectionMode,
-					PrometheusURL:  value.PrometheusURL,
-					IsDefault:      value.Default,
-					Enable:         true,
+					Name:          value.Name,
+					Description:   value.Description,
+					APIServerURL:  value.APIServerURL,
+					CABundle:      value.CABundle,
+					TLSServerName: value.TLSServerName,
+					PrometheusURL: value.PrometheusURL,
+					IsDefault:     value.Default,
+					Enable:        true,
 				}
 				if err := tx.Create(entry).Error; err != nil {
 					return fmt.Errorf("create configured cluster %q: %w", value.Name, err)
@@ -147,19 +139,13 @@ func applyClusters(clusters []ClusterConfig) error {
 			}
 
 			updates := map[string]any{
-				"description":               value.Description,
-				"api_server_url":            value.APIServerURL,
-				"ca_bundle":                 value.CABundle,
-				"tls_server_name":           value.TLSServerName,
-				"connection_mode":           value.ConnectionMode,
-				"prometheus_url":            value.PrometheusURL,
-				"in_cluster":                false,
-				"cluster_agent":             false,
-				"cluster_agent_token_hash":  "",
-				"cluster_agent_public_key":  "",
-				"cluster_agent_private_key": "",
-				"is_default":                value.Default,
-				"enable":                    true,
+				"description":     value.Description,
+				"api_server_url":  value.APIServerURL,
+				"ca_bundle":       value.CABundle,
+				"tls_server_name": value.TLSServerName,
+				"prometheus_url":  value.PrometheusURL,
+				"is_default":      value.Default,
+				"enable":          true,
 			}
 			if err := tx.Model(existing).Updates(updates).Error; err != nil {
 				return fmt.Errorf("update configured cluster %q: %w", value.Name, err)

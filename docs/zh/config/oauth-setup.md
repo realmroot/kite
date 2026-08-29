@@ -28,7 +28,6 @@ OIDC_PICTURE_CLAIM=picture
 PLATFORM_ADMIN_GROUPS=kite-platform-admins
 HOST=https://kite.example.com
 KITE_ENCRYPT_KEY=<独立随机密钥>
-JWT_SECRET=<独立随机密钥>
 ```
 
 Issuer 必须提供标准 Discovery Metadata，`OIDC_SCOPES` 必须包含 `openid` 和

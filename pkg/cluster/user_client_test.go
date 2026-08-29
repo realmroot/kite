@@ -14,17 +14,16 @@ func TestBaseRESTConfigContainsOnlyClusterConnectionMetadata(t *testing.T) {
 	server := httptest.NewTLSServer(nil)
 	t.Cleanup(server.Close)
 	ca := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.Certificate().Raw})
-	config, generation, err := manager.baseRESTConfig(&model.Cluster{
-		Name:           "production",
-		APIServerURL:   "https://api.example.com:6443",
-		CABundle:       base64.StdEncoding.EncodeToString(ca),
-		TLSServerName:  "api.internal",
-		ConnectionMode: "direct",
+	config, err := manager.baseRESTConfig(&model.Cluster{
+		Name:          "production",
+		APIServerURL:  "https://api.example.com:6443",
+		CABundle:      base64.StdEncoding.EncodeToString(ca),
+		TLSServerName: "api.internal",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if config.Host != "https://api.example.com:6443" || config.BearerToken != "" || generation != 0 {
+	if config.Host != "https://api.example.com:6443" || config.BearerToken != "" {
 		t.Fatalf("unexpected config: %#v", config)
 	}
 	if string(config.CAData) != string(ca) || config.ServerName != "api.internal" {

@@ -13,7 +13,6 @@ common_values=(
   --set oidc.clientSecret=test-secret
   --set platformAdminGroups=platform-admins
   --set encryptKey=test-encryption-key
-  --set jwtSecret=test-enrollment-key
 )
 
 helm lint "$chart" "${common_values[@]}"
@@ -34,7 +33,6 @@ required_patterns=(
   '_pragma=foreign_keys\(1\)&_pragma=busy_timeout\(5000\)&_pragma=journal_mode\(WAL\)'
   'value: "alpine/kubectl:1.36.3"'
   'value: "busybox:1.37.0"'
-  'value: "example.invalid/kite:v0.15.0"'
 )
 for pattern in "${required_patterns[@]}"; do
   if ! rg -q "$pattern" "$rendered"; then

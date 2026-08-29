@@ -10,8 +10,6 @@ import (
 	"testing"
 
 	"k8s.io/client-go/rest"
-
-	"github.com/zxh326/kite/pkg/clusteragent"
 )
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
@@ -49,7 +47,6 @@ func TestValidateKubernetesAPIServerURL(t *testing.T) {
 func TestInvalidateCatalogRuntimesClosesAndDropsCachedTransports(t *testing.T) {
 	transport := &closeTrackingTransport{}
 	manager := &ClusterManager{
-		clusterAgentManager: clusteragent.NewManager(func() {}),
 		runtimes: map[uint]*clusterRuntime{
 			7: {transport: transport},
 		},

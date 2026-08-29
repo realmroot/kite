@@ -31,7 +31,6 @@ OIDC_PICTURE_CLAIM=picture
 PLATFORM_ADMIN_GROUPS=kite-platform-admins
 HOST=https://kite.example.com
 KITE_ENCRYPT_KEY=<independent random secret>
-JWT_SECRET=<independent random secret>
 ```
 
 The issuer must expose standard discovery metadata. `OIDC_SCOPES` must include

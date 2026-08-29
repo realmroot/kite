@@ -36,10 +36,6 @@ terminalImages:
   kubectl: alpine/kubectl:1.36.3
   node: busybox:1.37.0
 
-# Defaults to this release's own Kite image. Set explicitly only when the
-# transport-only Cluster Agent is published at a different location.
-clusterAgentImage: ""
-
 # Optional GitHub-compatible latest-release API. Version checks make no
 # outbound request when this is empty.
 releaseAPIURL: ""
@@ -72,10 +68,6 @@ host: ""
 # Remember to also set the ingress path to match.
 # Example: "/kite"
 basePath: ""
-
-# Secret key for protecting one-time tunnel enrollment grants.
-# Ignored if using existingSecret
-jwtSecret: ""
 
 # This is the key used for encrypting sensitive data
 # Change this in production
@@ -121,7 +113,6 @@ secret:
   create: true
   # If set, the deployment will use this existing secret name instead of the generated one (ignored when `create: true`).
   # must contain all required keys. OIDC_CLIENT_SECRET is optional for public PKCE clients.
-  #  JWT_SECRET
   #  KITE_ENCRYPT_KEY
   #  OIDC_CLIENT_ID
   #  OIDC_CLIENT_SECRET (confidential clients only)
@@ -187,7 +178,6 @@ config:
   # clusters:
   #   - name: production
   #     description: "Production cluster"
-  #     connectionMode: direct
   #     apiServerUrl: "https://api.production.example:6443"
   #     caBundle: "<PEM or base64-encoded PEM>"
   #     tlsServerName: "api.production.example"

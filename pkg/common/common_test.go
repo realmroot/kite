@@ -7,7 +7,6 @@ import (
 
 func TestLoadEnvs(t *testing.T) {
 	old := struct {
-		JwtSecret                 string
 		Port                      string
 		PprofAddress              string
 		EnableAnalytics           bool
@@ -38,7 +37,6 @@ func TestLoadEnvs(t *testing.T) {
 		PlatformAdminGroups       []string
 		PlatformAdminSubjects     []string
 	}{
-		JwtSecret:                 JwtSecret,
 		Port:                      Port,
 		PprofAddress:              PprofAddress,
 		EnableAnalytics:           EnableAnalytics,
@@ -70,7 +68,6 @@ func TestLoadEnvs(t *testing.T) {
 		PlatformAdminSubjects:     append([]string(nil), PlatformAdminSubjects...),
 	}
 	defer func() {
-		JwtSecret = old.JwtSecret
 		Port = old.Port
 		PprofAddress = old.PprofAddress
 		EnableAnalytics = old.EnableAnalytics
@@ -105,7 +102,6 @@ func TestLoadEnvs(t *testing.T) {
 	CORSAllowedOrigins = nil
 	TrustedProxies = nil
 
-	t.Setenv("JWT_SECRET", "test-jwt-secret")
 	t.Setenv("PORT", "9090")
 	t.Setenv("PPROF_ADDRESS", "127.0.0.1:6060")
 	t.Setenv("ENABLE_ANALYTICS", "true")
@@ -114,7 +110,6 @@ func TestLoadEnvs(t *testing.T) {
 	t.Setenv("NAMESPACE", "test-namespace")
 	t.Setenv("NODE_TERMINAL_IMAGE", "test-node-image")
 	t.Setenv("KUBECTL_TERMINAL_IMAGE", "test-kubectl-image")
-	t.Setenv("CLUSTER_AGENT_IMAGE", "test-cluster-agent-image")
 	t.Setenv("DB_DSN", "test.db")
 	t.Setenv("DB_TYPE", "mysql")
 	t.Setenv("KITE_ENCRYPT_KEY", "test-encrypt-key")
@@ -138,9 +133,6 @@ func TestLoadEnvs(t *testing.T) {
 
 	LoadEnvs()
 
-	if JwtSecret != "test-jwt-secret" {
-		t.Fatalf("JwtSecret = %q, want %q", JwtSecret, "test-jwt-secret")
-	}
 	if Port != "9090" {
 		t.Fatalf("Port = %q, want %q", Port, "9090")
 	}

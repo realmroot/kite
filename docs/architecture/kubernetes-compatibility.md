@@ -12,7 +12,7 @@ same browser and API end-to-end suite against each release before shipping.
 The CI matrix uses digest-pinned images published with kind 0.32.0. It covers
 OIDC login, Kubernetes RBAC allow and deny behavior, discovery and generic
 resources, metrics, Search, Helm, logs, exec, browser terminals, and direct and
-tunneled clusters. The release workflow repeats the suite on the newest minor.
+reachable clusters. The release workflow repeats the suite on the newest minor.
 
 Kite prefers stable Kubernetes APIs and API discovery. Specialized code must
 move off deprecated APIs before the oldest supported minor removes them. For

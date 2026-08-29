@@ -25,7 +25,7 @@ Chart 部署的 Kite 不挂载 ServiceAccount token，也不会为 Dashboard 的
 只读方式挂载，并自动设置 `OIDC_CA_FILE`。
 
 生产环境建议使用 `secret.create=false` 和 `secret.existingSecret`。已有
-Secret 必须包含 `OIDC_CLIENT_ID`、`KITE_ENCRYPT_KEY`、`JWT_SECRET`，以及需要的
+Secret 必须包含 `OIDC_CLIENT_ID`、`KITE_ENCRYPT_KEY`，以及需要的
 数据库配置。只有机密客户端才需要 `OIDC_CLIENT_SECRET`。
 
 ## 运行与暴露
@@ -46,7 +46,6 @@ Secret 必须包含 `OIDC_CLIENT_ID`、`KITE_ENCRYPT_KEY`、`JWT_SECRET`，以�
 | `terminalImages.kubectl` | `alpine/kubectl:1.36.3` | 版本化 Shell + kubectl 终端镜像 |
 | `terminalImages.node` | `busybox:1.37.0` | 版本化 Node 终端镜像 |
 | `imageRegistryHosts` | 空 | 镜像 Tag 查询可访问的额外 Registry `host[:port]`，以逗号分隔 |
-| `clusterAgentImage` | 当前 Kite 镜像 | 可选的独立 Cluster Agent 镜像 |
 | `releaseAPIURL` | 空 | 可选 GitHub 兼容更新 API；为空时不发起外部检查 |
 | `analytics.enabled` | `false` | 加载部署方配置的统计脚本 |
 | `analytics.scriptURL` | 空 | Umami 兼容的 HTTPS 脚本地址；必须与 `analytics.websiteID` 同时配置 |

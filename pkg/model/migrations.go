@@ -35,6 +35,47 @@ var schemaMigrations = []migration{
 	{id: "20260820_encode_oidc_groups_as_json", run: encodeOIDCGroupsAsJSON},
 	{id: "20260828_remove_embedded_resource_server", run: removeEmbeddedResourceServer},
 	{id: "20260829_remove_scheduled_tasks", run: removeScheduledTasks},
+	{id: "20260829_remove_cluster_tunnel", run: removeClusterTunnel},
+}
+
+func removeClusterTunnel(db *gorm.DB) error {
+	migrator := db.Migrator()
+	if migrator.HasTable("clusters") && migrator.HasColumn("clusters", "connection_mode") {
+		if err := db.Table("clusters").Where("connection_mode = ?", "tunnel").Update("enable", false).Error; err != nil {
+			return fmt.Errorf("disable obsolete tunnel clusters: %w", err)
+		}
+	}
+	if db.Name() == "sqlite" {
+		if err := db.Exec(`DROP INDEX IF EXISTS idx_clusters_cluster_agent_token_hash`).Error; err != nil {
+			return fmt.Errorf("drop obsolete cluster Agent index: %w", err)
+		}
+	}
+	for table, columns := range map[string][]string{
+		"clusters": {
+			"connection_mode", "in_cluster", "cluster_agent",
+			"cluster_agent_token_hash", "cluster_agent_public_key",
+			"cluster_agent_private_key",
+		},
+		"general_settings": {"cluster_agent_image", "jwt_secret"},
+	} {
+		if !migrator.HasTable(table) {
+			continue
+		}
+		for _, column := range columns {
+			if migrator.HasColumn(table, column) {
+				var err error
+				if db.Name() == "sqlite" {
+					err = db.Exec(fmt.Sprintf(`ALTER TABLE %q DROP COLUMN %q`, table, column)).Error
+				} else {
+					err = migrator.DropColumn(table, column)
+				}
+				if err != nil {
+					return fmt.Errorf("drop obsolete %s.%s: %w", table, column, err)
+				}
+			}
+		}
+	}
+	return nil
 }
 
 func removeScheduledTasks(db *gorm.DB) error {
@@ -495,7 +536,6 @@ func replaceUpstreamImageDefaults(db *gorm.DB) error {
 	}{
 		{column: "kubectl_image", legacy: "zzde/kubectl:latest", value: DefaultGeneralKubectlImageValue()},
 		{column: "node_terminal_image", legacy: "busybox:latest", value: DefaultGeneralNodeTerminalImageValue()},
-		{column: "cluster_agent_image", legacy: "ghcr.io/kite-org/kite:latest", value: DefaultGeneralClusterAgentImageValue()},
 	}
 	for _, update := range updates {
 		if !db.Migrator().HasColumn("general_settings", update.column) {
@@ -624,7 +664,7 @@ func removeClusterCredentials(db *gorm.DB) error {
 			updates["tls_server_name"] = metadata.tlsServerName
 		case cluster.InCluster:
 			// The old in-cluster mode depended on Kite's mounted ServiceAccount.
-			// Preserve the catalog row but require explicit direct/tunnel setup.
+			// Preserve the catalog row but require explicit connection setup.
 			updates["enable"] = false
 		}
 		if err := db.Table("clusters").Where("id = ?", cluster.ID).Updates(updates).Error; err != nil {

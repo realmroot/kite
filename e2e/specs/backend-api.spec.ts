@@ -116,7 +116,6 @@ test("backend contracts follow OIDC and Kubernetes-native authorization", async 
       await request.post("/api/v1/admin/clusters/", {
         data: {
           name: `legacy-${suffix}`,
-          connectionMode: "direct",
           apiServerUrl: "https://127.0.0.1:6443",
           config: "credential-bearing kubeconfig must be rejected",
         },
@@ -129,7 +128,6 @@ test("backend contracts follow OIDC and Kubernetes-native authorization", async 
         data: {
           name: `metadata-${suffix}`,
           description: "credential-free catalog contract",
-          connectionMode: "direct",
           apiServerUrl: "https://127.0.0.1:1",
         },
       }),

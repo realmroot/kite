@@ -113,9 +113,13 @@ export async function enrichResourceList<T>(
   }
 
   if (resource === 'nodes') {
+    const [nodeMetricsPath, podsPath] = await Promise.all([
+      getKubernetesResourcePath('nodemetrics'),
+      getKubernetesResourcePath('pods'),
+    ])
     const [nodeMetrics, pods] = await Promise.all([
-      optionalList<NodeMetric>('/kubernetes/apis/metrics.k8s.io/v1beta1/nodes'),
-      optionalList<Pod>('/kubernetes/api/v1/pods'),
+      optionalList<NodeMetric>(nodeMetricsPath),
+      optionalList<Pod>(podsPath),
     ])
     const usageByNode = new Map(
       (nodeMetrics?.items || []).map((item) => [item.metadata.name, item.usage])

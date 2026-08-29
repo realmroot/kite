@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { IconChartBar, IconLink, IconTerminal2 } from '@tabler/icons-react'
+import { IconChartBar, IconTerminal2 } from '@tabler/icons-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -18,13 +18,11 @@ import { Switch } from '@/components/ui/switch'
 
 const DEFAULT_KUBECTL_IMAGE = 'alpine/kubectl:1.36.3'
 const DEFAULT_NODE_TERMINAL_IMAGE = 'busybox:1.37.0'
-const DEFAULT_CLUSTER_AGENT_IMAGE = ''
 
 interface GeneralSettingsFormData {
   kubectlEnabled: boolean
   kubectlImage: string
   nodeTerminalImage: string
-  clusterAgentImage: string
   enableAnalytics: boolean
   enableVersionCheck: boolean
 }
@@ -33,7 +31,6 @@ const DEFAULT_FORM_DATA: GeneralSettingsFormData = {
   kubectlEnabled: true,
   kubectlImage: DEFAULT_KUBECTL_IMAGE,
   nodeTerminalImage: DEFAULT_NODE_TERMINAL_IMAGE,
-  clusterAgentImage: DEFAULT_CLUSTER_AGENT_IMAGE,
   enableAnalytics: false,
   enableVersionCheck: true,
 }
@@ -51,7 +48,6 @@ export function GeneralManagement() {
       kubectlEnabled: data.kubectlEnabled,
       kubectlImage: data.kubectlImage || DEFAULT_KUBECTL_IMAGE,
       nodeTerminalImage: data.nodeTerminalImage || DEFAULT_NODE_TERMINAL_IMAGE,
-      clusterAgentImage: data.clusterAgentImage || DEFAULT_CLUSTER_AGENT_IMAGE,
       enableAnalytics: data.enableAnalytics,
       enableVersionCheck: data.enableVersionCheck,
     })
@@ -96,8 +92,6 @@ export function GeneralManagement() {
       kubectlEnabled: formData.kubectlEnabled,
       kubectlImage: formData.kubectlImage.trim(),
       nodeTerminalImage: formData.nodeTerminalImage.trim(),
-      clusterAgentImage:
-        formData.clusterAgentImage.trim() || DEFAULT_CLUSTER_AGENT_IMAGE,
       enableAnalytics: formData.enableAnalytics,
       enableVersionCheck: formData.enableVersionCheck,
     })
@@ -185,34 +179,6 @@ export function GeneralManagement() {
               setFormData((current) => ({
                 ...current,
                 nodeTerminalImage: event.target.value,
-              }))
-            }
-          />
-        </section>
-
-        <section className="space-y-3 rounded-lg border p-3">
-          <div className="space-y-1">
-            <Label className="flex items-center gap-2 text-sm font-medium">
-              <IconLink className="h-4 w-4" />
-              {t('generalManagement.clusterAgent.title', 'Cluster Agent Image')}
-            </Label>
-            <p className="text-xs text-muted-foreground">
-              {t(
-                'generalManagement.clusterAgent.description',
-                'Container image used for generated Cluster Agent manifests.'
-              )}
-            </p>
-          </div>
-          <Label htmlFor="general-cluster-agent-image">
-            {t('generalManagement.clusterAgent.form.image', 'Image')}
-          </Label>
-          <Input
-            id="general-cluster-agent-image"
-            value={formData.clusterAgentImage}
-            onChange={(event) =>
-              setFormData((current) => ({
-                ...current,
-                clusterAgentImage: event.target.value,
               }))
             }
           />

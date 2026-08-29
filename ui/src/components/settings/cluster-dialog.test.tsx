@@ -14,11 +14,8 @@ vi.mock('react-i18next', () => ({
 const directCluster: Cluster = {
   id: 7,
   name: 'Production',
-  connectionMode: 'direct',
   apiServerUrl: 'https://api.example.test',
   enabled: true,
-  clusterAgent: false,
-  connected: true,
   isDefault: false,
   createdAt: '2026-08-28T00:00:00Z',
   updatedAt: '2026-08-28T00:00:00Z',
@@ -36,8 +33,7 @@ describe('ClusterDialog', () => {
       />
     )
 
-    expect(screen.getByLabelText('Connection Mode')).toBeDisabled()
-    expect(screen.queryByText('Connector')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Connection Mode')).not.toBeInTheDocument()
     expect(screen.getByLabelText('Kubernetes API Server URL *')).toHaveValue(
       'https://api.example.test'
     )
@@ -50,7 +46,6 @@ describe('ClusterDialog', () => {
     expect(onSubmit).toHaveBeenCalledWith(
       expect.objectContaining({
         name: 'Renamed Production',
-        connectionMode: 'direct',
         apiServerUrl: 'https://api.example.test',
       })
     )

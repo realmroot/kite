@@ -42,7 +42,6 @@ func TestReadConfigAcceptsOnlyCredentialFreeClusterMetadata(t *testing.T) {
   - name: production
     apiServerUrl: ${TEST_API_SERVER}
     tlsServerName: api.internal
-    connectionMode: direct
     prometheusURL: http://prometheus.monitoring.svc:9090
     default: true
 `)
@@ -92,7 +91,7 @@ func TestApplyConfigReplacesOnlyClusterCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list clusters: %v", err)
 	}
-	if len(clusters) != 1 || clusters[0].Name != "new" || clusters[0].ConnectionMode != "direct" {
+	if len(clusters) != 1 || clusters[0].Name != "new" {
 		t.Fatalf("clusters = %#v", clusters)
 	}
 }
@@ -100,7 +99,7 @@ func TestApplyConfigReplacesOnlyClusterCatalog(t *testing.T) {
 func TestLoadConfigRejectsInvalidCatalogWithoutReplacingCurrentState(t *testing.T) {
 	setupTestDB(t)
 	current := &model.Cluster{
-		Name: "current", APIServerURL: "https://current.example.test", ConnectionMode: "direct", Enable: true,
+		Name: "current", APIServerURL: "https://current.example.test", Enable: true,
 	}
 	if err := model.AddCluster(current); err != nil {
 		t.Fatalf("seed current cluster: %v", err)
@@ -125,10 +124,10 @@ func TestLoadConfigRejectsInvalidCatalogWithoutReplacingCurrentState(t *testing.
 func TestApplyClustersReconcilesCatalogWithoutChangingStableIdentity(t *testing.T) {
 	setupTestDB(t)
 	retained := &model.Cluster{
-		Name: "retained", APIServerURL: "https://old.example.test", ConnectionMode: "direct", Enable: true,
+		Name: "retained", APIServerURL: "https://old.example.test", Enable: true,
 	}
 	removed := &model.Cluster{
-		Name: "removed", APIServerURL: "https://removed.example.test", ConnectionMode: "direct", Enable: true,
+		Name: "removed", APIServerURL: "https://removed.example.test", Enable: true,
 	}
 	if err := model.AddCluster(retained); err != nil {
 		t.Fatalf("seed retained cluster: %v", err)
@@ -165,8 +164,6 @@ func TestApplyClustersValidatesConnectionMetadata(t *testing.T) {
 	}{
 		{name: "missing name", cluster: ClusterConfig{APIServerURL: "https://api.example.test"}},
 		{name: "missing direct API server", cluster: ClusterConfig{Name: "prod"}},
-		{name: "unknown mode", cluster: ClusterConfig{Name: "prod", ConnectionMode: "kubeconfig"}},
-		{name: "tunnel requires enrollment API", cluster: ClusterConfig{Name: "prod", ConnectionMode: "tunnel"}},
 		{name: "credential bearing API URL", cluster: ClusterConfig{Name: "prod", APIServerURL: "https://user@api.example.test"}},
 		{name: "external Prometheus URL", cluster: ClusterConfig{Name: "prod", APIServerURL: "https://api.example.test", PrometheusURL: "https://prometheus.example.test"}},
 		{name: "invalid CA", cluster: ClusterConfig{Name: "prod", APIServerURL: "https://api.example.test", CABundle: "invalid"}},

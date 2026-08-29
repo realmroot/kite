@@ -59,14 +59,12 @@ func setupGeneralSettingTestDB(t *testing.T) {
 	t.Helper()
 	originalDB := model.DB
 	originalEncryptKey := common.KiteEncryptKey
-	originalJWTSecret := common.JwtSecret
 	originalAnalytics := common.EnableAnalytics
 	originalAnalyticsScriptURL := common.AnalyticsScriptURL
 	originalAnalyticsWebsiteID := common.AnalyticsWebsiteID
 	originalVersionCheck := common.EnableVersionCheck
 
 	common.KiteEncryptKey = "settings-handler-test-key"
-	common.JwtSecret = "settings-handler-test-jwt-secret"
 	common.EnableAnalytics = false
 	common.AnalyticsScriptURL = ""
 	common.AnalyticsWebsiteID = ""
@@ -86,7 +84,6 @@ func setupGeneralSettingTestDB(t *testing.T) {
 		KubectlImage:       model.DefaultGeneralKubectlImage,
 		NodeTerminalImage:  model.DefaultGeneralNodeTerminalImage,
 		EnableVersionCheck: true,
-		JWTSecret:          model.SecretString(common.JwtSecret),
 	}
 	if err := db.Create(&setting).Error; err != nil {
 		t.Fatalf("creating general setting: %v", err)
@@ -99,7 +96,6 @@ func setupGeneralSettingTestDB(t *testing.T) {
 		}
 		model.DB = originalDB
 		common.KiteEncryptKey = originalEncryptKey
-		common.JwtSecret = originalJWTSecret
 		common.EnableAnalytics = originalAnalytics
 		common.AnalyticsScriptURL = originalAnalyticsScriptURL
 		common.AnalyticsWebsiteID = originalAnalyticsWebsiteID

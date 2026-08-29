@@ -41,9 +41,6 @@ func initializeApp(ctx context.Context) (*application, error) {
 	if common.KiteEncryptKey == "kite-default-encryption-key-change-in-production" {
 		return nil, errors.New("KITE_ENCRYPT_KEY must be set because OIDC tokens are stored server-side")
 	}
-	if common.JwtSecret == common.DefaultJWTSecret {
-		return nil, errors.New("JWT_SECRET must be set because it protects cluster tunnel enrollment grants")
-	}
 	if klog.V(1).Enabled() {
 		gin.SetMode(gin.DebugMode)
 	} else {

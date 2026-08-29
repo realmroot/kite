@@ -20,7 +20,6 @@ stringData:
   # Replace every placeholder before applying this manifest.
   OIDC_CLIENT_ID: replace-me
   KITE_ENCRYPT_KEY: replace-with-an-independent-random-secret
-  JWT_SECRET: replace-with-another-independent-random-secret
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -104,8 +103,6 @@ spec:
               value: alpine/kubectl:1.36.3
             - name: NODE_TERMINAL_IMAGE
               value: busybox:1.37.0
-            - name: CLUSTER_AGENT_IMAGE
-              value: ghcr.io/OWNER/kite:VERSION
             - name: RELEASE_API_URL
               value: https://api.github.com/repos/OWNER/kite/releases/latest
             - name: DB_DSN

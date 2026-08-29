@@ -109,7 +109,6 @@ test("create a reusable OIDC admin session and credential-free catalog", async (
     data: {
       name: kindClusterName,
       description: "OIDC-enabled local kind cluster",
-      connectionMode: "direct",
       apiServerUrl: cluster.server,
       caBundle: cluster["certificate-authority-data"] || "",
       tlsServerName: cluster["tls-server-name"] || "",

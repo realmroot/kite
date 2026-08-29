@@ -1,12 +1,36 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { apiClient } from './api-client'
+import { clearKubernetesDiscoveryCache } from './kubernetes-api'
 import { enrichResourceList } from './resource-metrics'
 
-afterEach(() => vi.restoreAllMocks())
+afterEach(() => {
+  clearKubernetesDiscoveryCache()
+  vi.restoreAllMocks()
+})
 
 describe('standard Kubernetes metrics composition', () => {
   it('preserves pod usage, requests, and limits without a Kite list handler', async () => {
+    vi.spyOn(apiClient, 'get').mockImplementation(async (path) => {
+      if (path === '/kubernetes/apis') {
+        return {
+          groups: [
+            {
+              name: 'metrics.k8s.io',
+              preferredVersion: { groupVersion: 'metrics.k8s.io/v1beta1' },
+              versions: [{ groupVersion: 'metrics.k8s.io/v1beta1' }],
+            },
+          ],
+        }
+      }
+      if (path === '/kubernetes/apis/metrics.k8s.io/v1beta1') {
+        return {
+          groupVersion: 'metrics.k8s.io/v1beta1',
+          resources: [{ name: 'pods', namespaced: true }],
+        }
+      }
+      throw new Error(`unexpected discovery path ${path}`)
+    })
     vi.spyOn(apiClient, 'request').mockResolvedValue(
       new Response(
         JSON.stringify({

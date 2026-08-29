@@ -112,8 +112,6 @@ spec:
               value: {{ required "terminalImages.kubectl is required" .Values.terminalImages.kubectl | quote }}
             - name: NODE_TERMINAL_IMAGE
               value: {{ required "terminalImages.node is required" .Values.terminalImages.node | quote }}
-            - name: CLUSTER_AGENT_IMAGE
-              value: {{ .Values.clusterAgentImage | default (printf "%s:%s" (required "image.repository is required" .Values.image.repository) (.Values.image.tag | default .Chart.AppVersion)) | quote }}
             - name: KITE_IMAGE_REGISTRY_HOSTS
               value: {{ .Values.imageRegistryHosts | quote }}
             {{- if .Values.releaseAPIURL }}
