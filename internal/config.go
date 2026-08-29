@@ -168,11 +168,6 @@ func applyClusters(clusters []ClusterConfig) error {
 		}
 
 		for name, existing := range existingByName {
-			if tx.Migrator().HasTable(&model.ScheduledTask{}) {
-				if err := tx.Unscoped().Where("cluster_name = ?", name).Delete(&model.ScheduledTask{}).Error; err != nil {
-					return fmt.Errorf("delete scheduled tasks for removed cluster %q: %w", name, err)
-				}
-			}
 			if err := tx.Unscoped().Delete(existing).Error; err != nil {
 				return fmt.Errorf("delete cluster removed from configuration %q: %w", name, err)
 			}

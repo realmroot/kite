@@ -97,6 +97,14 @@ test("create a reusable OIDC admin session and credential-free catalog", async (
 
   await loginWithOIDC(page, adminUser);
 
+  const identityResponse = await page.request.get("/api/auth/user");
+  const identityBody = await identityResponse.text();
+  expect(identityResponse.status(), identityBody).toBe(200);
+  expect(
+    (JSON.parse(identityBody) as { platformAdmin?: boolean }).platformAdmin,
+    identityBody,
+  ).toBe(true);
+
   const response = await page.request.post("/api/v1/admin/clusters/", {
     data: {
       name: kindClusterName,
@@ -108,7 +116,8 @@ test("create a reusable OIDC admin session and credential-free catalog", async (
       isDefault: true,
     },
   });
-  expect(response.status()).toBe(201);
+  const responseBody = await response.text();
+  expect(response.status(), responseBody).toBe(201);
 
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible();

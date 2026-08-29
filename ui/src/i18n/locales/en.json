@@ -928,8 +928,7 @@
       "backToValues": "Back",
       "dryRun": "Dry Run",
       "upgrade": "Upgrade",
-      "rollback": "Rollback",
-      "autoUpgrade": "Auto upgrade"
+      "rollback": "Rollback"
     },
     "fields": {
       "chart": "Chart",
@@ -946,19 +945,9 @@
       "rollbackOnFailure": "Rollback on failure",
       "firstDeployed": "First Deployed",
       "lastDeployed": "Last Deployed",
-      "autoUpgrade": "Auto upgrade",
       "chartRepository": "Chart repository",
       "upgradeSettings": "Upgrade settings",
-      "status": "Status",
-      "schedule": "Schedule",
-      "scheduleInterval": "Interval",
-      "scheduleDaily": "Daily",
-      "intervalMinutes": "Interval (minutes)",
-      "scheduleTime": "Time",
-      "timeoutMinutes": "Timeout (minutes)",
-      "lastChecked": "Last checked",
-      "lastUpgraded": "Last upgraded",
-      "lastError": "Last error"
+      "status": "Status"
     },
     "diff": {
       "added": "Added",
@@ -990,18 +979,7 @@
       "loadingChart": "Loading chart...",
       "loadingVersions": "Loading versions...",
       "loadingChartPackage": "Loading chart package...",
-      "loadingValues": "Loading values...",
-      "autoUpgradeSaved": "Auto upgrade saved",
-      "autoUpgradeDescription": "Upgrade when a newer chart version is available, using the OIDC identity that saves this setting.",
-      "autoUpgradeChartDescription": "Chart source for version checks.",
-      "autoUpgradeScheduleDescription": "When to check for updates.",
-      "autoUpgradeIntervalDescription": "Check frequency.",
-      "autoUpgradeScheduleTimeDescription": "Check once per day.",
-      "autoUpgradeTimeoutDescription": "Upgrade wait limit.",
-      "invalidAutoUpgradeInterval": "Interval must be at least 1 minute.",
-      "invalidAutoUpgradeScheduleTime": "Enter a valid time.",
-      "invalidAutoUpgradeTimeout": "Timeout must be at least 1 minute.",
-      "autoUpgradeChartRequired": "Select a chart for auto upgrade."
+      "loadingValues": "Loading values..."
     },
     "placeholders": {
       "selectChart": "Select a chart..."

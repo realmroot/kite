@@ -313,7 +313,7 @@ function ServicePorts({
         >
           <a
             href={withSubPath(
-              `${API_BASE_URL}${withCurrentClusterPath(`/namespaces/${namespace}/services/${name}:${port.port}/proxy/`)}`
+              `${API_BASE_URL}${withCurrentClusterPath(`/kubernetes/api/v1/namespaces/${namespace}/services/${name}:${port.port}/proxy/`)}`
             )}
             target="_blank"
             rel="noopener noreferrer"

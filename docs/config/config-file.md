@@ -49,7 +49,7 @@ When `clusters` is present, the file is authoritative for the cluster catalog
 and the corresponding UI becomes read-only. Kite watches the file and applies
 valid changes transactionally. Existing names are updated in place so their
 stable cluster identity and resource history remain intact. Removing a cluster
-deletes its catalog row and scheduled Helm tasks, but does not change resources
+deletes its catalog row, but does not change resources
 inside that Kubernetes cluster. Invalid startup configuration prevents Kite
 from becoming ready; an invalid hot reload leaves the last valid catalog and
 connections active until the file is corrected.

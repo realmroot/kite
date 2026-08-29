@@ -31,10 +31,20 @@ var schemaMigrations = []migration{
 	{id: "20260820_replace_upstream_image_defaults", run: replaceUpstreamImageDefaults},
 	{id: "20260820_replace_shellless_kubectl_image", run: replaceShelllessKubectlImage},
 	{id: "20260820_redact_secret_resource_history", run: redactSecretResourceHistory},
-	{id: "20260820_rebind_scheduled_task_actors", run: rebindScheduledTaskActors},
 	{id: "20260820_bind_resource_history_clusters", run: bindResourceHistoryClusters},
 	{id: "20260820_encode_oidc_groups_as_json", run: encodeOIDCGroupsAsJSON},
 	{id: "20260828_remove_embedded_resource_server", run: removeEmbeddedResourceServer},
+	{id: "20260829_remove_scheduled_tasks", run: removeScheduledTasks},
+}
+
+func removeScheduledTasks(db *gorm.DB) error {
+	if !db.Migrator().HasTable("scheduled_tasks") {
+		return nil
+	}
+	if err := db.Migrator().DropTable("scheduled_tasks"); err != nil {
+		return fmt.Errorf("drop obsolete scheduled tasks table: %w", err)
+	}
+	return nil
 }
 
 func removeEmbeddedResourceServer(db *gorm.DB) error {
@@ -59,22 +69,6 @@ func encodeOIDCGroupsAsJSON(db *gorm.DB) error {
 	// an authorization boundary: clear them and require a freshly verified token.
 	if err := db.Table("users").Where("1 = 1").Update("oidc_groups", "[]").Error; err != nil {
 		return fmt.Errorf("clear ambiguous legacy OIDC groups: %w", err)
-	}
-	if migrator.HasTable("scheduled_tasks") &&
-		migrator.HasColumn("scheduled_tasks", "oidc_session_id") &&
-		migrator.HasColumn("scheduled_tasks", "enabled") {
-		updates := map[string]any{"enabled": false}
-		if migrator.HasColumn("scheduled_tasks", "next_run_at") {
-			updates["next_run_at"] = nil
-		}
-		if migrator.HasColumn("scheduled_tasks", "last_error") {
-			updates["last_error"] = "OIDC group encoding upgraded; sign in and re-enable this task"
-		}
-		if err := db.Table("scheduled_tasks").
-			Where("oidc_session_id <> ? AND enabled = ?", 0, true).
-			Updates(updates).Error; err != nil {
-			return fmt.Errorf("disable tasks bound to legacy OIDC sessions: %w", err)
-		}
 	}
 	if migrator.HasTable("oidc_sessions") {
 		if err := db.Exec("DELETE FROM oidc_sessions").Error; err != nil {
@@ -107,28 +101,6 @@ func bindResourceHistoryClusters(db *gorm.DB) error {
 	}
 	if err := db.Table("resource_histories").Where("cluster_id IS NULL").Update("cluster_id", 0).Error; err != nil {
 		return fmt.Errorf("normalize unbound resource history cluster identity: %w", err)
-	}
-	return nil
-}
-
-func rebindScheduledTaskActors(db *gorm.DB) error {
-	migrator := db.Migrator()
-	if !migrator.HasTable("scheduled_tasks") || !migrator.HasTable("oidc_sessions") ||
-		!migrator.HasColumn("scheduled_tasks", "creator_id") ||
-		!migrator.HasColumn("scheduled_tasks", "oidc_session_id") ||
-		!migrator.HasColumn("oidc_sessions", "user_id") {
-		return nil
-	}
-	if err := db.Exec(`UPDATE scheduled_tasks
-		SET creator_id = (
-			SELECT oidc_sessions.user_id FROM oidc_sessions
-			WHERE oidc_sessions.id = scheduled_tasks.oidc_session_id
-		)
-		WHERE oidc_session_id <> 0 AND EXISTS (
-			SELECT 1 FROM oidc_sessions
-			WHERE oidc_sessions.id = scheduled_tasks.oidc_session_id
-		)`).Error; err != nil {
-		return fmt.Errorf("rebind scheduled task actors to OIDC sessions: %w", err)
 	}
 	return nil
 }

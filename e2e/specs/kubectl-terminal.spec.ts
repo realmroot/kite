@@ -6,7 +6,7 @@ test("kubectl terminal uses the current OIDC user and cleans up its session", as
   page,
   request,
 }) => {
-  const clusterPath = "/api/v1/pods/kube-system";
+  const clusterPath = "/api/v1/kubernetes/api/v1/namespaces/kube-system/pods";
   const sessionSelector = encodeURIComponent(
     "kite.io/component=kubectl-terminal",
   );

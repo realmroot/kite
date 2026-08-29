@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/http/httputil"
@@ -22,6 +23,8 @@ func (h *KubernetesAPIHandler) RegisterRoutes(group *gin.RouterGroup) {
 }
 
 func (h *KubernetesAPIHandler) Proxy(c *gin.Context) {
+	defer suppressCanceledProxyAbort(c.Request)
+
 	clientSet := c.MustGet("cluster").(*cluster.ClientSet)
 	if clientSet.K8sClient == nil || clientSet.K8sClient.HTTPClient == nil || clientSet.K8sClient.Configuration == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Kubernetes client is unavailable"})
@@ -41,12 +44,19 @@ func (h *KubernetesAPIHandler) Proxy(c *gin.Context) {
 	reverseProxy := httputil.NewSingleHostReverseProxy(target)
 	reverseProxy.Transport = clientSet.K8sClient.HTTPClient.Transport
 	reverseProxy.FlushInterval = -1
-	reverseProxy.ErrorHandler = func(writer http.ResponseWriter, _ *http.Request, _ error) {
+	reverseProxy.ErrorHandler = func(writer http.ResponseWriter, request *http.Request, proxyError error) {
+		if errors.Is(proxyError, context.Canceled) || errors.Is(request.Context().Err(), context.Canceled) {
+			return
+		}
 		writer.Header().Set("Content-Type", "application/json")
 		writer.WriteHeader(http.StatusBadGateway)
 		_, _ = writer.Write([]byte(`{"error":"Kubernetes API request failed"}`))
 	}
 	baseDirector := reverseProxy.Director
+	audit := newKubernetesMutationAudit(c, clientSet, target, upstreamPath)
+	if audit != nil {
+		reverseProxy.ModifyResponse = audit.record
+	}
 	reverseProxy.Director = func(request *http.Request) {
 		baseDirector(request)
 		request.URL.Path = joinURLPath(target.Path, upstreamPath)
@@ -55,6 +65,18 @@ func (h *KubernetesAPIHandler) Proxy(c *gin.Context) {
 		stripBrowserCredentials(request.Header)
 	}
 	reverseProxy.ServeHTTP(c.Writer, c.Request)
+}
+
+func suppressCanceledProxyAbort(request *http.Request) {
+	recovered := recover()
+	if recovered == nil {
+		return
+	}
+	proxyError, isError := recovered.(error)
+	if isError && errors.Is(proxyError, http.ErrAbortHandler) && errors.Is(request.Context().Err(), context.Canceled) {
+		return
+	}
+	panic(recovered)
 }
 
 func validateKubernetesAPIPath(value string) error {

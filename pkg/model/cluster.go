@@ -56,11 +56,6 @@ func GetClusterByClusterAgentTokenHash(hash string) (*Cluster, error) {
 }
 
 func UpdateCluster(cluster *Cluster, updates map[string]interface{}) error {
-	oldName := cluster.Name
-	targetName := oldName
-	if nextName, ok := updates["name"].(string); ok && nextName != "" {
-		targetName = nextName
-	}
 	return DB.Transaction(func(tx *gorm.DB) error {
 		if isDefault, ok := updates["is_default"].(bool); ok && isDefault {
 			if err := tx.Model(&Cluster{}).Where("id <> ? AND is_default = ?", cluster.ID, true).Update("is_default", false).Error; err != nil {
@@ -70,38 +65,12 @@ func UpdateCluster(cluster *Cluster, updates map[string]interface{}) error {
 		if err := tx.Model(cluster).Updates(updates).Error; err != nil {
 			return err
 		}
-		if targetName != oldName {
-			if err := tx.Model(&ScheduledTask{}).
-				Where("cluster_name = ?", oldName).
-				Update("cluster_name", targetName).Error; err != nil {
-				return err
-			}
-		}
-		if enabled, ok := updates["enable"].(bool); ok && !enabled {
-			if err := tx.Model(&ScheduledTask{}).
-				Where("cluster_name = ? AND enabled = ?", targetName, true).
-				Updates(map[string]any{
-					"enabled":     false,
-					"next_run_at": nil,
-					"locked_at":   nil,
-					"locked_by":   "",
-					"lock_until":  nil,
-					"last_error":  "Cluster disabled; re-enable this task after enabling the cluster",
-				}).Error; err != nil {
-				return err
-			}
-		}
 		return nil
 	})
 }
 
 func DeleteCluster(cluster *Cluster) error {
-	return DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Unscoped().Where("cluster_name = ?", cluster.Name).Delete(&ScheduledTask{}).Error; err != nil {
-			return err
-		}
-		return tx.Unscoped().Delete(cluster).Error
-	})
+	return DB.Unscoped().Delete(cluster).Error
 }
 
 func ListClusters() ([]*Cluster, error) {

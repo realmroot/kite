@@ -20,7 +20,7 @@ func setupTestDB(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open test database: %v", err)
 	}
-	if err := db.AutoMigrate(&model.Cluster{}, &model.ScheduledTask{}); err != nil {
+	if err := db.AutoMigrate(&model.Cluster{}); err != nil {
 		t.Fatalf("migrate test schema: %v", err)
 	}
 	oldDB := model.DB
@@ -136,14 +136,6 @@ func TestApplyClustersReconcilesCatalogWithoutChangingStableIdentity(t *testing.
 	if err := model.AddCluster(removed); err != nil {
 		t.Fatalf("seed removed cluster: %v", err)
 	}
-	if err := model.DB.Create(&model.ScheduledTask{
-		ClusterName: removed.Name,
-		Type:        "helm_release_auto_upgrade",
-		Key:         "default/release",
-	}).Error; err != nil {
-		t.Fatalf("seed scheduled task: %v", err)
-	}
-
 	if err := applyClusters([]ClusterConfig{{
 		Name: "retained", Description: "updated", APIServerURL: "https://new.example.test", Default: true,
 	}}); err != nil {
@@ -162,13 +154,6 @@ func TestApplyClustersReconcilesCatalogWithoutChangingStableIdentity(t *testing.
 	}
 	if _, err := model.GetClusterByName("removed"); !errors.Is(err, gorm.ErrRecordNotFound) {
 		t.Fatalf("removed cluster lookup error = %v, want record not found", err)
-	}
-	var taskCount int64
-	if err := model.DB.Model(&model.ScheduledTask{}).Where("cluster_name = ?", removed.Name).Count(&taskCount).Error; err != nil {
-		t.Fatalf("count removed cluster tasks: %v", err)
-	}
-	if taskCount != 0 {
-		t.Fatalf("removed cluster has %d scheduled task(s), want 0", taskCount)
 	}
 }
 

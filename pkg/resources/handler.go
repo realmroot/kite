@@ -48,13 +48,6 @@ import (
 )
 
 type resourceHandler interface {
-	List(c *gin.Context)
-	Get(c *gin.Context)
-	Create(c *gin.Context)
-	Update(c *gin.Context)
-	Delete(c *gin.Context)
-	Patch(c *gin.Context)
-
 	IsClusterScoped() bool
 	Searchable() bool
 	Search(c *gin.Context, query string, limit int64) ([]common.SearchResult, error)
@@ -65,10 +58,6 @@ type resourceHandler interface {
 	ListHistory(c *gin.Context)
 
 	Describe(c *gin.Context)
-}
-
-type Restartable interface {
-	Restart(c *gin.Context, namespace, name string) error
 }
 
 type workloadRevisionHandler interface {
@@ -102,7 +91,7 @@ func newResourceHandlers() map[string]resourceHandler {
 		string(common.PersistentVolumeClaims): NewGenericResourceHandler[*corev1.PersistentVolumeClaim, *corev1.PersistentVolumeClaimList](common.PersistentVolumeClaims),
 		string(common.ServiceAccounts):        NewGenericResourceHandler[*corev1.ServiceAccount, *corev1.ServiceAccountList](common.ServiceAccounts),
 		string(common.CRDs):                   NewGenericResourceHandler[*apiextensionsv1.CustomResourceDefinition, *apiextensionsv1.CustomResourceDefinitionList](common.CRDs),
-		string(common.Events):                 NewEventHandler(),
+		string(common.Events):                 NewGenericResourceHandler[*corev1.Event, *corev1.EventList](common.Events),
 		string(common.Deployments):            NewDeploymentHandler(),
 		string(common.ReplicaSets):            NewGenericResourceHandler[*appsv1.ReplicaSet, *appsv1.ReplicaSetList](common.ReplicaSets),
 		string(common.ControllerRevisions):    NewGenericResourceHandler[*appsv1.ControllerRevision, *appsv1.ControllerRevisionList](common.ControllerRevisions),
@@ -185,7 +174,6 @@ func newResourceHandlers() map[string]resourceHandler {
 			newResourceVersionCandidate("autoscaling/v2", string(common.HorizontalPodAutoscalers), NewGenericResourceHandler[*autoscalingv2.HorizontalPodAutoscaler, *autoscalingv2.HorizontalPodAutoscalerList](common.HorizontalPodAutoscalers)),
 			newResourceVersionCandidate("autoscaling/v1", string(common.HorizontalPodAutoscalers), NewGenericResourceHandler[*autoscalingv1.HorizontalPodAutoscaler, *autoscalingv1.HorizontalPodAutoscalerList](common.HorizontalPodAutoscalers)),
 		),
-		string(common.HelmReleases): NewHelmReleaseHandler(),
 	}
 }
 
@@ -209,11 +197,7 @@ func RegisterRoutes(group *gin.RouterGroup) {
 			g.PUT("/:namespace/:name/rollback", workloadHandler.Rollback)
 		}
 		handler.registerCustomRoutes(g)
-		if handler.IsClusterScoped() {
-			registerClusterScopeRoutes(g, handler)
-		} else {
-			registerNamespaceScopeRoutes(g, handler)
-		}
+		registerHistoryAndDescribeRoutes(g, handler)
 	}
 
 	for _, resourceType := range common.RelatedResourceTypes() {
@@ -240,45 +224,33 @@ func RegisterRoutes(group *gin.RouterGroup) {
 	crHandler := NewCRHandler()
 	otherGroup := group.Group("/:crd")
 	{
-		otherGroup.GET("", crHandler.List)
-		otherGroup.GET("/_all", crHandler.List)
-		otherGroup.GET("/_all/:name", crHandler.Get)
 		otherGroup.GET("/_all/:name/history", crHandler.ListHistory)
 		otherGroup.GET("/_all/:name/describe", crHandler.Describe)
-		otherGroup.PUT("/_all/:name", crHandler.Update)
-		otherGroup.DELETE("/_all/:name", crHandler.Delete)
-
-		otherGroup.GET("/:namespace", crHandler.List)
-		otherGroup.GET("/:namespace/:name", crHandler.Get)
 		otherGroup.GET("/:namespace/:name/history", crHandler.ListHistory)
 		otherGroup.GET("/:namespace/:name/describe", crHandler.Describe)
-		otherGroup.PUT("/:namespace/:name", crHandler.Update)
-		otherGroup.DELETE("/:namespace/:name", crHandler.Delete)
 	}
+
+	registerHelmReleaseRoutes(group.Group("/"+string(common.HelmReleases)), NewHelmReleaseHandler())
 }
 
-func registerClusterScopeRoutes(group *gin.RouterGroup, handler resourceHandler) {
-	group.GET("", handler.List)
-	group.GET("/_all", handler.List)
-	group.GET("/_all/:name", handler.Get)
-	group.POST("/_all", handler.Create)
-	group.PUT("/_all/:name", handler.Update)
-	group.DELETE("/_all/:name", handler.Delete)
-	group.PATCH("/_all/:name", handler.Patch)
-	group.GET("/_all/:name/history", handler.ListHistory)
-	group.GET("/_all/:name/describe", handler.Describe)
+func registerHistoryAndDescribeRoutes(group *gin.RouterGroup, handler resourceHandler) {
+	prefix := "/:namespace/:name"
+	if handler.IsClusterScoped() {
+		prefix = "/_all/:name"
+	}
+	group.GET(prefix+"/history", handler.ListHistory)
+	group.GET(prefix+"/describe", handler.Describe)
 }
 
-func registerNamespaceScopeRoutes(group *gin.RouterGroup, handler resourceHandler) {
+func registerHelmReleaseRoutes(group *gin.RouterGroup, handler *HelmReleaseHandler) {
 	group.GET("", handler.List)
 	group.GET("/:namespace", handler.List)
 	group.GET("/:namespace/:name", handler.Get)
 	group.POST("/:namespace", handler.Create)
-	group.PUT("/:namespace/:name", handler.Update)
 	group.DELETE("/:namespace/:name", handler.Delete)
-	group.PATCH("/:namespace/:name", handler.Patch)
 	group.GET("/:namespace/:name/history", handler.ListHistory)
 	group.GET("/:namespace/:name/describe", handler.Describe)
+	handler.registerCustomRoutes(group)
 }
 
 func GetResource(c *gin.Context, resource, namespace, name string) (interface{}, error) {

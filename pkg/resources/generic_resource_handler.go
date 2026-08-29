@@ -1,7 +1,6 @@
 package resources
 
 import (
-	"net/http"
 	"reflect"
 
 	"github.com/gin-gonic/gin"
@@ -9,8 +8,6 @@ import (
 	"github.com/zxh326/kite/pkg/common"
 	"github.com/zxh326/kite/pkg/kube"
 	"github.com/zxh326/kite/pkg/model"
-	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
@@ -42,16 +39,49 @@ func NewGenericResourceHandler[T client.Object, V client.ObjectList](
 	}
 }
 
-func (h *GenericResourceHandler[T, V]) ToYAML(obj T) string {
+func (h *GenericResourceHandler[T, V]) toYAML(obj T) string {
 	if reflect.ValueOf(obj).IsNil() {
 		return ""
 	}
-	obj.SetManagedFields(nil)
-	yamlBytes, err := yaml.Marshal(obj)
+	copy := obj.DeepCopyObject().(T)
+	copy.SetManagedFields(nil)
+	yamlBytes, err := yaml.Marshal(copy)
 	if err != nil {
 		return ""
 	}
 	return string(yamlBytes)
+}
+
+func (h *GenericResourceHandler[T, V]) recordHistory(c *gin.Context, operation string, previous, current T, success bool, errorMessage string) {
+	cs := c.MustGet("cluster").(*cluster.ClientSet)
+	user := c.MustGet("user").(model.User)
+	resourceName, namespace := "", ""
+	if !reflect.ValueOf(current).IsNil() {
+		resourceName, namespace = current.GetName(), current.GetNamespace()
+	}
+	if resourceName == "" && !reflect.ValueOf(previous).IsNil() {
+		resourceName, namespace = previous.GetName(), previous.GetNamespace()
+	}
+	resourceYAML, previousYAML := h.toYAML(current), h.toYAML(previous)
+	if h.name == string(common.Secrets) {
+		resourceYAML, previousYAML = "", ""
+		if errorMessage != "" {
+			errorMessage = "Kubernetes Secret operation failed; details omitted"
+		}
+	}
+	if operation == "delete" {
+		resourceYAML = ""
+	}
+	history := model.ResourceHistory{
+		ClusterID: cs.ClusterID, ClusterName: cs.Name,
+		ResourceType: h.name, ResourceName: resourceName, Namespace: namespace,
+		OperationType: operation, OperationSource: "manual",
+		ResourceYAML: resourceYAML, PreviousYAML: previousYAML,
+		Success: success, ErrorMessage: errorMessage, OperatorID: user.ID,
+	}
+	if err := model.DB.Create(&history).Error; err != nil {
+		klog.Errorf("Failed to create resource history: %v", err)
+	}
 }
 
 func (h *GenericResourceHandler[T, V]) getGroupKind() schema.GroupKind {
@@ -61,40 +91,6 @@ func (h *GenericResourceHandler[T, V]) getGroupKind() schema.GroupKind {
 		return schema.GroupKind{}
 	}
 	return gvks[0].GroupKind()
-}
-
-func (h *GenericResourceHandler[T, V]) recordHistory(c *gin.Context, opType string, prev, curr T, success bool, errMsg string) {
-	cs := c.MustGet("cluster").(*cluster.ClientSet)
-	user := c.MustGet("user").(model.User)
-	resourceYAML := h.ToYAML(curr)
-	previousYAML := h.ToYAML(prev)
-	if h.name == string(common.Secrets) {
-		resourceYAML = ""
-		previousYAML = ""
-		if errMsg != "" {
-			errMsg = "Kubernetes Secret operation failed; details omitted"
-		}
-	}
-	if opType == "delete" {
-		resourceYAML = ""
-	}
-
-	history := model.ResourceHistory{
-		ClusterID:     cs.ClusterID,
-		ClusterName:   cs.Name,
-		ResourceType:  h.name,
-		ResourceName:  curr.GetName(),
-		Namespace:     curr.GetNamespace(),
-		OperationType: opType,
-		ResourceYAML:  resourceYAML,
-		PreviousYAML:  previousYAML,
-		Success:       success,
-		ErrorMessage:  errMsg,
-		OperatorID:    user.ID,
-	}
-	if err := model.DB.Create(&history).Error; err != nil {
-		klog.Errorf("Failed to create resource history: %v", err)
-	}
 }
 
 func (h *GenericResourceHandler[T, V]) IsClusterScoped() bool {
@@ -122,28 +118,4 @@ func (h *GenericResourceHandler[T, V]) GetResource(c *gin.Context, namespace, na
 		return nil, err
 	}
 	return object, nil
-}
-
-func (h *GenericResourceHandler[T, V]) Get(c *gin.Context) {
-	object, err := h.GetResource(c, c.Param("namespace"), c.Param("name"))
-	if err != nil {
-		if errors.IsNotFound(err) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
-			return
-		}
-		writeKubernetesError(c, err, "")
-		return
-	}
-	obj, err := meta.Accessor(object)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to access object metadata"})
-		return
-	}
-	obj.SetManagedFields(nil)
-	anno := obj.GetAnnotations()
-	if anno != nil {
-		delete(anno, common.KubectlAnnotation)
-	}
-
-	c.JSON(http.StatusOK, object)
 }

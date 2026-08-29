@@ -127,7 +127,7 @@ test("tunnel cluster carries the current OIDC identity to Kubernetes", async ({
       .toBe(true);
 
     const namespaces = await request.get(
-      `/api/v1/_clusters/${encodeURIComponent(name)}/namespaces`,
+      `/api/v1/_clusters/${encodeURIComponent(name)}/kubernetes/api/v1/namespaces`,
     );
     const namespacesText = await namespaces.text();
     expect(namespaces.status(), namespacesText).toBe(200);

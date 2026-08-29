@@ -1,9 +1,7 @@
 package model
 
 import (
-	"strings"
 	"testing"
-	"time"
 
 	"github.com/glebarez/sqlite"
 	"github.com/zxh326/kite/pkg/common"
@@ -82,14 +80,8 @@ func TestEncodeOIDCGroupsAsJSONRevokesAmbiguousSessions(t *testing.T) {
 	for _, statement := range []string{
 		`CREATE TABLE users (id integer primary key, oidc_groups text)`,
 		`CREATE TABLE oidc_sessions (id integer primary key, user_id integer not null)`,
-		`CREATE TABLE scheduled_tasks (
-			id integer primary key, oidc_session_id integer, enabled boolean,
-			next_run_at datetime, last_error text
-		)`,
 		`INSERT INTO users (id, oidc_groups) VALUES (1, 'developers,platform-admins')`,
 		`INSERT INTO oidc_sessions (id, user_id) VALUES (10, 1)`,
-		`INSERT INTO scheduled_tasks (id, oidc_session_id, enabled, next_run_at)
-			VALUES (20, 10, true, CURRENT_TIMESTAMP)`,
 	} {
 		if err := db.Exec(statement).Error; err != nil {
 			t.Fatal(err)
@@ -113,16 +105,21 @@ func TestEncodeOIDCGroupsAsJSONRevokesAmbiguousSessions(t *testing.T) {
 	if sessionCount != 0 {
 		t.Fatalf("session count = %d, want 0", sessionCount)
 	}
-	var task struct {
-		Enabled   bool
-		NextRunAt *time.Time
-		LastError string
-	}
-	if err := db.Table("scheduled_tasks").Where("id = ?", 20).Scan(&task).Error; err != nil {
+}
+
+func TestRemoveScheduledTasksDropsObsoleteAutomationState(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	if err != nil {
 		t.Fatal(err)
 	}
-	if task.Enabled || task.NextRunAt != nil || !strings.Contains(task.LastError, "sign in") {
-		t.Fatalf("scheduled task was not safely disabled: %#v", task)
+	if err := db.Exec(`CREATE TABLE scheduled_tasks (id integer primary key, payload text)`).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := removeScheduledTasks(db); err != nil {
+		t.Fatal(err)
+	}
+	if db.Migrator().HasTable("scheduled_tasks") {
+		t.Fatal("obsolete scheduled_tasks table still exists")
 	}
 }
 
@@ -165,33 +162,6 @@ func TestRedactSecretResourceHistoryMigration(t *testing.T) {
 	}
 	if rows[1].ErrorMessage != "config error" {
 		t.Fatalf("non-secret error changed: %#v", rows[1])
-	}
-}
-
-func TestRebindScheduledTaskActorsMigration(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, statement := range []string{
-		`CREATE TABLE oidc_sessions (id integer primary key, user_id integer not null)`,
-		`CREATE TABLE scheduled_tasks (id integer primary key, creator_id integer, oidc_session_id integer)`,
-		`INSERT INTO oidc_sessions (id, user_id) VALUES (10, 2)`,
-		`INSERT INTO scheduled_tasks (id, creator_id, oidc_session_id) VALUES (1, 1, 10), (2, 3, 0), (3, 4, 99)`,
-	} {
-		if err := db.Exec(statement).Error; err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := rebindScheduledTaskActors(db); err != nil {
-		t.Fatal(err)
-	}
-	var creators []uint
-	if err := db.Table("scheduled_tasks").Order("id").Pluck("creator_id", &creators).Error; err != nil {
-		t.Fatal(err)
-	}
-	if len(creators) != 3 || creators[0] != 2 || creators[1] != 3 || creators[2] != 4 {
-		t.Fatalf("creator IDs = %#v", creators)
 	}
 }
 

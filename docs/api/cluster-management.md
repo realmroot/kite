@@ -90,12 +90,9 @@ Update accepts `name`, `description`, `apiServerUrl`, `caBundle`,
 `tlsServerName`, `prometheusURL`, `isDefault`, and `enabled`. Connection
 mode is immutable; replace the catalog entry to change direct versus tunnel.
 The default entry cannot be deleted until another entry becomes default.
-Renaming a cluster atomically rebinds its scheduled Helm tasks. Disabling a
-cluster disables those tasks so they cannot repeatedly execute against an
-unavailable target; an operator must re-enable each task after enabling the
-cluster. Deleting a non-default cluster permanently removes its scheduled
-tasks and releases the catalog name for reuse. Historical audit metadata is
-retained under the name recorded when the operation occurred.
+Deleting a non-default cluster releases the catalog name for reuse. Historical
+audit metadata is retained under the stable cluster identity recorded when the
+operation occurred.
 
 If the catalog is managed by `KITE_CONFIG_FILE`, create, update, and delete
 return 403 and changes must be made in that file.

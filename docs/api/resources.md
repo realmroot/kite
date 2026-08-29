@@ -1,224 +1,65 @@
-# Resources
+# Kubernetes resources
 
-Kite exposes generic CRUD-style APIs for built-in Kubernetes resources under `/api/v1/<resource>`.
+Kite's browser client uses the Kubernetes API itself. Kite does not publish or
+maintain a second CRUD contract for built-in or custom resources.
 
-## Prerequisites
+## Gateway
 
-Resource endpoints require:
+An authenticated browser session can address any Kubernetes API path below:
 
-- an authenticated OIDC browser session
-- a target cluster, usually passed through `x-cluster-name`
-
-Example:
-
-```bash
--H "Cookie: kite_session=<opaque-session-cookie>" \
--H "x-cluster-name: demo-cluster"
+```text
+/api/v1/kubernetes/<kubernetes-api-path>
+/api/v1/_clusters/<cluster>/kubernetes/<kubernetes-api-path>
 ```
 
-## Path patterns
-
-Built-in resources use one of these two patterns:
-
-- namespaced resources: `/api/v1/<resource>/<namespace>`
-- cluster-scoped resources: `/api/v1/<resource>/_all`
+The gateway preserves the method, query string, request body, response status,
+Kubernetes `Status` object, streaming body, and content type. It removes browser
+cookies and credentials before using the current user's cluster-bound OIDC
+transport. Kubernetes remains the only resource authorizer.
 
 Examples:
 
-- ConfigMap: `/api/v1/configmaps/default`
-- Deployment: `/api/v1/deployments/default`
-- Namespace: `/api/v1/namespaces/_all`
-- Node: `/api/v1/nodes/_all`
-
-## Supported operations
-
-For built-in resources, Kite exposes these generic routes:
-
-### Namespaced resources
-
 ```text
-GET    /api/v1/<resource>/<namespace>
-GET    /api/v1/<resource>/<namespace>/<name>
-POST   /api/v1/<resource>/<namespace>
-PUT    /api/v1/<resource>/<namespace>/<name>
-PATCH  /api/v1/<resource>/<namespace>/<name>
-DELETE /api/v1/<resource>/<namespace>/<name>
+GET    /api/v1/kubernetes/api/v1/namespaces/default/configmaps
+GET    /api/v1/kubernetes/apis/apps/v1/namespaces/default/deployments/example
+POST   /api/v1/kubernetes/api/v1/namespaces/default/configmaps
+PUT    /api/v1/kubernetes/api/v1/namespaces/default/configmaps/example
+PATCH  /api/v1/kubernetes/apis/apps/v1/namespaces/default/deployments/example
+DELETE /api/v1/kubernetes/api/v1/namespaces/default/configmaps/example
 ```
 
-### Cluster-scoped resources
+Use Kubernetes-native media types and request shapes. For example, a merge
+patch uses `Content-Type: application/merge-patch+json`; delete propagation and
+grace periods use a Kubernetes `DeleteOptions` body. Lists use Kubernetes
+`limit`, `continue`, `labelSelector`, `fieldSelector`, and `watch` parameters.
 
-```text
-GET    /api/v1/<resource>/_all
-GET    /api/v1/<resource>/_all/<name>
-POST   /api/v1/<resource>/_all
-PUT    /api/v1/<resource>/_all/<name>
-PATCH  /api/v1/<resource>/_all/<name>
-DELETE /api/v1/<resource>/_all/<name>
-```
+The frontend catalog maps built-in resources to their canonical group and
+version. For a custom resource, it reads the CRD through
+`apiextensions.k8s.io/v1`, selects its storage (or first served) version, and
+uses the CRD's plural and scope. Adding a CRD therefore does not add a Kite
+handler.
 
-## Create example
+Pod and Node table metrics are client-side compositions of the standard core
+resources and `metrics.k8s.io/v1beta1`. A missing or unauthorized Metrics API
+does not prevent the underlying resources from being displayed.
 
-This example creates a ConfigMap in the `default` namespace.
+## Kite-specific resource operations
 
-```bash
-curl \
-  -X POST \
-  -H "Cookie: kite_session=<opaque-session-cookie>" \
-  -H "x-cluster-name: demo-cluster" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "apiVersion": "v1",
-    "kind": "ConfigMap",
-    "metadata": {
-      "name": "example-config",
-      "namespace": "default"
-    },
-    "data": {
-      "APP_MODE": "prod",
-      "LOG_LEVEL": "info"
-    }
-  }' \
-  https://kite.example.com/api/v1/configmaps/default
-```
+Kite retains narrow APIs only when the capability is not one Kubernetes
+resource operation:
 
-## Update example
+- multi-document YAML apply and history rollback orchestration;
+- resource history and audit presentation;
+- `kubectl describe`-compatible aggregate output;
+- related-resource aggregation;
+- workload revision presentation and rollback orchestration;
+- Node drain, which coordinates cordon and multiple Pod evictions;
+- Pod file browsing and transfer over exec;
+- Helm release operations, because a Helm release is not a Kubernetes API
+  resource.
 
-`PUT` is a full update. Include `metadata.resourceVersion` from the current object, otherwise Kubernetes will reject the request.
-
-This example replaces the ConfigMap content.
-
-```bash
-curl \
-  -X PUT \
-  -H "Cookie: kite_session=<opaque-session-cookie>" \
-  -H "x-cluster-name: demo-cluster" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "apiVersion": "v1",
-    "kind": "ConfigMap",
-    "metadata": {
-      "name": "example-config",
-      "namespace": "default",
-      "resourceVersion": "123456"
-    },
-    "data": {
-      "APP_MODE": "staging",
-      "LOG_LEVEL": "debug"
-    }
-  }' \
-  https://kite.example.com/api/v1/configmaps/default/example-config
-```
-
-## Patch example
-
-`PATCH` accepts raw patch bodies. Supported patch types are:
-
-- default: strategic merge patch
-- `?patchType=merge`: JSON merge patch
-- `?patchType=json`: JSON patch
-
-This example uses JSON merge patch to update one field without sending the full object.
-
-```bash
-curl \
-  -X PATCH \
-  -H "Cookie: kite_session=<opaque-session-cookie>" \
-  -H "x-cluster-name: demo-cluster" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "data": {
-      "LOG_LEVEL": "warn"
-    }
-  }' \
-  "https://kite.example.com/api/v1/configmaps/default/example-config?patchType=merge"
-```
-
-To restart a Deployment with `PATCH`, update an annotation under `spec.template.metadata.annotations`. This changes the Pod template and triggers a new rollout.
-
-```bash
-curl \
-  -X PATCH \
-  -H "Cookie: kite_session=<opaque-session-cookie>" \
-  -H "x-cluster-name: demo-cluster" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "spec": {
-      "template": {
-        "metadata": {
-          "annotations": {
-            "kite.kubernetes.io/restartedAt": "2026-04-20T12:00:00Z"
-          }
-        }
-      }
-    }
-  }' \
-  "https://kite.example.com/api/v1/deployments/default/example-app?patchType=merge"
-```
-
-## Delete example
-
-This example deletes the ConfigMap.
-
-```bash
-curl \
-  -X DELETE \
-  -H "Cookie: kite_session=<opaque-session-cookie>" \
-  -H "x-cluster-name: demo-cluster" \
-  https://kite.example.com/api/v1/configmaps/default/example-config
-```
-
-Optional delete query parameters:
-
-- `force=true`: delete with zero grace period
-- `wait=false`: return immediately instead of waiting for deletion
-- `cascade=false`: orphan dependents instead of foreground deletion
-
-Example:
-
-```bash
-curl \
-  -X DELETE \
-  -H "Cookie: kite_session=<opaque-session-cookie>" \
-  -H "x-cluster-name: demo-cluster" \
-  "https://kite.example.com/api/v1/deployments/default/example-app?force=true&wait=false"
-```
-
-## Cluster-scoped example
-
-Cluster-scoped resources use `/_all` in the path.
-
-This example patches a Namespace label:
-
-```bash
-curl \
-  -X PATCH \
-  -H "Cookie: kite_session=<opaque-session-cookie>" \
-  -H "x-cluster-name: demo-cluster" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "metadata": {
-      "labels": {
-        "team": "platform"
-      }
-    }
-  }' \
-  https://kite.example.com/api/v1/namespaces/_all/demo
-```
-
-## Custom resources
-
-Custom resources use `/:crd/...` routes, where `:crd` is the CRD name such as `rollouts.argoproj.io`.
-
-Examples:
-
-- namespaced custom resource get: `/api/v1/rollouts.argoproj.io/default/example`
-- cluster-scoped custom resource get: `/api/v1/<crd>/_all/example`
-
-As of the current server routes:
-
-- custom resources expose list and get routes
-- custom resources expose update and delete routes
-- custom resource create and patch are not documented here because the generic built-in resource routes are the stable CRUD surface currently registered for normal resource operations
+These APIs do not replace ordinary Kubernetes list/get/create/update/patch/delete
+operations.
 
 ## Resource history
 
@@ -229,12 +70,13 @@ Kubernetes `SelfSubjectAccessReview` for `get` on that exact resource group,
 plural, namespace, and name with the current user's token. A denied review
 returns `403`; a platform-management role does not bypass this check.
 
-History pages accept one-based `page` and `pageSize` values. `pageSize` is
-limited to 100. Kubernetes Secret operations retain attribution and success or
-failure metadata, but Kite does not persist Secret YAML bodies or raw Secret
-error details. A rollback from resource history is a new apply operation and is
-authorized again by Kubernetes.
+Mutations sent through the standard Kubernetes gateway are recorded at that
+single boundary. History pages accept one-based `page` and `pageSize` values;
+`pageSize` is limited to 100. Kubernetes Secret operations retain attribution
+and success or failure metadata, but Kite does not persist Secret YAML bodies or
+raw Secret error details. A rollback from resource history is a new apply
+operation and is authorized again by Kubernetes.
 
-History is internally bound to the immutable catalog cluster ID rather than
-only its display name. Renaming a cluster preserves its history, while deleting
-and later recreating the same name cannot attach old YAML to the new cluster.
+History is bound to the immutable catalog cluster ID rather than only its
+display name. Renaming a cluster preserves its history, while deleting and later
+recreating the same name cannot attach old YAML to the new cluster.

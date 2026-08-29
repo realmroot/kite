@@ -1,131 +1,16 @@
 package resources
 
 import (
-	"net/http"
 	"reflect"
-	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/zxh326/kite/pkg/cluster"
 	"github.com/zxh326/kite/pkg/common"
 	"k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/fields"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
-
-func (h *GenericResourceHandler[T, V]) list(c *gin.Context) (V, error) {
-	var zero V
-	cs := c.MustGet("cluster").(*cluster.ClientSet)
-	objectList := reflect.New(h.listType).Interface().(V)
-
-	ctx := c.Request.Context()
-
-	var listOpts []client.ListOption
-	namespace := c.Param("namespace")
-	allNamespaces := namespace == "" || namespace == common.AllNamespaces
-	if !h.isClusterScoped {
-		if !allNamespaces {
-			listOpts = append(listOpts, client.InNamespace(namespace))
-		}
-	}
-	if c.Query("limit") != "" {
-		limit, err := strconv.ParseInt(c.Query("limit"), 10, 64)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid limit parameter"})
-			return zero, err
-		}
-		listOpts = append(listOpts, client.Limit(limit))
-	}
-
-	if c.Query("continue") != "" {
-		continueToken := c.Query("continue")
-		listOpts = append(listOpts, client.Continue(continueToken))
-	}
-
-	if c.Query("labelSelector") != "" {
-		labelSelector := c.Query("labelSelector")
-		selector, err := metav1.ParseToLabelSelector(labelSelector)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid labelSelector parameter: " + err.Error()})
-			return zero, err
-		}
-		labelSelectorOption, err := metav1.LabelSelectorAsSelector(selector)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "failed to convert labelSelector: " + err.Error()})
-			return zero, err
-		}
-		listOpts = append(listOpts, client.MatchingLabelsSelector{Selector: labelSelectorOption})
-	}
-
-	if c.Query("fieldSelector") != "" {
-		fieldSelector := c.Query("fieldSelector")
-		fieldSelectorOption, err := fields.ParseSelector(fieldSelector)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid fieldSelector parameter: " + err.Error()})
-			return zero, err
-		}
-		listOpts = append(listOpts, client.MatchingFieldsSelector{Selector: fieldSelectorOption})
-	}
-
-	if err := cs.K8sClient.List(ctx, objectList, listOpts...); err != nil {
-		if h.Name() == string(common.EndpointSlices) && meta.IsNoMatchError(err) {
-			_ = meta.SetList(objectList, []runtime.Object{})
-			return objectList, nil
-		}
-		writeKubernetesError(c, err, "")
-		return zero, err
-	}
-
-	items, err := meta.ExtractList(objectList)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to extract items from list"})
-		return zero, err
-	}
-	sort.Slice(items, func(i, j int) bool {
-		o1, _ := meta.Accessor(items[i])
-		o2, _ := meta.Accessor(items[j])
-		if o1 == nil || o2 == nil {
-			return false
-		}
-
-		t1 := o1.GetCreationTimestamp()
-		t2 := o2.GetCreationTimestamp()
-		if t1.Equal(&t2) {
-			return o1.GetName() < o2.GetName()
-		}
-
-		return t1.After(t2.Time)
-	})
-
-	for i := range items {
-		obj, err := meta.Accessor(items[i])
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to access object metadata"})
-			return zero, err
-		}
-		obj.SetManagedFields(nil)
-		anno := obj.GetAnnotations()
-		if anno != nil {
-			delete(anno, common.KubectlAnnotation)
-		}
-	}
-	_ = meta.SetList(objectList, items)
-
-	return objectList, nil
-}
-
-func (h *GenericResourceHandler[T, V]) List(c *gin.Context) {
-	object, err := h.list(c)
-	if err != nil {
-		return
-	}
-	c.JSON(http.StatusOK, object)
-}
 
 func (h *GenericResourceHandler[T, V]) Search(c *gin.Context, q string, limit int64) ([]common.SearchResult, error) {
 	if !h.enableSearch || q == "" {

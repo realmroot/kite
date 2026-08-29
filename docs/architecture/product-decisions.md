@@ -72,6 +72,8 @@ documentation, except for migration notes that explicitly state their removal:
   impersonation.
 - Kite-local OAuth Resource Server routes, DPoP replay state, Agent access-token
   verification, and Agent Kubernetes execution.
+- Scheduled Helm auto-upgrade, its scheduler, retained execution credentials,
+  configuration UI, and persisted task table.
 
 No other original product capability belongs in this list by inference. Moving
 an existing capability here requires an explicit product decision and a
@@ -112,7 +114,7 @@ authentication credential.
 
 Existing capabilities not named in either of the two lists above remain in the
 product while they are evaluated. This currently includes browser kubectl,
-node-terminal workflows, Helm automation, image-registry tag lookup, analytics,
+node-terminal workflows, image-registry tag lookup, analytics,
 version checks, and other extensions inherited from upstream. Preservation does
 not certify their long-term product direction; each receives an explicit keep,
 redesign, replace, or remove decision before destructive work begins. While a

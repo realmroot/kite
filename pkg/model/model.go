@@ -116,7 +116,6 @@ func InitDB() {
 		ResourceTemplate{},
 		OIDCSession{},
 		HelmRepository{},
-		ScheduledTask{},
 	}
 	for _, model := range models {
 		err = DB.AutoMigrate(model)
@@ -124,17 +123,4 @@ func InitDB() {
 			panic("failed to migrate database: " + err.Error())
 		}
 	}
-	if err := disableUnboundOIDCScheduledTasks(); err != nil {
-		panic("failed to disable scheduled tasks without an OIDC session: " + err.Error())
-	}
-}
-
-func disableUnboundOIDCScheduledTasks() error {
-	return DB.Model(&ScheduledTask{}).
-		Where("type = ? AND enabled = ? AND oidc_session_id = ?", "helm_release_auto_upgrade", true, 0).
-		Updates(map[string]any{
-			"enabled":     false,
-			"next_run_at": nil,
-			"last_error":  "Re-enable this task to authorize it with a current OIDC session",
-		}).Error
 }

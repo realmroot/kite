@@ -25,13 +25,11 @@ export function useResourceTableData<T>({
 
   const query = useResources(resolvedResourceType, namespace, {
     refreshInterval: useSSE ? 0 : refreshInterval,
-    reduce: true,
     disable: useSSE,
     labelSelector,
   })
 
   const watch = useResourcesWatch(resolvedResourceType, namespace, {
-    reduce: true,
     enabled: useSSE,
     labelSelector,
   })

@@ -66,8 +66,8 @@ test("encoded proxy paths cannot escape Kubernetes RBAC", async ({
     "base64",
   );
   const clusterPath = `/api/v1/_clusters/${encodeURIComponent(kindClusterName)}`;
-  const podPath = `${clusterPath}/pods/default/${podName}`;
-  const secretPath = `${clusterPath}/secrets/kube-system/${secretName}`;
+  const podPath = `${clusterPath}/kubernetes/api/v1/namespaces/default/pods/${podName}`;
+  const secretPath = `${clusterPath}/kubernetes/api/v1/namespaces/kube-system/secrets/${secretName}`;
   let podCreated = false;
   let secretCreated = false;
   let adminRequest: APIRequestContext | undefined;
@@ -78,31 +78,37 @@ test("encoded proxy paths cannot escape Kubernetes RBAC", async ({
       storageState: authFile,
     });
     await expectStatus(
-      await adminRequest.post(`${clusterPath}/pods/default`, {
-        data: {
-          apiVersion: "v1",
-          kind: "Pod",
-          metadata: { name: podName, labels: { "e2e.kite.io/test": suffix } },
-          spec: {
-            containers: [
-              { name: "pause", image: "registry.k8s.io/pause:3.10.1" },
-            ],
+      await adminRequest.post(
+        `${clusterPath}/kubernetes/api/v1/namespaces/default/pods`,
+        {
+          data: {
+            apiVersion: "v1",
+            kind: "Pod",
+            metadata: { name: podName, labels: { "e2e.kite.io/test": suffix } },
+            spec: {
+              containers: [
+                { name: "pause", image: "registry.k8s.io/pause:3.10.1" },
+              ],
+            },
           },
         },
-      }),
+      ),
       201,
     );
     podCreated = true;
     await expectStatus(
-      await adminRequest.post(`${clusterPath}/secrets/kube-system`, {
-        data: {
-          apiVersion: "v1",
-          kind: "Secret",
-          metadata: { name: secretName, namespace: "kube-system" },
-          type: "Opaque",
-          data: { proof: secretProofValue },
+      await adminRequest.post(
+        `${clusterPath}/kubernetes/api/v1/namespaces/kube-system/secrets`,
+        {
+          data: {
+            apiVersion: "v1",
+            kind: "Secret",
+            metadata: { name: secretName, namespace: "kube-system" },
+            type: "Opaque",
+            data: { proof: secretProofValue },
+          },
         },
-      }),
+      ),
       201,
     );
     secretCreated = true;
@@ -110,7 +116,9 @@ test("encoded proxy paths cannot escape Kubernetes RBAC", async ({
     await loginWithOIDC(page, viewerUser);
     await expectStatus(await page.request.get(podPath), 200);
     await expectStatus(
-      await page.request.get(`${clusterPath}/secrets/kube-system`),
+      await page.request.get(
+        `${clusterPath}/kubernetes/api/v1/namespaces/kube-system/secrets`,
+      ),
       403,
     );
     await expectStatus(await page.request.get(secretPath), 403);
@@ -122,7 +130,7 @@ test("encoded proxy paths cannot escape Kubernetes RBAC", async ({
     expect(cookieHeader).toContain("kite_session=");
 
     const dotdot = "%2e%2e";
-    const escapePath = `${clusterPath}/namespaces/default/pods/${encodeURIComponent(
+    const escapePath = `${clusterPath}/kubernetes/api/v1/namespaces/default/pods/${encodeURIComponent(
       podName,
     )}/proxy/${Array(4).fill(dotdot).join("/")}/kube-system/secrets`;
     const escaped = await sendRawHTTP(baseURL, escapePath, cookieHeader);
@@ -130,7 +138,7 @@ test("encoded proxy paths cannot escape Kubernetes RBAC", async ({
     expect(escaped.body).not.toContain(secretName);
     expect(escaped.body).not.toContain(secretProofValue);
 
-    const clusterEscapePath = `${clusterPath}/namespaces/default/pods/${encodeURIComponent(
+    const clusterEscapePath = `${clusterPath}/kubernetes/api/v1/namespaces/default/pods/${encodeURIComponent(
       podName,
     )}/proxy/${Array(5).fill(dotdot).join("/")}/secrets`;
     const clusterEscaped = await sendRawHTTP(
@@ -153,7 +161,7 @@ test("encoded proxy paths cannot escape Kubernetes RBAC", async ({
       "services",
       "http%3akube-dns%3ametrics",
     ].join("%2f");
-    const nameEscapePath = `${clusterPath}/namespaces/default/pods/${escapedName}/proxy/metrics`;
+    const nameEscapePath = `${clusterPath}/kubernetes/api/v1/namespaces/default/pods/${escapedName}/proxy/metrics`;
     const nameEscaped = await sendRawHTTP(
       baseURL,
       nameEscapePath,
@@ -162,7 +170,7 @@ test("encoded proxy paths cannot escape Kubernetes RBAC", async ({
     expect(nameEscaped.status, nameEscaped.body).toBeGreaterThanOrEqual(400);
     expect(nameEscaped.body).not.toContain("# HELP");
 
-    const legitimatePath = `${clusterPath}/namespaces/default/pods/${encodeURIComponent(
+    const legitimatePath = `${clusterPath}/kubernetes/api/v1/namespaces/default/pods/${encodeURIComponent(
       podName,
     )}/proxy/`;
     const legitimate = await sendRawHTTP(baseURL, legitimatePath, cookieHeader);
@@ -173,14 +181,10 @@ test("encoded proxy paths cannot escape Kubernetes RBAC", async ({
     }
   } finally {
     if (podCreated) {
-      await adminRequest
-        ?.delete(`${podPath}?wait=false`)
-        .catch(() => undefined);
+      await adminRequest?.delete(podPath).catch(() => undefined);
     }
     if (secretCreated) {
-      await adminRequest
-        ?.delete(`${secretPath}?wait=false`)
-        .catch(() => undefined);
+      await adminRequest?.delete(secretPath).catch(() => undefined);
     }
     await adminRequest?.dispose();
   }

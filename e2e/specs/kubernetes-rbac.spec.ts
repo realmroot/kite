@@ -31,11 +31,17 @@ test.describe("Kubernetes-native authorization", () => {
 
     const clusterPath = `/api/v1/_clusters/${encodeURIComponent(kindClusterName)}`;
     expect(
-      (await page.request.get(`${clusterPath}/configmaps/default`)).status(),
+      (
+        await page.request.get(
+          `${clusterPath}/kubernetes/api/v1/namespaces/default/configmaps`,
+        )
+      ).status(),
     ).toBe(200);
     expect(
       (
-        await page.request.get(`${clusterPath}/configmaps/kube-system`)
+        await page.request.get(
+          `${clusterPath}/kubernetes/api/v1/namespaces/kube-system/configmaps`,
+        )
       ).status(),
     ).toBe(403);
     const allowedHistory = await page.request.get(
@@ -46,18 +52,12 @@ test.describe("Kubernetes-native authorization", () => {
       `${clusterPath}/configmaps/kube-system/kube-root-ca.crt/history`,
     );
     expect(deniedHistory.status(), await deniedHistory.text()).toBe(403);
-    const deniedNodes = await page.request.get(`${clusterPath}/nodes`);
-    expect(deniedNodes.status(), await deniedNodes.text()).toBe(403);
-    const deniedHelmAutomation = await page.request.get(
-      `${clusterPath}/helmrelease/default/not-authorized/auto-upgrade`,
+    const deniedNodes = await page.request.get(
+      `${clusterPath}/kubernetes/api/v1/nodes`,
     );
-    expect(
-      deniedHelmAutomation.status(),
-      await deniedHelmAutomation.text(),
-    ).toBe(403);
-
+    expect(deniedNodes.status(), await deniedNodes.text()).toBe(403);
     const deniedWrite = await page.request.post(
-      `${clusterPath}/configmaps/default`,
+      `${clusterPath}/kubernetes/api/v1/namespaces/default/configmaps`,
       {
         data: {
           apiVersion: "v1",

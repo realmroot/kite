@@ -137,8 +137,6 @@ func registerClusterProtectedRoutes(
 
 	helmChartsHandler.RegisterRoutes(api)
 
-	proxyHandler := proxy.NewProxyHandler()
-	proxyHandler.RegisterRoutes(api)
 	proxy.NewKubernetesAPIHandler().RegisterRoutes(api)
 
 	resources.RegisterRoutes(api)

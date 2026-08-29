@@ -442,7 +442,7 @@ func (a *oidcAuthenticator) sessionTokensForLoadedSession(ctx context.Context, s
 	})
 	var credentialError *SessionCredentialError
 	if errors.As(err, &credentialError) && credentialError.Permanent {
-		_ = model.RevokeOIDCSession(session.ID, "OIDC authorization expired; re-enable this task to authorize it again")
+		_ = model.RevokeOIDCSession(session.ID)
 	}
 	return rawIDToken, accessToken, err
 }

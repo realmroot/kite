@@ -38,8 +38,7 @@ export function StorageClassListPage() {
   const queryClient = useQueryClient()
   const { data: storageClasses = [] } = useResources(
     'storageclasses',
-    undefined,
-    { reduce: true }
+    undefined
   )
   const defaultStorageClassCount = storageClasses.filter(
     isDefaultStorageClass

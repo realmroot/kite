@@ -18,7 +18,6 @@ import (
 	"github.com/zxh326/kite/pkg/common"
 	"github.com/zxh326/kite/pkg/middleware"
 	"github.com/zxh326/kite/pkg/model"
-	"github.com/zxh326/kite/pkg/scheduler"
 	"github.com/zxh326/kite/pkg/templates"
 	"k8s.io/klog/v2"
 	controllerlog "sigs.k8s.io/controller-runtime/pkg/log"
@@ -75,7 +74,6 @@ func initializeApp(ctx context.Context) (*application, error) {
 		klog.Warningf("Failed to watch config file: %v", err)
 	}
 	authHandler := auth.NewAuthHandler()
-	scheduler.Start(ctx, cm, authHandler)
 	app := &application{clusters: cm, auth: authHandler}
 	app.ready.Store(true)
 	return app, nil

@@ -58,28 +58,14 @@ func TouchOIDCSession(sessionID uint) error {
 }
 
 func DeleteOIDCSession(session *OIDCSession) error {
-	return RevokeOIDCSession(session.ID, "OIDC session ended; re-enable this task to authorize it again")
+	return RevokeOIDCSession(session.ID)
 }
 
-func RevokeOIDCSession(sessionID uint, taskError string) error {
-	return DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Model(&ScheduledTask{}).
-			Where("oidc_session_id = ? AND enabled = ?", sessionID, true).
-			Updates(map[string]any{
-				"enabled":     false,
-				"next_run_at": nil,
-				"last_error":  taskError,
-			}).Error; err != nil {
-			return err
-		}
-		return tx.Delete(&OIDCSession{}, sessionID).Error
-	})
+func RevokeOIDCSession(sessionID uint) error {
+	return DB.Delete(&OIDCSession{}, sessionID).Error
 }
 
 func DeleteInactiveOIDCSessions(lastUsedBefore time.Time) error {
 	return DB.Where("updated_at <= ?", lastUsedBefore).
-		Where("NOT EXISTS (?)", DB.Model(&ScheduledTask{}).
-			Select("1").
-			Where("scheduled_tasks.oidc_session_id = oidc_sessions.id AND scheduled_tasks.enabled = ?", true)).
 		Delete(&OIDCSession{}).Error
 }

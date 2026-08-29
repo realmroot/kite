@@ -63,7 +63,9 @@ test("backend contracts follow OIDC and Kubernetes-native authorization", async 
       await expectStatus(await anonymous.get("/api/v1/version"), 200);
       await expectStatus(await anonymous.get("/api/v1/clusters"), 401);
       await expectStatus(
-        await anonymous.get(`${clusterPath}/configmaps/default`),
+        await anonymous.get(
+          `${clusterPath}/kubernetes/api/v1/namespaces/default/configmaps`,
+        ),
         401,
       );
       await expectStatus(await anonymous.get("/api/v1/admin/clusters/"), 401);
@@ -187,14 +189,19 @@ test("backend contracts follow OIDC and Kubernetes-native authorization", async 
       data: { phase: "created" },
     };
     await expectStatus(
-      await request.post(`${clusterPath}/configmaps/default`, {
-        data: configMap,
-      }),
+      await request.post(
+        `${clusterPath}/kubernetes/api/v1/namespaces/default/configmaps`,
+        {
+          data: configMap,
+        },
+      ),
       201,
     );
     configMapCreated = true;
     const fetched = await expectJSON<{ data: { phase: string } }>(
-      await request.get(`${clusterPath}/configmaps/default/${configMapName}`),
+      await request.get(
+        `${clusterPath}/kubernetes/api/v1/namespaces/default/configmaps/${configMapName}`,
+      ),
       200,
     );
     expect(fetched.data.phase).toBe("created");
@@ -223,7 +230,7 @@ test("backend contracts follow OIDC and Kubernetes-native authorization", async 
       items: Array<{ metadata: { name: string } }>;
     }>(
       await request.get(
-        `${clusterPath}/pods/kube-system?labelSelector=${encodeURIComponent(
+        `${clusterPath}/kubernetes/api/v1/namespaces/kube-system/pods?labelSelector=${encodeURIComponent(
           "k8s-app=metrics-server",
         )}`,
       ),
@@ -287,7 +294,7 @@ test("backend contracts follow OIDC and Kubernetes-native authorization", async 
 
     await expectStatus(
       await request.delete(
-        `${clusterPath}/configmaps/default/${configMapName}`,
+        `${clusterPath}/kubernetes/api/v1/namespaces/default/configmaps/${configMapName}`,
       ),
       200,
     );
@@ -313,7 +320,7 @@ test("backend contracts follow OIDC and Kubernetes-native authorization", async 
   } finally {
     if (configMapCreated) {
       await request.delete(
-        `${clusterPath}/configmaps/default/${configMapName}`,
+        `${clusterPath}/kubernetes/api/v1/namespaces/default/configmaps/${configMapName}`,
       );
     }
     if (repositoryId) {

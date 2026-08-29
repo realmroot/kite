@@ -17,12 +17,44 @@ for pattern in \
   'api.GET("/prometheus/resource-usage-history"' \
   'api.GET("/search"' \
   'resources.RegisterRoutes(api)' \
-  'string(common.HelmReleases): NewHelmReleaseHandler()'; do
+  'registerHelmReleaseRoutes'; do
   if ! rg -F -q "$pattern" routes.go pkg/resources/handler.go; then
     echo "explicitly retained Helm, Metrics, Search, or resource-dashboard route is missing: $pattern" >&2
     exit 1
   fi
 done
+
+for path in \
+  pkg/scheduler \
+  pkg/model/scheduled_task.go \
+  pkg/proxy/handler.go \
+  pkg/kube/proxy.go \
+  pkg/resources/event_handler.go \
+  pkg/resources/generic_resource_handler_write.go \
+  ui/src/pages/helmrelease-auto-upgrade-dialog.tsx; do
+  if [ -e "$path" ]; then
+    echo "removed Helm auto-upgrade implementation remains: $path" >&2
+    exit 1
+  fi
+done
+
+if rg -n 'api\.(GET|POST|PUT|PATCH|DELETE)\("/(pods|nodes|namespaces|services|deployments|statefulsets|daemonsets|configmaps|secrets|events)(/|"|:)' \
+  --glob '*.go' \
+  --glob '!**/*_test.go' \
+  .; then
+  echo "legacy ordinary Kubernetes resource route remains" >&2
+  exit 1
+fi
+
+if rg -n 'auto-upgrade|HelmReleaseAutoUpgrade|helm_release_auto_upgrade' \
+  --glob '!pkg/model/migrations.go' \
+  --glob '!pkg/model/migrations_test.go' \
+  --glob '!scripts/verify-architecture.sh' \
+  --glob '!docs/architecture/product-decisions.md' \
+  .; then
+  echo "removed Helm auto-upgrade contract remains" >&2
+  exit 1
+fi
 
 for path in \
   pkg/ai \

@@ -35,7 +35,7 @@ JWT_SECRET=<independent random secret>
 ```
 
 The issuer must expose standard discovery metadata. `OIDC_SCOPES` must include
-`openid` and `offline_access`; scheduled Helm operations require the user's
+`openid` and `offline_access`; browser session renewal requires the user's
 refresh grant. `HOST` is a required HTTPS origin and is never inferred from
 forwarded request headers. The configured claim names are ordinary top-level
 ID-token claims; Kite contains no provider-specific claim logic.

@@ -1,7 +1,6 @@
 package resources
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -10,13 +9,10 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/zxh326/kite/pkg/auth"
 	"github.com/zxh326/kite/pkg/cluster"
 	"github.com/zxh326/kite/pkg/common"
 	"github.com/zxh326/kite/pkg/helmutil"
 	"github.com/zxh326/kite/pkg/model"
-	"github.com/zxh326/kite/pkg/scheduler"
-	"gorm.io/gorm"
 	"helm.sh/helm/v4/pkg/action"
 	release "helm.sh/helm/v4/pkg/release/v1"
 	"helm.sh/helm/v4/pkg/storage/driver"
@@ -155,12 +151,6 @@ func (h *HelmReleaseHandler) runInstall(c *gin.Context, dryRun bool) (rel *relea
 	return rel, http.StatusOK, nil
 }
 
-func (h *HelmReleaseHandler) Update(c *gin.Context) {
-	c.JSON(http.StatusNotImplemented, gin.H{"error": "helm release updates must use the upgrade action"})
-}
-func (h *HelmReleaseHandler) Patch(c *gin.Context) {
-	c.JSON(http.StatusNotImplemented, gin.H{"error": "patching Helm releases is not supported"})
-}
 func (h *HelmReleaseHandler) Describe(c *gin.Context) {
 	obj, err := h.get(c, c.Param("namespace"), c.Param("name"), true)
 	if err != nil {
@@ -182,8 +172,6 @@ func (h *HelmReleaseHandler) Describe(c *gin.Context) {
 
 func (h *HelmReleaseHandler) registerCustomRoutes(group *gin.RouterGroup) {
 	group.POST("/:namespace/dry-run", h.DryRunInstall)
-	group.GET("/:namespace/:name/auto-upgrade", h.GetAutoUpgrade)
-	group.PUT("/:namespace/:name/auto-upgrade", h.UpdateAutoUpgrade)
 	group.PUT("/:namespace/:name/upgrade", h.Upgrade)
 	group.PUT("/:namespace/:name/upgrade/dry-run", h.DryRunUpgrade)
 	group.PUT("/:namespace/:name/rollback", h.Rollback)
@@ -239,7 +227,6 @@ func (h *HelmReleaseHandler) Search(c *gin.Context, q string, limit int64) ([]co
 }
 
 func (h *HelmReleaseHandler) Delete(c *gin.Context) {
-	cs := c.MustGet("cluster").(*cluster.ClientSet)
 	cfg, err := h.actionConfig(c, c.Param("namespace"))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -263,9 +250,6 @@ func (h *HelmReleaseHandler) Delete(c *gin.Context) {
 		runErr = err
 		writeHelmError(c, err)
 		return
-	}
-	if err := deleteHelmReleaseAutoUpgradeTask(cs.Name, current.Namespace, current.Name); err != nil {
-		klog.Errorf("Failed to delete helm release auto upgrade task: %v", err)
 	}
 	success = true
 	c.JSON(http.StatusOK, gin.H{"message": "helm release deleted"})
@@ -494,274 +478,4 @@ func helmReleaseID(release helmutil.HelmRelease) string {
 		return string(release.UID)
 	}
 	return release.Namespace + "/" + release.Name
-}
-
-const (
-	helmReleaseAutoUpgradeDefaultScheduleType    = model.ScheduledTaskScheduleTypeInterval
-	helmReleaseAutoUpgradeDefaultIntervalMinutes = 60
-	helmReleaseAutoUpgradeDefaultScheduleTime    = "03:00"
-	helmReleaseAutoUpgradeDefaultTimeoutMinutes  = 5
-)
-
-type helmReleaseAutoUpgradeRequest struct {
-	Enabled           bool   `json:"enabled"`
-	ScheduleType      string `json:"scheduleType"`
-	IntervalMinutes   int    `json:"intervalMinutes"`
-	ScheduleTime      string `json:"scheduleTime"`
-	TimeoutMinutes    int    `json:"timeoutMinutes"`
-	RollbackOnFailure bool   `json:"rollbackOnFailure"`
-	Source            string `json:"source"`
-	RepositoryName    string `json:"repositoryName"`
-	ChartName         string `json:"chartName"`
-}
-
-type helmReleaseAutoUpgradeResponse struct {
-	ClusterName       string     `json:"clusterName"`
-	Namespace         string     `json:"namespace"`
-	ReleaseName       string     `json:"releaseName"`
-	Enabled           bool       `json:"enabled"`
-	ScheduleType      string     `json:"scheduleType"`
-	IntervalMinutes   int        `json:"intervalMinutes"`
-	ScheduleTime      string     `json:"scheduleTime"`
-	TimeoutMinutes    int        `json:"timeoutMinutes"`
-	RollbackOnFailure bool       `json:"rollbackOnFailure"`
-	Source            string     `json:"source,omitempty"`
-	RepositoryName    string     `json:"repositoryName,omitempty"`
-	ChartName         string     `json:"chartName,omitempty"`
-	LastCheckedAt     *time.Time `json:"lastCheckedAt,omitempty"`
-	LastUpgradedAt    *time.Time `json:"lastUpgradedAt,omitempty"`
-	LastError         string     `json:"lastError,omitempty"`
-}
-
-func (h *HelmReleaseHandler) GetAutoUpgrade(c *gin.Context) {
-	cs := c.MustGet("cluster").(*cluster.ClientSet)
-	namespace, name := c.Param("namespace"), c.Param("name")
-	if err := h.ensureHelmReleaseAutoUpgradeTarget(cs, namespace, name); err != nil {
-		writeKubernetesError(c, err, "Failed to read Helm release")
-		return
-	}
-	task, err := getHelmReleaseAutoUpgradeTask(cs.Name, namespace, name)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusOK, helmReleaseAutoUpgradeResponse{
-				ClusterName:       cs.Name,
-				Namespace:         namespace,
-				ReleaseName:       name,
-				Enabled:           false,
-				ScheduleType:      helmReleaseAutoUpgradeDefaultScheduleType,
-				IntervalMinutes:   helmReleaseAutoUpgradeDefaultIntervalMinutes,
-				ScheduleTime:      helmReleaseAutoUpgradeDefaultScheduleTime,
-				TimeoutMinutes:    helmReleaseAutoUpgradeDefaultTimeoutMinutes,
-				RollbackOnFailure: true,
-			})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	response, err := toHelmReleaseAutoUpgradeResponse(task)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, response)
-}
-
-func (h *HelmReleaseHandler) UpdateAutoUpgrade(c *gin.Context) {
-	cs := c.MustGet("cluster").(*cluster.ClientSet)
-	user := c.MustGet("user").(model.User)
-	sessionID, ok := auth.OIDCSessionID(c)
-	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "A current OIDC session is required to authorize automatic upgrades"})
-		return
-	}
-	namespace, name := c.Param("namespace"), c.Param("name")
-	var req helmReleaseAutoUpgradeRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	normalizeHelmReleaseAutoUpgradeRequest(&req)
-	if err := validateHelmReleaseAutoUpgradeRequest(req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	if err := h.ensureHelmReleaseAutoUpgradeTarget(cs, namespace, name); err != nil {
-		writeKubernetesError(c, err, "Failed to read Helm release")
-		return
-	}
-
-	payload := scheduler.HelmReleaseAutoUpgradePayload{
-		Namespace:         namespace,
-		ResourceType:      string(common.HelmReleases),
-		ResourceName:      name,
-		Source:            req.Source,
-		RepositoryName:    req.RepositoryName,
-		ChartName:         req.ChartName,
-		TimeoutMinutes:    req.TimeoutMinutes,
-		RollbackOnFailure: req.RollbackOnFailure,
-	}
-	key := scheduler.HelmReleaseAutoUpgradeTaskKey(namespace, name)
-	taskName := scheduler.HelmReleaseAutoUpgradeTaskName(namespace, name)
-	task, queryErr := getHelmReleaseAutoUpgradeTask(cs.Name, namespace, name)
-	if queryErr == nil && task.Payload != "" {
-		var existingPayload scheduler.HelmReleaseAutoUpgradePayload
-		if err := json.Unmarshal([]byte(task.Payload), &existingPayload); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-		payload.LastUpgradedAt = existingPayload.LastUpgradedAt
-	}
-
-	payloadData, err := json.Marshal(payload)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	var nextRunAt *time.Time
-	if req.Enabled {
-		next, err := scheduler.NextRunAt(time.Now(), req.ScheduleType, req.IntervalMinutes, req.ScheduleTime)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-		nextRunAt = &next
-	}
-	switch {
-	case errors.Is(queryErr, gorm.ErrRecordNotFound):
-		task = model.ScheduledTask{
-			ClusterName: cs.Name,
-			Type:        scheduler.HelmReleaseAutoUpgradeTaskType,
-			Key:         key,
-			CreatorID:   user.ID,
-		}
-	case queryErr != nil:
-		err = queryErr
-	default:
-		task.ClusterName = cs.Name
-		task.Type = scheduler.HelmReleaseAutoUpgradeTaskType
-		task.Key = key
-	}
-	task.Name = taskName
-	task.CreatorID = user.ID
-	task.OIDCSessionID = sessionID
-	task.Enabled = req.Enabled
-	task.ScheduleType = req.ScheduleType
-	task.IntervalMinutes = req.IntervalMinutes
-	task.ScheduleTime = req.ScheduleTime
-	task.Payload = string(payloadData)
-	task.LastError = ""
-	task.NextRunAt = nextRunAt
-	task.LockedAt = nil
-	task.LockedBy = ""
-	task.LockUntil = nil
-	if err == nil {
-		err = model.DB.Save(&task).Error
-	}
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	response, err := toHelmReleaseAutoUpgradeResponse(task)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, response)
-}
-
-func normalizeHelmReleaseAutoUpgradeRequest(req *helmReleaseAutoUpgradeRequest) {
-	req.Source = strings.TrimSpace(req.Source)
-	req.RepositoryName = strings.TrimSpace(req.RepositoryName)
-	req.ChartName = strings.TrimSpace(req.ChartName)
-	req.ScheduleType = strings.TrimSpace(req.ScheduleType)
-	req.ScheduleTime = strings.TrimSpace(req.ScheduleTime)
-	if req.ScheduleType == "" {
-		req.ScheduleType = helmReleaseAutoUpgradeDefaultScheduleType
-	}
-	if req.IntervalMinutes == 0 {
-		req.IntervalMinutes = helmReleaseAutoUpgradeDefaultIntervalMinutes
-	}
-	if req.ScheduleTime == "" {
-		req.ScheduleTime = helmReleaseAutoUpgradeDefaultScheduleTime
-	}
-	if req.TimeoutMinutes == 0 {
-		req.TimeoutMinutes = helmReleaseAutoUpgradeDefaultTimeoutMinutes
-	}
-	if req.Source == "" && (req.Enabled || req.RepositoryName != "" || req.ChartName != "") {
-		req.Source = helmutil.ChartSourceRepository
-	}
-}
-
-func validateHelmReleaseAutoUpgradeRequest(req helmReleaseAutoUpgradeRequest) error {
-	if req.Source != "" && req.Source != helmutil.ChartSourceRepository && req.Source != helmutil.ChartSourceArtifactHub {
-		return fmt.Errorf("unsupported chart source")
-	}
-	if req.ScheduleType != model.ScheduledTaskScheduleTypeInterval && req.ScheduleType != model.ScheduledTaskScheduleTypeDaily {
-		return fmt.Errorf("unsupported scheduleType")
-	}
-	if req.ScheduleType == model.ScheduledTaskScheduleTypeInterval && req.IntervalMinutes < 1 {
-		return fmt.Errorf("intervalMinutes must be at least 1")
-	}
-	if req.ScheduleType == model.ScheduledTaskScheduleTypeDaily {
-		if _, err := scheduler.NextRunAt(time.Now(), req.ScheduleType, req.IntervalMinutes, req.ScheduleTime); err != nil {
-			return err
-		}
-	}
-	if req.TimeoutMinutes < 1 {
-		return fmt.Errorf("timeoutMinutes must be at least 1")
-	}
-	if req.Enabled && (req.RepositoryName == "" || req.ChartName == "") {
-		return fmt.Errorf("repositoryName and chartName are required")
-	}
-	return nil
-}
-
-func (h *HelmReleaseHandler) ensureHelmReleaseAutoUpgradeTarget(cs *cluster.ClientSet, namespace, name string) error {
-	cfg, err := h.actionConfigForClientSet(cs, helmutil.StorageNamespace(namespace))
-	if err != nil {
-		return err
-	}
-	_, err = helmutil.GetRelease(cfg, name)
-	return err
-}
-
-func getHelmReleaseAutoUpgradeTask(clusterName, namespace, releaseName string) (model.ScheduledTask, error) {
-	var task model.ScheduledTask
-	err := model.DB.
-		Where("cluster_name = ? AND type = ? AND key = ?", clusterName, scheduler.HelmReleaseAutoUpgradeTaskType, scheduler.HelmReleaseAutoUpgradeTaskKey(namespace, releaseName)).
-		First(&task).Error
-	return task, err
-}
-
-func deleteHelmReleaseAutoUpgradeTask(clusterName, namespace, releaseName string) error {
-	return model.DB.
-		Where("cluster_name = ? AND type = ? AND key = ?", clusterName, scheduler.HelmReleaseAutoUpgradeTaskType, scheduler.HelmReleaseAutoUpgradeTaskKey(namespace, releaseName)).
-		Delete(&model.ScheduledTask{}).Error
-}
-
-func toHelmReleaseAutoUpgradeResponse(task model.ScheduledTask) (helmReleaseAutoUpgradeResponse, error) {
-	var payload scheduler.HelmReleaseAutoUpgradePayload
-	if task.Payload != "" {
-		if err := json.Unmarshal([]byte(task.Payload), &payload); err != nil {
-			return helmReleaseAutoUpgradeResponse{}, err
-		}
-	}
-	return helmReleaseAutoUpgradeResponse{
-		ClusterName:       task.ClusterName,
-		Namespace:         payload.Namespace,
-		ReleaseName:       payload.ResourceName,
-		Enabled:           task.Enabled,
-		ScheduleType:      task.ScheduleType,
-		IntervalMinutes:   task.IntervalMinutes,
-		ScheduleTime:      task.ScheduleTime,
-		TimeoutMinutes:    payload.TimeoutMinutes,
-		RollbackOnFailure: payload.RollbackOnFailure,
-		Source:            payload.Source,
-		RepositoryName:    payload.RepositoryName,
-		ChartName:         payload.ChartName,
-		LastCheckedAt:     task.LastRunAt,
-		LastUpgradedAt:    payload.LastUpgradedAt,
-		LastError:         task.LastError,
-	}, nil
 }

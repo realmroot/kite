@@ -232,7 +232,7 @@ async function expectAppliedPodLabel(
     .poll(
       async () => {
         const response = await page.request.get(
-          `/api/v1/deployments/${namespace}?labelSelector=${encodeURIComponent(
+          `/api/v1/kubernetes/apis/apps/v1/namespaces/${namespace}/deployments?labelSelector=${encodeURIComponent(
             `app.kubernetes.io/instance=${releaseName}`,
           )}`,
         );
@@ -515,37 +515,6 @@ test.describe("Helm release lifecycle", () => {
       await expectReleaseSummary(page, releaseName, specifiedUpgradeVersion, 4);
       await expectReleaseValues(page, "e2e-mode: upgraded");
       await expectAppliedPodLabel(page, releaseName, "upgraded");
-
-      await page.getByRole("button", { name: "Auto upgrade" }).click();
-      const autoUpgradeDialog = page.getByRole("dialog", {
-        name: "Auto upgrade",
-      });
-      await expect(autoUpgradeDialog).toBeVisible();
-      await autoUpgradeDialog.locator("#helm-auto-upgrade-enabled").click();
-      await selectUpgradeChart(page, autoUpgradeDialog, repositoryName);
-      await autoUpgradeDialog.locator("#helm-auto-upgrade-interval").fill("1");
-      await autoUpgradeDialog.getByRole("button", { name: "Save" }).click();
-      await expect(autoUpgradeDialog).toBeHidden({ timeout: 60_000 });
-
-      await expect
-        .poll(
-          async () => {
-            const response = await page.request.get(
-              `/api/v1/helmrelease/${namespace}/${encodeURIComponent(releaseName)}/auto-upgrade`,
-            );
-            if (!response.ok()) return null;
-            const body = (await response.json()) as {
-              enabled?: boolean;
-              lastCheckedAt?: string;
-              lastError?: string;
-            };
-            return body.enabled && body.lastCheckedAt && !body.lastError
-              ? body.lastCheckedAt
-              : null;
-          },
-          { timeout: 240_000, intervals: [10_000] },
-        )
-        .not.toBeNull();
 
       await deleteReleaseFromCurrentPage(page, releaseName);
       await page.getByPlaceholder(/^Search Helm Release/).fill(releaseName);

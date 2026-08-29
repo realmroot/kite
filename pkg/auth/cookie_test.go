@@ -90,7 +90,7 @@ func TestRefreshTokenRenewsBrowserCookieAndServerSessionActivity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&model.User{}, &model.OIDCSession{}, &model.ScheduledTask{}); err != nil {
+	if err := db.AutoMigrate(&model.User{}, &model.OIDCSession{}); err != nil {
 		t.Fatal(err)
 	}
 

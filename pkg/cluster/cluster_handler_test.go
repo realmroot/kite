@@ -20,14 +20,6 @@ func TestCredentialFreeClusterConfigurationLifecycle(t *testing.T) {
 	setupClusterHandlerTestDB(t)
 	router := newClusterHandlerTestRouter()
 	primary := createPrimaryCluster(t, router)
-	if err := model.DB.Create(&model.ScheduledTask{
-		ClusterName: "primary",
-		Type:        "test",
-		Key:         "rename",
-		Enabled:     true,
-	}).Error; err != nil {
-		t.Fatalf("creating scheduled task: %v", err)
-	}
 	if !primary.IsDefault || !primary.Enable || primary.APIServerURL != "https://k8s.example.com" {
 		t.Fatalf("created cluster = %#v", primary)
 	}
@@ -47,14 +39,6 @@ func TestCredentialFreeClusterConfigurationLifecycle(t *testing.T) {
 	if updated.APIServerURL != "https://new-k8s.example.com" || updated.CABundle != "" {
 		t.Fatalf("updated cluster lost transport metadata: %#v", updated)
 	}
-	var renamedTask model.ScheduledTask
-	if err := model.DB.Where("type = ? AND key = ?", "test", "rename").First(&renamedTask).Error; err != nil {
-		t.Fatalf("loading renamed task: %v", err)
-	}
-	if renamedTask.ClusterName != "renamed" {
-		t.Fatalf("scheduled task cluster = %q, want renamed", renamedTask.ClusterName)
-	}
-
 	invalidURL := performClusterRequest(router, http.MethodPut, fmt.Sprintf("/clusters/%d", primary.ID),
 		`{"name":"renamed","apiServerUrl":"http://user:password@new-k8s.example.com?token=secret","enabled":true}`)
 	if invalidURL.Code != http.StatusBadRequest {
@@ -80,15 +64,6 @@ func TestCredentialFreeClusterConfigurationLifecycle(t *testing.T) {
 	if strings.Contains(list.Body.String(), "kubeconfig") {
 		t.Fatal("cluster list exposed kubeconfig")
 	}
-	if err := model.UpdateCluster(updated, map[string]interface{}{"enable": false}); err != nil {
-		t.Fatalf("disabling cluster: %v", err)
-	}
-	if err := model.DB.Where("type = ? AND key = ?", "test", "rename").First(&renamedTask).Error; err != nil {
-		t.Fatalf("reloading disabled task: %v", err)
-	}
-	if renamedTask.Enabled || renamedTask.NextRunAt != nil || !strings.Contains(renamedTask.LastError, "Cluster disabled") {
-		t.Fatalf("task was not disabled with cluster: %#v", renamedTask)
-	}
 }
 
 func TestCredentialFreeClusterDefaultAndDeletionConstraints(t *testing.T) {
@@ -104,9 +79,6 @@ func TestCredentialFreeClusterDefaultAndDeletionConstraints(t *testing.T) {
 	secondary := &model.Cluster{Name: "secondary", APIServerURL: "https://secondary.example.com", ConnectionMode: "direct", Enable: true}
 	if err := model.AddCluster(secondary); err != nil {
 		t.Fatalf("creating secondary cluster: %v", err)
-	}
-	if err := model.DB.Create(&model.ScheduledTask{ClusterName: "secondary", Type: "test", Key: "delete"}).Error; err != nil {
-		t.Fatalf("creating secondary scheduled task: %v", err)
 	}
 	duplicateName := performClusterRequest(router, http.MethodPut, fmt.Sprintf("/clusters/%d", secondary.ID),
 		`{"name":"primary","apiServerUrl":"https://secondary.example.com","enabled":true}`)
@@ -134,10 +106,6 @@ func TestCredentialFreeClusterDefaultAndDeletionConstraints(t *testing.T) {
 	}
 	if _, err := model.GetClusterByID(secondary.ID); err == nil {
 		t.Fatal("deleted secondary cluster still exists")
-	}
-	var taskCount int64
-	if err := model.DB.Unscoped().Model(&model.ScheduledTask{}).Where("cluster_name = ?", "secondary").Count(&taskCount).Error; err != nil || taskCount != 0 {
-		t.Fatalf("deleted cluster tasks = %d, err=%v", taskCount, err)
 	}
 	recreated := &model.Cluster{Name: "secondary", APIServerURL: "https://replacement.example.com", ConnectionMode: "direct", Enable: true}
 	if err := model.AddCluster(recreated); err != nil {
@@ -254,7 +222,7 @@ func setupClusterHandlerTestDB(t *testing.T) {
 	if err != nil {
 		t.Fatalf("opening test database: %v", err)
 	}
-	if err := db.AutoMigrate(&model.Cluster{}, &model.GeneralSetting{}, &model.ScheduledTask{}); err != nil {
+	if err := db.AutoMigrate(&model.Cluster{}, &model.GeneralSetting{}); err != nil {
 		t.Fatalf("migrating test database: %v", err)
 	}
 	model.DB = db
