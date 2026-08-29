@@ -724,7 +724,6 @@
     "type": {
       "clusterAgent": "Cluster Agent",
       "direct": "Direct",
-      "connector": "Connector",
       "tunnel": "私网隧道"
     },
     "status": {
@@ -778,10 +777,6 @@
       "isDefault": "设为默认",
       "connectionMode": "连接模式",
       "apiServerUrl": "API Server 地址",
-      "connectorId": "Connector ID",
-      "connectorIdDescription": "由集群名称自动生成，并用于 Connector 部署。",
-      "connectorUrl": "Connector URL",
-      "connectorDescription": "为该集群部署一个 Connector。控制面只保存它的 HTTPS 地址，不保存任何 Kubernetes 凭据。",
       "directDescription": "Direct 模式要求 API Server 可从公网访问，并使用受公共 CA 信任的 TLS 证书。",
       "tunnelDescription": "Transport-only Agent 传输实际登录用户的 token，自身没有 Kubernetes 身份。"
     }

@@ -11,9 +11,7 @@ export interface ClusterCreateRequest {
   apiServerUrl?: string
   caBundle?: string
   tlsServerName?: string
-  connectionMode: 'direct' | 'tunnel' | 'connector'
-  connectorId?: string
-  connectorUrl?: string
+  connectionMode: 'direct' | 'tunnel'
   prometheusURL?: string
   isDefault?: boolean
   enabled?: boolean
@@ -25,9 +23,7 @@ export interface ClusterUpdateRequest {
   apiServerUrl?: string
   caBundle?: string
   tlsServerName?: string
-  connectionMode?: 'direct' | 'connector'
-  connectorId?: string
-  connectorUrl?: string
+  connectionMode?: 'direct' | 'tunnel'
   prometheusURL?: string
   isDefault?: boolean
   enabled?: boolean

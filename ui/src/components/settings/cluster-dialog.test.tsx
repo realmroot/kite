@@ -11,13 +11,11 @@ vi.mock('react-i18next', () => ({
   }),
 }))
 
-const connectorCluster: Cluster = {
+const gatewayCluster: Cluster = {
   id: 7,
   name: 'Production',
-  connectionMode: 'connector',
-  connectorId: 'production',
-  connectorUrl: 'https://connector.example.test',
-  apiServerUrl: '',
+  connectionMode: 'direct',
+  apiServerUrl: 'https://api.example.test',
   enabled: true,
   clusterAgent: false,
   connected: true,
@@ -26,28 +24,24 @@ const connectorCluster: Cluster = {
   updatedAt: '2026-08-28T00:00:00Z',
 }
 
-describe('ClusterDialog Gateway connector mode', () => {
-  it('shows credential-free Connector settings and preserves the stable Connector ID when renamed', () => {
+describe('ClusterDialog Gateway mode', () => {
+  it('shows only the cluster catalog fields', () => {
     const onSubmit = vi.fn()
     render(
       <ClusterDialog
         open
         onOpenChange={vi.fn()}
-        cluster={connectorCluster}
+        cluster={gatewayCluster}
         onSubmit={onSubmit}
         gatewayEnabled
       />
     )
 
-    const connectorId = screen.getByLabelText('Connector ID *')
-    expect(connectorId).toHaveValue('production')
-    expect(connectorId).toHaveAttribute('readonly')
-    expect(
-      screen.queryByLabelText('Kubernetes API Server URL *')
-    ).not.toBeInTheDocument()
-    expect(
-      screen.getByText(/never stores Kubernetes credentials/i)
-    ).toBeVisible()
+    expect(screen.queryByLabelText('Connection Mode')).not.toBeInTheDocument()
+    expect(screen.queryByText('Connector')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Kubernetes API Server URL *')).toHaveValue(
+      'https://api.example.test'
+    )
 
     fireEvent.change(screen.getByLabelText('Cluster Name *'), {
       target: { value: 'Renamed Production' },
@@ -57,9 +51,8 @@ describe('ClusterDialog Gateway connector mode', () => {
     expect(onSubmit).toHaveBeenCalledWith(
       expect.objectContaining({
         name: 'Renamed Production',
-        connectionMode: 'connector',
-        connectorId: 'production',
-        connectorUrl: 'https://connector.example.test',
+        connectionMode: 'direct',
+        apiServerUrl: 'https://api.example.test',
       })
     )
   })

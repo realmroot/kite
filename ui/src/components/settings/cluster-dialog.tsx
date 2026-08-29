@@ -41,23 +41,10 @@ function createClusterFormData(cluster?: Cluster | null): ClusterCreateRequest {
     caBundle: cluster?.caBundle || '',
     tlsServerName: cluster?.tlsServerName || '',
     connectionMode: cluster?.connectionMode || 'direct',
-    connectorId: cluster?.connectorId || '',
-    connectorUrl: cluster?.connectorUrl || '',
     prometheusURL: cluster?.prometheusURL || '',
     enabled: cluster?.enabled ?? true,
     isDefault: cluster?.isDefault ?? false,
   }
-}
-
-function clusterIdFromName(name: string): string {
-  const id = name
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 63)
-    .replace(/-$/g, '')
-  return id || 'cluster'
 }
 
 export function ClusterDialog({
@@ -99,14 +86,10 @@ function ClusterDialogContent({
     value: ClusterCreateRequest[K]
   ) => setFormData((current) => ({ ...current, [key]: value }))
   const direct = formData.connectionMode === 'direct'
-  const connector = formData.connectionMode === 'connector'
   const canSubmit =
     formData.name.trim() !== '' &&
     (formData.connectionMode === 'tunnel' ||
-      (direct && formData.apiServerUrl?.trim() !== '') ||
-      (connector &&
-        formData.connectorId?.trim() !== '' &&
-        formData.connectorUrl?.trim() !== ''))
+      (direct && formData.apiServerUrl?.trim() !== ''))
 
   return (
     <DialogContent className="sm:max-w-[640px]">
@@ -130,7 +113,13 @@ function ClusterDialogContent({
           onSubmit(formData)
         }}
       >
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div
+          className={
+            gatewayEnabled
+              ? 'grid grid-cols-1 gap-4'
+              : 'grid grid-cols-1 gap-4 sm:grid-cols-2'
+          }
+        >
           <div className="space-y-2">
             <Label htmlFor="cluster-name">
               {t('clusterManagement.dialog.name', 'Cluster Name')} *
@@ -138,73 +127,40 @@ function ClusterDialogContent({
             <Input
               id="cluster-name"
               value={formData.name}
-              onChange={(event) => {
-                const name = event.target.value
-                setFormData((current) => ({
-                  ...current,
-                  name,
-                  ...(!isEditMode && current.connectionMode === 'connector'
-                    ? { connectorId: clusterIdFromName(name) }
-                    : {}),
-                }))
-              }}
+              onChange={(event) => change('name', event.target.value)}
               placeholder="production"
               required
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="cluster-connection-mode">
-              {t('clusterManagement.dialog.connectionMode', 'Connection Mode')}
-            </Label>
-            <Select
-              value={formData.connectionMode}
-              disabled={isEditMode && !gatewayEnabled}
-              onValueChange={(value: 'direct' | 'tunnel' | 'connector') => {
-                setFormData((current) => ({
-                  ...current,
-                  connectionMode: value,
-                  ...(value === 'direct' && gatewayEnabled
-                    ? {
-                        caBundle: '',
-                        tlsServerName: '',
-                        connectorId: '',
-                        connectorUrl: '',
-                      }
-                    : {}),
-                  ...(value === 'connector' && gatewayEnabled
-                    ? {
-                        apiServerUrl: '',
-                        caBundle: '',
-                        tlsServerName: '',
-                      }
-                    : {}),
-                  ...(value === 'connector' && !current.connectorId
-                    ? {
-                        connectorId: clusterIdFromName(current.name),
-                      }
-                    : {}),
-                }))
-              }}
-            >
-              <SelectTrigger id="cluster-connection-mode">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="direct">
-                  {t('clusterManagement.type.direct', 'Direct')}
-                </SelectItem>
-                {gatewayEnabled ? (
-                  <SelectItem value="connector">
-                    {t('clusterManagement.type.connector', 'Connector')}
+          {!gatewayEnabled ? (
+            <div className="space-y-2">
+              <Label htmlFor="cluster-connection-mode">
+                {t(
+                  'clusterManagement.dialog.connectionMode',
+                  'Connection Mode'
+                )}
+              </Label>
+              <Select
+                value={formData.connectionMode}
+                disabled={isEditMode}
+                onValueChange={(value: 'direct' | 'tunnel') =>
+                  change('connectionMode', value)
+                }
+              >
+                <SelectTrigger id="cluster-connection-mode">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="direct">
+                    {t('clusterManagement.type.direct', 'Direct')}
                   </SelectItem>
-                ) : (
                   <SelectItem value="tunnel">
                     {t('clusterManagement.type.tunnel', 'Private Tunnel')}
                   </SelectItem>
-                )}
-              </SelectContent>
-            </Select>
-          </div>
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
         </div>
 
         <div className="space-y-2">
@@ -219,86 +175,26 @@ function ClusterDialogContent({
           />
         </div>
 
-        {direct || connector ? (
+        {direct ? (
           <>
-            {direct ? (
-              <div className="space-y-2">
-                <Label htmlFor="api-server">
-                  {t(
-                    'clusterManagement.dialog.apiServerUrl',
-                    'Kubernetes API Server URL'
-                  )}{' '}
-                  *
-                </Label>
-                <Input
-                  id="api-server"
-                  type="url"
-                  value={formData.apiServerUrl}
-                  onChange={(event) =>
-                    change('apiServerUrl', event.target.value)
-                  }
-                  placeholder="https://api.cluster.example:6443"
-                  required
-                />
-              </div>
-            ) : null}
-            {connector ? (
-              <>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="connector-id">
-                      {t(
-                        'clusterManagement.dialog.connectorId',
-                        'Connector ID'
-                      )}{' '}
-                      *
-                    </Label>
-                    <Input
-                      id="connector-id"
-                      value={formData.connectorId}
-                      readOnly
-                      aria-describedby="connector-id-description"
-                      placeholder="production"
-                      required
-                    />
-                    <p
-                      id="connector-id-description"
-                      className="text-xs text-muted-foreground"
-                    >
-                      {t(
-                        'clusterManagement.dialog.connectorIdDescription',
-                        'Generated from the cluster name and used by the Connector deployment.'
-                      )}
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="connector-url">
-                      {t(
-                        'clusterManagement.dialog.connectorUrl',
-                        'Connector URL'
-                      )}{' '}
-                      *
-                    </Label>
-                    <Input
-                      id="connector-url"
-                      type="url"
-                      value={formData.connectorUrl}
-                      onChange={(event) =>
-                        change('connectorUrl', event.target.value)
-                      }
-                      placeholder="https://connector.cluster.example"
-                      required
-                    />
-                  </div>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {t(
-                    'clusterManagement.dialog.connectorDescription',
-                    'Deploy one Connector for this cluster. The control plane stores only its HTTPS address and never stores Kubernetes credentials.'
-                  )}
-                </p>
-              </>
-            ) : gatewayEnabled ? (
+            <div className="space-y-2">
+              <Label htmlFor="api-server">
+                {t(
+                  'clusterManagement.dialog.apiServerUrl',
+                  'Kubernetes API Server URL'
+                )}{' '}
+                *
+              </Label>
+              <Input
+                id="api-server"
+                type="url"
+                value={formData.apiServerUrl}
+                onChange={(event) => change('apiServerUrl', event.target.value)}
+                placeholder="https://api.cluster.example:6443"
+                required
+              />
+            </div>
+            {gatewayEnabled ? (
               <p className="text-xs text-muted-foreground">
                 {t(
                   'clusterManagement.dialog.directDescription',

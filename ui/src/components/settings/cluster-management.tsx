@@ -100,16 +100,6 @@ export function ClusterManagement() {
           </Tooltip>
         )
       }
-      if (cluster.connectionMode === 'connector') {
-        return (
-          <Badge
-            variant="outline"
-            className="border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/20 dark:text-blue-300"
-          >
-            {t('clusterManagement.type.connector', 'Connector')}
-          </Badge>
-        )
-      }
       return (
         <Badge
           variant="outline"
@@ -379,10 +369,7 @@ export function ClusterManagement() {
           apiServerUrl: clusterData.apiServerUrl,
           caBundle: clusterData.caBundle,
           tlsServerName: clusterData.tlsServerName,
-          connectionMode:
-            clusterData.connectionMode === 'connector' ? 'connector' : 'direct',
-          connectorId: clusterData.connectorId,
-          connectorUrl: clusterData.connectorUrl,
+          connectionMode: clusterData.connectionMode,
           prometheusURL: clusterData.prometheusURL,
           isDefault: clusterData.isDefault,
           enabled: clusterData.enabled,

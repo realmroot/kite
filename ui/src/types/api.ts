@@ -635,9 +635,7 @@ export interface Cluster {
   apiServerUrl?: string
   caBundle?: string
   tlsServerName?: string
-  connectionMode: 'direct' | 'tunnel' | 'connector'
-  connectorId?: string
-  connectorUrl?: string
+  connectionMode: 'direct' | 'tunnel'
   enabled: boolean
   clusterAgent: boolean
   clusterAgentVersion?: string

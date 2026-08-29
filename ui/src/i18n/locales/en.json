@@ -719,7 +719,6 @@
     "type": {
       "clusterAgent": "Cluster Agent",
       "direct": "Direct",
-      "connector": "Connector",
       "tunnel": "Private Tunnel"
     },
     "status": {
@@ -773,10 +772,6 @@
       "isDefault": "Set as Default",
       "connectionMode": "Connection Mode",
       "apiServerUrl": "API Server URL",
-      "connectorId": "Connector ID",
-      "connectorIdDescription": "Generated from the cluster name and used by the Connector deployment.",
-      "connectorUrl": "Connector URL",
-      "connectorDescription": "Deploy one Connector for this cluster. The control plane stores only its HTTPS address and never stores Kubernetes credentials.",
       "directDescription": "Direct mode requires a publicly reachable API server with a publicly trusted TLS certificate.",
       "tunnelDescription": "The transport-only agent carries the signed-in user token and has no Kubernetes identity."
     }
