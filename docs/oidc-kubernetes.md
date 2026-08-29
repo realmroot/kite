@@ -8,7 +8,10 @@ not a Kubernetes identity provider or authorization proxy.
 1. The browser starts the OIDC Authorization Code flow with PKCE, state, and
    nonce.
 2. Kite validates issuer, signature, audience, lifetime, and nonce, then keeps
-   ID, access, and refresh tokens in an encrypted server-side session.
+   ID, access, and refresh tokens in an encrypted server-side session. While
+   the signed-in browser remains active, Kite renews the opaque HttpOnly
+   session cookie and server-side activity timestamp; provider token refresh
+   remains entirely server-side.
 3. The browser receives only an opaque, `HttpOnly`, `SameSite=Lax` session
    cookie.
 4. Kite keeps one credential-free connection runtime and HTTP transport per

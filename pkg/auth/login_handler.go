@@ -97,11 +97,22 @@ func (h *AuthHandler) GetUser(c *gin.Context) {
 }
 
 func (h *AuthHandler) RefreshToken(c *gin.Context) {
-	if _, _, _, err := h.oidc.authenticatedSession(c); err != nil {
+	_, _, sessionID, err := h.oidc.authenticatedSession(c)
+	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Failed to refresh OIDC session"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Token refreshed successfully"})
+	if err := model.TouchOIDCSession(sessionID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to renew OIDC session"})
+		return
+	}
+	opaqueToken, err := c.Cookie(sessionCookieName)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Failed to renew OIDC session"})
+		return
+	}
+	setCookieSecure(c, sessionCookieName, opaqueToken, common.CookieExpirationSeconds)
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Session renewed successfully"})
 }
 
 func setCookieSecure(c *gin.Context, name, value string, maxAge int) {

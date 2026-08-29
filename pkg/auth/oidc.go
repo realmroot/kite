@@ -394,11 +394,11 @@ func (a *oidcAuthenticator) authenticatedSession(c *gin.Context) (*model.User, s
 		_ = model.DeleteOIDCSession(session)
 		return nil, "", 0, errors.New("OIDC session issuer no longer matches the configured issuer")
 	}
-	idToken, err := a.idTokenForLoadedSession(c.Request.Context(), session)
+	idToken, accessToken, err := a.sessionTokensForLoadedSession(c.Request.Context(), session)
 	if err != nil {
 		return nil, "", 0, err
 	}
-	c.Set(accessTokenContextKey, string(session.AccessToken))
+	c.Set(accessTokenContextKey, accessToken)
 	return user, idToken, session.ID, nil
 }
 
@@ -413,15 +413,16 @@ func (a *oidcAuthenticator) idTokenForSession(ctx context.Context, sessionID uin
 		}
 		return "", err
 	}
-	return a.idTokenForLoadedSession(ctx, session)
+	idToken, _, err := a.sessionTokensForLoadedSession(ctx, session)
+	return idToken, err
 }
 
-func (a *oidcAuthenticator) idTokenForLoadedSession(ctx context.Context, session *model.OIDCSession) (string, error) {
+func (a *oidcAuthenticator) sessionTokensForLoadedSession(ctx context.Context, session *model.OIDCSession) (string, string, error) {
 	if session == nil || session.ID == 0 {
-		return "", &SessionCredentialError{Err: errors.New("OIDC session is missing"), Permanent: true}
+		return "", "", &SessionCredentialError{Err: errors.New("OIDC session is missing"), Permanent: true}
 	}
 	if time.Until(session.ExpiresAt) > time.Minute {
-		return string(session.IDToken), nil
+		return string(session.IDToken), string(session.AccessToken), nil
 	}
 
 	refreshLock := &a.sessionRefreshLocks[session.ID%sessionLockShards]
@@ -429,6 +430,7 @@ func (a *oidcAuthenticator) idTokenForLoadedSession(ctx context.Context, session
 	defer refreshLock.Unlock()
 
 	var rawIDToken string
+	var accessToken string
 	err := model.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		current, err := model.GetOIDCSessionByID(tx.Clauses(clause.Locking{Strength: "UPDATE"}), session.ID)
 		if err != nil {
@@ -443,13 +445,14 @@ func (a *oidcAuthenticator) idTokenForLoadedSession(ctx context.Context, session
 			}
 		}
 		rawIDToken = string(current.IDToken)
+		accessToken = string(current.AccessToken)
 		return nil
 	})
 	var credentialError *SessionCredentialError
 	if errors.As(err, &credentialError) && credentialError.Permanent {
 		_ = model.RevokeOIDCSession(session.ID, "OIDC authorization expired; re-enable this task to authorize it again")
 	}
-	return rawIDToken, err
+	return rawIDToken, accessToken, err
 }
 
 func (a *oidcAuthenticator) refreshSession(ctx context.Context, db *gorm.DB, session *model.OIDCSession) error {

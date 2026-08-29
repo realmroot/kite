@@ -44,6 +44,19 @@ func UpdateOIDCSession(db *gorm.DB, session *OIDCSession, updates map[string]any
 	return db.Model(session).Updates(updates).Error
 }
 
+func TouchOIDCSession(sessionID uint) error {
+	result := DB.Model(&OIDCSession{}).
+		Where("id = ?", sessionID).
+		UpdateColumn("updated_at", time.Now())
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
+}
+
 func DeleteOIDCSession(session *OIDCSession) error {
 	return RevokeOIDCSession(session.ID, "OIDC session ended; re-enable this task to authorize it again")
 }

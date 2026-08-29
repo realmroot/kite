@@ -224,6 +224,49 @@ func TestIDTokenForSessionUsesCurrentUnexpiredCredential(t *testing.T) {
 	}
 }
 
+func TestSessionTokensUseCredentialsReloadedUnderRefreshLock(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&model.OIDCSession{}); err != nil {
+		t.Fatal(err)
+	}
+	previousDB := model.DB
+	previousKey := common.KiteEncryptKey
+	model.DB = db
+	common.KiteEncryptKey = "refresh-race-test-key"
+	t.Cleanup(func() {
+		model.DB = previousDB
+		common.KiteEncryptKey = previousKey
+	})
+
+	current := model.OIDCSession{
+		TokenHash:   "hash",
+		UserID:      1,
+		IDToken:     model.SecretString("current-id-token"),
+		AccessToken: model.SecretString("current-access-token"),
+		ExpiresAt:   time.Now().Add(time.Hour),
+	}
+	if err := db.Create(&current).Error; err != nil {
+		t.Fatal(err)
+	}
+	stale := &model.OIDCSession{
+		Model:       model.Model{ID: current.ID},
+		IDToken:     model.SecretString("stale-id-token"),
+		AccessToken: model.SecretString("stale-access-token"),
+		ExpiresAt:   time.Now().Add(-time.Minute),
+	}
+
+	idToken, accessToken, err := (&oidcAuthenticator{}).sessionTokensForLoadedSession(context.Background(), stale)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if idToken != "current-id-token" || accessToken != "current-access-token" {
+		t.Fatalf("tokens = (%q, %q), want current database credentials", idToken, accessToken)
+	}
+}
+
 func TestOIDCSessionRefreshLocksAreSharded(t *testing.T) {
 	authenticator := &oidcAuthenticator{}
 	first := &authenticator.sessionRefreshLocks[1%sessionLockShards]
