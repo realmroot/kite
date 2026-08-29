@@ -66,7 +66,7 @@ Set `host` explicitly in production.
 | `db.sqlite.persistence.pvc.storageClass` | empty | Requested StorageClass |
 | `db.sqlite.persistence.pvc.size` | `1Gi` | Requested size |
 | `db.sqlite.persistence.mountPath` | `/data` | SQLite mount path |
-| `db.sqlite.persistence.filename` | `kite.db` | SQLite filename |
+| `db.sqlite.persistence.filename` | `lightkite.db` | SQLite filename |
 
 Production multi-replica deployments require PostgreSQL or MySQL. The chart
 rejects multiple SQLite replicas, a rolling SQLite PVC deployment, conflicting

@@ -11,9 +11,10 @@ Lightkite 不导入 `kubectl` 使用的云厂商 CLI kubeconfig。只有当托�
 2. 接受 Lightkite OIDC Client ID 作为 token audience；
 3. 配置或明确 username/groups claim；
 4. 为这些身份创建原生 RoleBinding/ClusterRoleBinding；以及
-5. 提供 Lightkite 可直接访问或通过 transport-only 隧道访问的 HTTPS API 地址。
+5. 提供一个通过部署方网络可由 Lightkite 访问的 HTTPS API 地址。
 
-添加集群时只填写 API URL、CA Bundle、可选 TLS Server Name 和连接模式。
+添加集群时只填写 API URL、CA Bundle 和可选 TLS Server Name。私网连通由
+Lightkite 之外的部署基础设施负责。
 
 基于短时 `exec` 插件的云 IAM Authenticator 与直接 OIDC 不是同一协议。Lightkite
 不会执行云 CLI、保存其 token、创建高权限 ServiceAccount，或通过用户模拟弥合

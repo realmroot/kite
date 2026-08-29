@@ -106,7 +106,7 @@ spec:
             - name: RELEASE_API_URL
               value: https://api.github.com/repos/OWNER/lightkite/releases/latest
             - name: DB_DSN
-              value: /data/kite.db?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)
+              value: /data/lightkite.db?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)
           resources:
             limits:
               cpu: 1000m

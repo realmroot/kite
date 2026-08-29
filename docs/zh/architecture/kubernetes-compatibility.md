@@ -11,7 +11,7 @@ Lightkite 跟随最近三个 Kubernetes 小版本；每次发布前，同一套�
 
 CI 使用 kind 0.32.0 发布且固定 digest 的节点镜像，覆盖 OIDC 登录、
 Kubernetes RBAC 允许与拒绝、资源发现与通用资源、Metrics、Search、Helm、
-日志、Exec、浏览器终端，以及直连和隧道集群。发布工作流还会在最新小版本
+日志、Exec、浏览器终端，以及通过部署方网络可达的 HTTPS API Endpoint。发布工作流还会在最新小版本
 上重复执行整套测试。
 
 Lightkite 优先使用稳定 Kubernetes API 和 API Discovery。专用实现必须在最老

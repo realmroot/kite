@@ -12,6 +12,9 @@
 
 ### 方式一：Helm Chart（推荐）
 
+请把 Lightkite 安装到新的 Release 和 Namespace，不要把该 Chart 应用到现有
+Kite Release 上。
+
 使用 Lightkite 发布的版本化 OCI Chart 安装（替换 `<version>`）：
 
 ```bash
@@ -28,9 +31,6 @@ helm install lightkite lightkite/lightkite --version <version> \
   -n lightkite-system --create-namespace -f values.yaml
 ```
 
-已有 Kite 安装首次升级到 Lightkite 时，需要保留原先生成的资源名称。应用 Chart
-前请先阅读[改名兼容说明](../architecture/upstream-kite.md#兼容标识)。
-
 #### 自定义安装
 
 可通过自定义 values 文件调整安装参数：
@@ -40,11 +40,11 @@ helm install lightkite lightkite/lightkite --version <version> \
 使用自定义值安装：
 
 ```bash
-helm upgrade --install lightkite oci://ghcr.io/realmroot/charts/lightkite \
+helm install lightkite oci://ghcr.io/realmroot/charts/lightkite \
   --version <version> -n lightkite-system --create-namespace -f values.yaml
 
 # 或使用 Helm 仓库
-helm upgrade --install lightkite lightkite/lightkite --version <version> \
+helm install lightkite lightkite/lightkite --version <version> \
   -n lightkite-system --create-namespace -f values.yaml
 ```
 
@@ -134,7 +134,7 @@ basePath: "/lightkite"
 - 或使用 Helm CLI：
 
 ```fish
-helm upgrade --install lightkite oci://ghcr.io/realmroot/charts/lightkite \
+helm install lightkite oci://ghcr.io/realmroot/charts/lightkite \
   --version <version> -n lightkite-system --create-namespace \
   -f values.yaml --set basePath="/lightkite"
 ```
@@ -166,10 +166,10 @@ ingress:
 :::
 
 `PLATFORM_ADMIN_GROUPS` 中的管理员可以进入 **设置 > 集群** 添加第一个集群。
-直连模式只填写 API Server URL、CA Bundle 和可选 TLS Server Name；私有 API
-Server 可以使用无集群凭据的隧道 Agent。Lightkite 不会把自身 Pod ServiceAccount
-当作集群凭据。目标集群必须信任同一个 OIDC Issuer，并通过 Kubernetes RBAC
-绑定登录用户或 group。
+只需填写 API Server URL、CA Bundle 和可选 TLS Server Name；私有 API Server
+的网络连通性由部署方通过网络、VPN 或独立隧道基础设施提供。Lightkite 不会把
+自身 Pod ServiceAccount 当作集群凭据。目标集群必须信任同一个 OIDC Issuer，
+并通过 Kubernetes RBAC 绑定登录用户或 group。
 
 ## 卸载 Lightkite
 

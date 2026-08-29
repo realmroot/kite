@@ -22,6 +22,9 @@ provider; Lightkite sends that user's validated ID token to the selected Kuberne
 API server. Configured group claims therefore map directly to Kubernetes
 RoleBindings and ClusterRoleBindings.
 
+Lightkite is installed as a new deployment. An existing Kite installation is
+not a supported in-place upgrade source.
+
 See the [OIDC Kubernetes architecture](docs/oidc-kubernetes.md) and the detailed
 [comparison with upstream Kite](docs/architecture/upstream-kite.md). Provider-specific
 configuration belongs under `examples/` and never enters the core runtime.

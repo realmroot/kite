@@ -34,20 +34,16 @@ Lightkite 保留与新安全模型相容的 Dashboard 能力，包括资源查�
 以及 Kubernetes Service/Pod Proxy。所有操作仍受目标集群的 Kubernetes RBAC
 约束。
 
-## 兼容标识
+## 命名与安装边界
 
-产品名称、Go Module、可执行文件、容器镜像、Helm Chart 和新建的 Kubernetes
+产品名称、Go Module、可执行文件、容器镜像、Helm Chart 和 Kubernetes
 部署资源使用 `Lightkite` 或 `lightkite`。
 
-仅因改名无需迁移现有配置值和数据格式。`KITE_*` 环境变量、Session Cookie 名称、
-浏览器存储键、数据库文件名、Base Path 占位符和历史迁移值保持不变。它们是
-兼容接口，不代表当前产品品牌。
+Lightkite 只作为全新部署安装，不支持把现有 Kite 安装原地转换或升级为
+Lightkite。部署时应使用新的 Release、Namespace、配置、Secret 和数据库或 PVC。
 
-全新部署使用 `lightkite` Kubernetes 资源名。已有 Helm Release 首次升级到
-Lightkite 时，应保留原 Namespace 和 Release 名称，并设置
-`fullnameOverride: kite`。这样可以继续使用原有 Secret、Service 和 PVC，只把
-镜像与可执行文件切换到 Lightkite。应用前应先用 `helm template` 检查渲染结果；
-资源名称本身可以在后续计划维护窗口中单独迁移。
+现有 `KITE_*` 环境变量名称继续作为 Lightkite 的配置接口。这是有意保留的配置
+约定，不代表项目承诺提供升级或数据迁移能力。
 
 ## 与上游的关系
 

@@ -15,8 +15,8 @@ Confirm that the managed service lets you:
 5. expose an HTTPS API endpoint reachable directly from Lightkite or through the
    operator-managed private network path.
 
-Add the cluster using only its API URL, CA bundle, optional TLS server name, and
-connection mode.
+Add the cluster using only its API URL, CA bundle, and optional TLS server name.
+Private connectivity is deployment infrastructure outside Lightkite.
 
 Provider IAM authenticators based on short-lived `exec` plugins are not the
 same protocol as direct OIDC authentication. Lightkite will not execute cloud CLIs,

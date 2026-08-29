@@ -12,7 +12,8 @@ This guide provides detailed instructions for installing Lightkite in a Kubernet
 
 ### Method 1: Helm Chart (Recommended)
 
-Using Helm provides flexibility for configuration and upgrades:
+Install Lightkite into a new release and namespace. Do not apply this chart over
+an existing Kite release.
 
 Install the versioned OCI chart published by Lightkite (replace `<version>`):
 
@@ -31,11 +32,6 @@ helm install lightkite lightkite/lightkite --version <version> \
   -n lightkite-system --create-namespace -f values.yaml
 ```
 
-When upgrading an existing Kite installation, preserve its generated resource
-names for the first Lightkite rollout. Follow the
-[rename compatibility guidance](../architecture/upstream-kite.md#compatibility-identifiers)
-before applying the chart.
-
 #### Custom Installation
 
 You can adjust installation parameters by customizing the values file:
@@ -45,11 +41,11 @@ For complete configuration, refer to [Chart Values](../config/chart-values).
 Install with custom values:
 
 ```bash
-helm upgrade --install lightkite oci://ghcr.io/realmroot/charts/lightkite \
+helm install lightkite oci://ghcr.io/realmroot/charts/lightkite \
   --version <version> -n lightkite-system --create-namespace -f values.yaml
 
 # Or use the Helm repository
-helm upgrade --install lightkite lightkite/lightkite --version <version> \
+helm install lightkite lightkite/lightkite --version <version> \
   -n lightkite-system --create-namespace -f values.yaml
 ```
 
@@ -141,7 +137,7 @@ basePath: "/lightkite"
 - Or with Helm CLI:
 
 ```fish
-helm upgrade --install lightkite oci://ghcr.io/realmroot/charts/lightkite \
+helm install lightkite oci://ghcr.io/realmroot/charts/lightkite \
   --version <version> -n lightkite-system --create-namespace \
   -f values.yaml --set basePath="/lightkite"
 ```
@@ -177,8 +173,8 @@ If you need to configure Lightkite through environment variables, please refer t
 
 An operator in `PLATFORM_ADMIN_GROUPS` can open **Settings > Clusters** and add
 a direct cluster using only its API server URL, CA bundle, and optional TLS
-server name. Private APIs require operator-managed network connectivity
-server. Lightkite does not use its Pod ServiceAccount as a cluster credential. The
+server name. Private APIs require operator-managed network connectivity.
+Lightkite does not use its Pod ServiceAccount as a cluster credential. The
 cluster API server must trust the same OIDC issuer, and Kubernetes RBAC must
 bind the signed-in users or groups.
 

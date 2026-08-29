@@ -155,7 +155,7 @@ db:
       # where to mount inside the container
       mountPath: /data
       # sqlite filename inside the mountPath
-      filename: kite.db
+      filename: lightkite.db
     # Additional sqlite database connection options
     # Example: "_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)"
     options: "_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)"

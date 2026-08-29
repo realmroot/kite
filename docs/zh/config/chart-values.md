@@ -14,7 +14,6 @@ Chart 部署的 Lightkite 不挂载 ServiceAccount token，也不会为 Dashboar
 | `platformAdminGroups` | 可管理 Lightkite 自有共享数据的 group；group 含空格、逗号或其他标点时使用 JSON 字符串数组 |
 | `platformAdminSubjects` | 具有相同平台权限的精确 OIDC `sub`；同样支持 JSON 字符串数组 |
 | `encryptKey` | 加密服务端提供方 token 的随机密钥 |
-| `jwtSecret` | 用于短时隧道注册凭据的独立随机密钥 |
 
 可选映射包括 `oidc.providerName`、`oidc.scopes`、
 `oidc.usernameClaim`、`oidc.groupsClaim`、`oidc.nameClaim` 和
@@ -65,7 +64,7 @@ Ingress/Gateway 终止 TLS 时必须保留公网 Host 与协议；生产环境�
 | `db.sqlite.persistence.pvc.storageClass` | 空 | StorageClass |
 | `db.sqlite.persistence.pvc.size` | `1Gi` | 容量 |
 | `db.sqlite.persistence.mountPath` | `/data` | 挂载路径 |
-| `db.sqlite.persistence.filename` | `kite.db` | 文件名 |
+| `db.sqlite.persistence.filename` | `lightkite.db` | 文件名 |
 
 生产多副本需要 PostgreSQL 或 MySQL。Chart 会拒绝 SQLite 多副本、SQLite
 PVC 滚动升级、PVC 与 hostPath 同时启用、不支持的数据库类型，以及缺少 DSN

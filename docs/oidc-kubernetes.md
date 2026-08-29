@@ -120,8 +120,7 @@ Each cluster row stores only:
 - enabled/default flags.
 
 It never accepts or returns a kubeconfig, bearer token, client certificate, or
-client key. Existing upstream installations must re-register clusters using
-transport metadata; privileged kubeconfigs are not migrated.
+client key.
 
 Lightkite requires network reachability to the API server. Private routing and any
 tunnel are operator-owned deployment infrastructure; Lightkite does not implement

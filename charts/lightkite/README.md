@@ -6,7 +6,7 @@ mounted ServiceAccount token or dashboard-owned Kubernetes RBAC policy.
 Install the immutable chart version published by Lightkite:
 
 ```bash
-helm upgrade --install lightkite oci://ghcr.io/realmroot/charts/lightkite \
+helm install lightkite oci://ghcr.io/realmroot/charts/lightkite \
   --version <version> \
   --namespace lightkite-system \
   --create-namespace \

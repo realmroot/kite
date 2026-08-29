@@ -21,6 +21,8 @@ Kubernetes 原生 RBAC 替换本地身份、本地授权以及共享高权限 ku
 用户通过配置的 OIDC 提供方登录，Lightkite 将该用户验证后的 ID token 发送给所选
 Kubernetes API Server；用户或 group 直接绑定 RoleBinding/ClusterRoleBinding。
 
+Lightkite 只作为全新部署安装，不支持在现有 Kite 安装上原地升级。
+
 架构说明参见 [OIDC Kubernetes 架构](docs/oidc-kubernetes.md)和
 [与上游 Kite 的详细对比](docs/zh/architecture/upstream-kite.md)。内置 AI/Agent
 已经移除；Helm、Metrics/Prometheus、Search 以及 Kubernetes 资源管理继续保留。

@@ -38,24 +38,18 @@ selection, search, Helm, metrics, logs, exec and node terminals, CRDs, resource
 relationships, custom navigation, and Kubernetes service and pod proxying.
 Every operation remains subject to the selected cluster's Kubernetes RBAC.
 
-## Compatibility identifiers
+## Naming and installation boundary
 
-The product name, Go module, executable, container image, Helm chart, and new
+The product name, Go module, executable, container image, Helm chart, and
 Kubernetes deployment resources use `Lightkite` or `lightkite`.
 
-Existing configuration values and stored data formats do not require a migration
-solely due to the rename. In particular, the `KITE_*` environment variables, session
-cookie name, browser storage keys, database filename, base-path placeholder,
-and historical migration values remain unchanged. They are compatibility
-interfaces, not current product branding.
+Lightkite is installed as a new deployment. It does not support converting or
+upgrading an existing Kite installation in place. Use a new release, namespace,
+configuration, Secret, and database or PVC.
 
-Fresh deployments use `lightkite` Kubernetes resource names. When upgrading an
-existing Helm release that used Kite's generated names, set
-`fullnameOverride: kite` and keep the existing namespace and release name for
-the first Lightkite rollout. This keeps the existing Secret, Service, and PVC
-names while the executable and image change to Lightkite. Verify the rendered
-manifest with `helm template` before applying it. After the rollout, resource
-names can be migrated separately during a planned maintenance window.
+The existing `KITE_*` environment-variable names remain the supported Lightkite
+configuration interface. This is an intentional configuration convention, not
+an upgrade or data-migration promise.
 
 ## Upstream relationship
 
