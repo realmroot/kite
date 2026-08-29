@@ -57,7 +57,7 @@ type crAPITestFixture struct {
 
 type crAPITestClusterProvider map[string]*cluster.ClientSet
 
-func (p crAPITestClusterProvider) GetClientSet(clusterName, _, _ string) (*cluster.ClientSet, error) {
+func (p crAPITestClusterProvider) GetClientSet(clusterName, _ string) (*cluster.ClientSet, error) {
 	if clusterName == "" {
 		clusterName = "cluster-a"
 	}

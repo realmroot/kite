@@ -11,7 +11,7 @@ vi.mock('react-i18next', () => ({
   }),
 }))
 
-const gatewayCluster: Cluster = {
+const directCluster: Cluster = {
   id: 7,
   name: 'Production',
   connectionMode: 'direct',
@@ -24,20 +24,19 @@ const gatewayCluster: Cluster = {
   updatedAt: '2026-08-28T00:00:00Z',
 }
 
-describe('ClusterDialog Gateway mode', () => {
-  it('shows only the cluster catalog fields', () => {
+describe('ClusterDialog', () => {
+  it('edits a standalone credential-free cluster', () => {
     const onSubmit = vi.fn()
     render(
       <ClusterDialog
         open
         onOpenChange={vi.fn()}
-        cluster={gatewayCluster}
+        cluster={directCluster}
         onSubmit={onSubmit}
-        gatewayEnabled
       />
     )
 
-    expect(screen.queryByLabelText('Connection Mode')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Connection Mode')).toBeDisabled()
     expect(screen.queryByText('Connector')).not.toBeInTheDocument()
     expect(screen.getByLabelText('Kubernetes API Server URL *')).toHaveValue(
       'https://api.example.test'

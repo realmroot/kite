@@ -32,10 +32,11 @@ type ResourceMetric struct {
 }
 
 type ClusterInfo struct {
-	Name      string `json:"name"`
-	Version   string `json:"version"`
-	IsDefault bool   `json:"isDefault"`
-	Error     string `json:"error,omitempty"`
+	Name        string `json:"name"`
+	DisplayName string `json:"displayName,omitempty"`
+	Version     string `json:"version"`
+	IsDefault   bool   `json:"isDefault"`
+	Error       string `json:"error,omitempty"`
 }
 
 type MetricsCell struct {

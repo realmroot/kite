@@ -78,8 +78,7 @@ The backend package layout is feature-oriented:
 - `pkg/model` is the GORM layer. `InitDB` auto-migrates all models and supports
   sqlite, mysql, and postgres. Sensitive persisted strings use `SecretString`.
 - `pkg/cluster` owns `ClusterManager`, Kubernetes client creation, Prometheus
-  discovery, and the credential-free projection of Cluster Access Gateway
-  inventory.
+  discovery, and optional standard Cluster Inventory discovery.
 - `pkg/kube` wraps controller-runtime/client-go clients and owns the shared
   runtime scheme.
 - `pkg/resources` owns Kubernetes resource APIs. Most resources use
@@ -107,12 +106,13 @@ Most protected API calls go through:
 The selected Kubernetes API server performs native authentication and RBAC.
 Kite does not evaluate a parallel resource permission model.
 
-When `CLUSTER_GATEWAY_URL` is configured, Kube Cluster Hub is the cluster
-directory and Kubernetes access boundary. Kite keeps only a local projection
-for stable resource-history keys. It uses the session Access Token for the
-OAuth-protected catalog and the session ID Token for Kubernetes passthrough;
-the two token boundaries must not be merged. Agent Resource Server discovery,
-DPoP verification, impersonated execution, and Agent audit belong to the Hub.
+When Cluster Inventory is enabled, Kite runs one shared informer against the
+configured Inventory Kubernetes API and turns each `ClusterProfile` access
+provider into a credential-free cluster context. It does not copy those entries
+into Kite's database. The session ID Token is attached only to the current
+request sent to the selected access provider. Agent Resource Server discovery,
+DPoP verification, execution, and Agent audit belong to the access provider,
+not Kite.
 
 The current cluster is passed as `x-cluster-name`. The frontend writes it to
 localStorage and a cookie in `ui/src/lib/current-cluster.ts`, and the API client
@@ -154,7 +154,7 @@ indentation, sorted imports. Let the configured formatter handle import order.
 Runtime settings are loaded in `pkg/common/common.go` from environment variables
 such as the `OIDC_*` claim/client settings, `PLATFORM_ADMIN_GROUPS`, `HOST`,
 `PORT`, `JWT_SECRET`, `KITE_ENCRYPT_KEY`, `DB_TYPE`, `DB_DSN`, `KITE_BASE`,
-`KITE_CONFIG_FILE`, and CORS settings.
+`KITE_CONFIG_FILE`, `CLUSTER_INVENTORY_*`, and CORS settings.
 
 External config files are parsed in `internal/config.go`. Only the
 credential-free `clusters` section is accepted and becomes read-only in the UI.

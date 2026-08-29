@@ -63,7 +63,7 @@ func initializeApp(ctx context.Context) (*application, error) {
 		return nil, err
 	}
 
-	cm, err := cluster.NewClusterManager()
+	cm, err := cluster.NewClusterManagerWithContext(ctx)
 	if err != nil {
 		return nil, err
 	}

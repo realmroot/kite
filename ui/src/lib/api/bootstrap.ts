@@ -5,7 +5,6 @@ import { fetchAPI } from './shared'
 
 export interface BootstrapCapabilities {
   kubectlEnabled: boolean
-  clusterGatewayEnabled: boolean
 }
 
 export interface AuthProviderCatalog {

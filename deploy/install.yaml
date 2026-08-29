@@ -92,9 +92,10 @@ spec:
               value: groups
             - name: PLATFORM_ADMIN_GROUPS
               value: kite-platform-admins
-            # Shared credential-free cluster catalog and Kubernetes gateway.
-            - name: CLUSTER_GATEWAY_URL
-              value: https://clusters.example.com
+            # Optional standard Cluster Inventory discovery. This manifest must
+            # also grant the ServiceAccount get/list/watch on ClusterProfiles.
+            - name: CLUSTER_INVENTORY_ENABLED
+              value: "false"
             - name: HOST
               value: https://kite.example.com
             - name: DB_TYPE

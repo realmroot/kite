@@ -21,11 +21,11 @@ not a Kubernetes identity provider or authorization proxy.
 5. The Kubernetes API server authenticates the token and authorizes the
    configured username and group claims through native RBAC.
 
-When `CLUSTER_GATEWAY_URL` is configured, Kite also requests the Hub catalog
-as an RFC 8707 resource. The resulting resource-audience Access Token is used
-only for catalog CRUD and audit. The ID Token remains the only credential sent
-through the Hub's Kubernetes path. Both stay inside the encrypted server-side
-session.
+When Cluster Inventory is enabled, Kite watches `ClusterProfile` resources in
+one Inventory Kubernetes API. Each profile supplies a credential-free access
+provider endpoint. The ID Token remains the only user credential sent through
+that Kubernetes-compatible endpoint and stays inside the encrypted server-side
+session. Kite requests no provider-specific catalog scope.
 
 `PLATFORM_ADMIN_GROUPS` controls only who may maintain Kite's shared cluster
 catalog, templates, and audit view. It does not grant access to Kubernetes
@@ -106,6 +106,12 @@ specific authentication bridge and is not compatible as-is.
 
 ## Cluster catalog
 
+Kite can combine two sources: its existing local credential-free cluster
+configuration and standard Cluster Inventory profiles. Inventory profiles are
+watched by one process-wide shared informer, are not copied into Kite's
+database, and are managed at their publisher rather than through Kite settings.
+Disabling Inventory leaves the standalone local source unchanged.
+
 Each cluster row stores only:
 
 - display name and description;
@@ -141,6 +147,8 @@ permissions only to a dedicated operator group.
 
 ## Helm installation
 
-Set the chart's `oidc` and secret values. The Kite ServiceAccount has
-`automountServiceAccountToken: false`, and the chart does not install Kubernetes
-RBAC for Kite. Apply provider-user and provider-group bindings separately.
+Set the chart's `oidc` and secret values. With `clusterInventory.enabled=false`,
+the Kite ServiceAccount token is not mounted. Enabling it mounts the token and
+installs read-only get/list/watch permission for `ClusterProfile` resources in
+the selected namespace. Apply provider-user and provider-group bindings for
+target cluster resources separately.

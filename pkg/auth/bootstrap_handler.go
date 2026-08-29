@@ -15,8 +15,7 @@ type bootstrapAuthOptions struct {
 }
 
 type bootstrapCapabilities struct {
-	KubectlEnabled        bool `json:"kubectlEnabled"`
-	ClusterGatewayEnabled bool `json:"clusterGatewayEnabled"`
+	KubectlEnabled bool `json:"kubectlEnabled"`
 }
 
 type bootstrapResponse struct {
@@ -45,8 +44,7 @@ func (h *AuthHandler) Bootstrap(c *gin.Context) {
 	c.JSON(http.StatusOK, bootstrapResponse{
 		Auth: h.bootstrapAuth(setting),
 		Capabilities: bootstrapCapabilities{
-			KubectlEnabled:        setting.KubectlEnabled,
-			ClusterGatewayEnabled: common.ClusterGatewayURL != "",
+			KubectlEnabled: setting.KubectlEnabled,
 		},
 		User:                       user,
 		PlatformAdmin:              user != nil && platformAdmin(*user),

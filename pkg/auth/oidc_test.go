@@ -36,22 +36,6 @@ func TestOIDCConfiguredSupportsPublicPKCEClient(t *testing.T) {
 	}
 }
 
-func TestOIDCResourceOptionsTargetConfiguredClusterCatalog(t *testing.T) {
-	previous := common.ClusterGatewayURL
-	common.ClusterGatewayURL = "https://hub.example.com"
-	t.Cleanup(func() { common.ClusterGatewayURL = previous })
-
-	config := oauth2.Config{Endpoint: oauth2.Endpoint{AuthURL: "https://identity.example.com/authorize"}}
-	authorizationURL := config.AuthCodeURL("state", oidcResourceOptions()...)
-	request, err := http.NewRequest(http.MethodGet, authorizationURL, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := request.URL.Query().Get("resource"); got != "https://hub.example.com/api" {
-		t.Fatalf("resource = %q", got)
-	}
-}
-
 func TestOIDCCustomCATrustsPrivateIssuer(t *testing.T) {
 	server := httptest.NewTLSServer(nil)
 	t.Cleanup(server.Close)

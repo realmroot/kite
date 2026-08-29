@@ -7,15 +7,15 @@ Kite supports several environment variables by default to change the default val
 - **OIDC_CLIENT_ID**: Required application client ID. Public Authorization Code + PKCE clients are supported.
 - **OIDC_CLIENT_SECRET**: Optional confidential-client secret. Leave unset for a public PKCE client.
 - **OIDC_PROVIDER_NAME**: Login-page display name. Defaults to `OpenID Connect`.
-- **OIDC_SCOPES**: Space- or comma-separated scopes. Must contain `openid` and `offline_access`; when `CLUSTER_GATEWAY_URL` is set, include the catalog scopes published by that Resource Server. Scheduled Helm operations use the user's refresh grant.
+- **OIDC_SCOPES**: Space- or comma-separated scopes. Must contain `openid` and `offline_access`. Scheduled Helm operations use the user's refresh grant.
 - **OIDC_USERNAME_CLAIM** / **OIDC_GROUPS_CLAIM**: Claims mapped to the local display identity and Kubernetes groups. Defaults to `email` and `groups`.
 - **OIDC_NAME_CLAIM** / **OIDC_PICTURE_CLAIM**: Optional profile claim names. Defaults to `name` and `picture`.
 - **PLATFORM_ADMIN_GROUPS**: Groups allowed to manage Kite-owned shared metadata. Comma/space-separated values remain supported; use a JSON string array such as `["operators,west","platform admins"]` to preserve claim values containing separators. This does not grant Kubernetes access.
 - **PLATFORM_ADMIN_SUBJECTS**: Exact OIDC `sub` values with the same platform access. It accepts the same legacy-list or JSON-array syntax and is useful when the issuer does not emit groups.
-- **CLUSTER_GATEWAY_URL**: Optional Kube Cluster Hub root URL. When set, Kite
-  requests `${CLUSTER_GATEWAY_URL}/api` as an RFC 8707 resource,
-  retains only a local metadata projection, uses the Access Token for catalog
-  calls, and uses the ID Token for Kubernetes calls.
+- **CLUSTER_INVENTORY_ENABLED**: Enable standard Cluster Inventory `ClusterProfile` discovery. Defaults to `false`; Kite remains usable with its local credential-free cluster configuration when disabled.
+- **CLUSTER_INVENTORY_KUBECONFIG**: Optional kubeconfig file path for an external Inventory Kubernetes API. When empty, Kite uses its in-cluster ServiceAccount.
+- **CLUSTER_INVENTORY_NAMESPACE**: Namespace watched for `ClusterProfile` resources. Defaults to `cluster-inventory`.
+- **CLUSTER_INVENTORY_LABEL_SELECTOR**: Optional Kubernetes label selector limiting discovered profiles.
 
 - **JWT_SECRET**: Secret key used for signing and verifying JWT
 - **KITE_ENCRYPT_KEY**: Secret key used to encrypt server-side OIDC tokens.

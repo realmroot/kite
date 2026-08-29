@@ -141,15 +141,6 @@ func oidcOAuthConfig(provider *oidc.Provider, redirectURL string) oauth2.Config 
 	}
 }
 
-func oidcResourceOptions() []oauth2.AuthCodeOption {
-	if common.ClusterGatewayURL == "" {
-		return nil
-	}
-	return []oauth2.AuthCodeOption{
-		oauth2.SetAuthURLParam("resource", common.ClusterGatewayURL+"/api"),
-	}
-}
-
 func (a *oidcAuthenticator) authorizationURL(c *gin.Context) (string, error) {
 	provider, err := a.discoveredProvider(c.Request.Context())
 	if err != nil {
@@ -176,7 +167,6 @@ func (a *oidcAuthenticator) authorizationURL(c *gin.Context) (string, error) {
 		oidc.Nonce(nonce),
 		oauth2.S256ChallengeOption(verifier),
 	}
-	options = append(options, oidcResourceOptions()...)
 	return config.AuthCodeURL(state, options...), nil
 }
 
@@ -204,7 +194,6 @@ func (a *oidcAuthenticator) exchange(c *gin.Context, code, state string) (*oauth
 	}
 	config := oidcOAuthConfig(provider, oidcRedirectURL())
 	options := []oauth2.AuthCodeOption{oauth2.VerifierOption(verifier)}
-	options = append(options, oidcResourceOptions()...)
 	token, err := config.Exchange(oidcContext, code, options...)
 	if err != nil {
 		return nil, nil, fmt.Errorf("exchange authorization code: %w", err)

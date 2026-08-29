@@ -57,6 +57,7 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/sirupsen/logrus v1.9.4 // indirect
 	golang.org/x/net v0.57.0 // indirect
+	sigs.k8s.io/cluster-inventory-api v0.1.3 // indirect
 )
 
 require (

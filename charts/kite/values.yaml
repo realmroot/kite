@@ -107,10 +107,12 @@ platformAdminGroups: ""
 # legacy-list or JSON string-array syntax is accepted. Configure either or both.
 platformAdminSubjects: ""
 
-clusterGateway:
-  # Shared cluster catalog and Kubernetes access gateway. Leave empty to use
-  # Kite's embedded credential-free catalog during migration.
-  url: ""
+clusterInventory:
+  # Discover additional clusters from the standard Cluster Inventory API.
+  # The chart grants read-only ClusterProfile access to Kite's ServiceAccount.
+  enabled: false
+  namespace: cluster-inventory
+  labelSelector: ""
 
 # Secret handling
 # By default the chart will create a Kubernetes Secret containing sensitive values.

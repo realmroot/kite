@@ -35,24 +35,27 @@ var (
 	Host               = ""
 	Base               = ""
 
-	NodeTerminalImage     = "busybox:1.37.0"
-	KubectlTerminalImage  = "alpine/kubectl:1.36.3"
-	ClusterAgentImage     = ""
-	OIDCIssuer            = ""
-	OIDCCAFile            = ""
-	OIDCClientID          = ""
-	OIDCClientSecret      = ""
-	OIDCProviderName      = "OpenID Connect"
-	OIDCScopes            = []string{"openid", "profile", "email", "offline_access"}
-	OIDCUsernameClaim     = "email"
-	OIDCGroupsClaim       = "groups"
-	OIDCNameClaim         = "name"
-	OIDCPictureClaim      = "picture"
-	PlatformAdminGroups   []string
-	PlatformAdminSubjects []string
-	ClusterGatewayURL     = ""
-	DBType                = "sqlite"
-	DBDSN                 = "dev.db?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)"
+	NodeTerminalImage             = "busybox:1.37.0"
+	KubectlTerminalImage          = "alpine/kubectl:1.36.3"
+	ClusterAgentImage             = ""
+	OIDCIssuer                    = ""
+	OIDCCAFile                    = ""
+	OIDCClientID                  = ""
+	OIDCClientSecret              = ""
+	OIDCProviderName              = "OpenID Connect"
+	OIDCScopes                    = []string{"openid", "profile", "email", "offline_access"}
+	OIDCUsernameClaim             = "email"
+	OIDCGroupsClaim               = "groups"
+	OIDCNameClaim                 = "name"
+	OIDCPictureClaim              = "picture"
+	PlatformAdminGroups           []string
+	PlatformAdminSubjects         []string
+	ClusterInventoryEnabled       = false
+	ClusterInventoryKubeconfig    = ""
+	ClusterInventoryNamespace     = "cluster-inventory"
+	ClusterInventoryLabelSelector = ""
+	DBType                        = "sqlite"
+	DBDSN                         = "dev.db?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)"
 
 	KiteEncryptKey = "kite-default-encryption-key-change-in-production"
 
@@ -140,7 +143,12 @@ func LoadEnvs() {
 
 	ClusterAgentImage = strings.TrimSpace(os.Getenv("CLUSTER_AGENT_IMAGE"))
 	loadOIDCEnvs()
-	ClusterGatewayURL = strings.TrimRight(strings.TrimSpace(os.Getenv("CLUSTER_GATEWAY_URL")), "/")
+	ClusterInventoryEnabled = os.Getenv("CLUSTER_INVENTORY_ENABLED") == "true"
+	ClusterInventoryKubeconfig = strings.TrimSpace(os.Getenv("CLUSTER_INVENTORY_KUBECONFIG"))
+	if namespace := strings.TrimSpace(os.Getenv("CLUSTER_INVENTORY_NAMESPACE")); namespace != "" {
+		ClusterInventoryNamespace = namespace
+	}
+	ClusterInventoryLabelSelector = strings.TrimSpace(os.Getenv("CLUSTER_INVENTORY_LABEL_SELECTOR"))
 	loadDatabaseEnvs()
 
 	if key := os.Getenv("KITE_ENCRYPT_KEY"); key != "" {

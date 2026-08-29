@@ -630,6 +630,7 @@ export interface RelatedResources {
 export interface Cluster {
   id: number
   name: string
+  displayName?: string
   description?: string
   version?: string
   apiServerUrl?: string
@@ -645,33 +646,6 @@ export interface Cluster {
   updatedAt: string
   prometheusURL?: string
   error?: string
-}
-
-export interface GatewayAuditEvent {
-  id: number
-  createdAt: string
-  requestId: string
-  tokenId?: string
-  principalType: 'user' | 'agent'
-  controllerSubject?: string
-  agentIssuer?: string
-  agentSubject?: string
-  userSubject?: string
-  clientId?: string
-  scopes?: string
-  clusterId: string
-  method: string
-  path: string
-  status: number
-  durationMillis: number
-}
-
-export interface GatewayAuditPage {
-  items: GatewayAuditEvent[]
-  pagination: {
-    pageSize: number
-    nextPageToken?: string
-  }
 }
 
 // Resource History types

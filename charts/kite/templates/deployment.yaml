@@ -52,7 +52,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "kite.serviceAccountName" . }}
-      automountServiceAccountToken: false
+      automountServiceAccountToken: {{ or .Values.serviceAccount.automount .Values.clusterInventory.enabled }}
       terminationGracePeriodSeconds: 30
       {{- with .Values.podSecurityContext }}
       securityContext:
@@ -98,9 +98,13 @@ spec:
               value: {{ .Values.platformAdminGroups | quote }}
             - name: PLATFORM_ADMIN_SUBJECTS
               value: {{ .Values.platformAdminSubjects | quote }}
-            {{- if .Values.clusterGateway.url }}
-            - name: CLUSTER_GATEWAY_URL
-              value: {{ .Values.clusterGateway.url | quote }}
+            {{- if .Values.clusterInventory.enabled }}
+            - name: CLUSTER_INVENTORY_ENABLED
+              value: "true"
+            - name: CLUSTER_INVENTORY_NAMESPACE
+              value: {{ .Values.clusterInventory.namespace | quote }}
+            - name: CLUSTER_INVENTORY_LABEL_SELECTOR
+              value: {{ .Values.clusterInventory.labelSelector | quote }}
             {{- end }}
             - name: DB_TYPE
               value: {{ .Values.db.type | quote }}

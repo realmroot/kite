@@ -68,11 +68,7 @@ func (e *helmReleaseAutoUpgradeExecutor) Run(ctx context.Context, task model.Sch
 	if err != nil {
 		return err
 	}
-	session, err = model.GetOIDCSessionByID(model.DB.WithContext(ctx), task.OIDCSessionID)
-	if err != nil {
-		return err
-	}
-	cs, err := e.cm.GetClientSet(task.ClusterName, idToken, string(session.AccessToken))
+	cs, err := e.cm.GetClientSet(task.ClusterName, idToken)
 	if err != nil {
 		return err
 	}

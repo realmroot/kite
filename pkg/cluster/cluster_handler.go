@@ -47,12 +47,6 @@ func clusterAgentServerURL() string {
 }
 
 func (cm *ClusterManager) GetClusters(c *gin.Context) {
-	if cm.gatewayCatalog != nil {
-		if _, err := cm.syncGatewayCatalog(c.Request.Context(), c.GetString("oidc-access-token")); err != nil {
-			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
-			return
-		}
-	}
 	clusters, err := model.ListClusters()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -60,9 +54,6 @@ func (cm *ClusterManager) GetClusters(c *gin.Context) {
 	}
 	result := make([]common.ClusterInfo, 0, len(clusters))
 	for _, cluster := range clusters {
-		if cm.gatewayCatalog != nil && cluster.CatalogSource != gatewayCatalogSource {
-			continue
-		}
 		if !cluster.Enable {
 			continue
 		}
@@ -71,6 +62,11 @@ func (cm *ClusterManager) GetClusters(c *gin.Context) {
 			IsDefault: cluster.IsDefault,
 		})
 	}
+	if cm.inventoryCatalog != nil {
+		for _, item := range cm.inventoryCatalog.list() {
+			result = append(result, common.ClusterInfo{Name: item.name, DisplayName: item.displayName})
+		}
+	}
 	sort.Slice(result, func(i, j int) bool {
 		return result[i].Name < result[j].Name
 	})
@@ -78,15 +74,6 @@ func (cm *ClusterManager) GetClusters(c *gin.Context) {
 }
 
 func (cm *ClusterManager) GetClusterList(c *gin.Context) {
-	var gatewayDetails map[string]gatewayCluster
-	if cm.gatewayCatalog != nil {
-		var err error
-		_, gatewayDetails, err = cm.syncGatewayCatalogWithDetails(c.Request.Context(), c.GetString("oidc-access-token"))
-		if err != nil {
-			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
-			return
-		}
-	}
 	clusters, err := model.ListClusters()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -95,22 +82,11 @@ func (cm *ClusterManager) GetClusterList(c *gin.Context) {
 
 	result := make([]gin.H, 0, len(clusters))
 	for _, cluster := range clusters {
-		if cm.gatewayCatalog != nil && cluster.CatalogSource != gatewayCatalogSource {
-			continue
-		}
 		connectionMode := cluster.ConnectionMode
 		apiServerURL := cluster.APIServerURL
 		caBundle := cluster.CABundle
 		tlsServerName := cluster.TLSServerName
 		prometheusURL := cluster.PrometheusURL
-		if cluster.CatalogSource == gatewayCatalogSource {
-			remote := gatewayDetails[cluster.CatalogID]
-			connectionMode = "direct"
-			apiServerURL = remote.APIServerURL
-			caBundle = ""
-			tlsServerName = ""
-			prometheusURL = remote.PrometheusURL
-		}
 		clusterInfo := gin.H{
 			"id":             cluster.ID,
 			"name":           cluster.Name,
@@ -137,7 +113,7 @@ func (cm *ClusterManager) GetClusterList(c *gin.Context) {
 }
 
 func (cm *ClusterManager) CreateCluster(c *gin.Context) {
-	if cm.gatewayCatalog == nil && common.IsSectionManaged("clusters") {
+	if common.IsSectionManaged("clusters") {
 		c.JSON(http.StatusForbidden, gin.H{"error": common.ManagedSectionError})
 		return
 	}
@@ -153,10 +129,6 @@ func (cm *ClusterManager) CreateCluster(c *gin.Context) {
 	req.CABundle = strings.TrimSpace(req.CABundle)
 	req.TLSServerName = strings.TrimSpace(req.TLSServerName)
 	req.PrometheusURL = strings.TrimSpace(req.PrometheusURL)
-	if cm.gatewayCatalog != nil {
-		cm.createGatewayCluster(c, req)
-		return
-	}
 	if req.ConnectionMode != "direct" && req.ConnectionMode != "tunnel" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "connectionMode must be direct or tunnel"})
 		return
@@ -245,7 +217,7 @@ func (cm *ClusterManager) CreateCluster(c *gin.Context) {
 }
 
 func (cm *ClusterManager) UpdateCluster(c *gin.Context) {
-	if cm.gatewayCatalog == nil && common.IsSectionManaged("clusters") {
+	if common.IsSectionManaged("clusters") {
 		c.JSON(http.StatusForbidden, gin.H{"error": common.ManagedSectionError})
 		return
 	}
@@ -278,14 +250,6 @@ func (cm *ClusterManager) UpdateCluster(c *gin.Context) {
 		} else {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		}
-		return
-	}
-	if cm.gatewayCatalog != nil {
-		if cluster.CatalogSource != gatewayCatalogSource {
-			c.JSON(http.StatusNotFound, gin.H{"error": "cluster not found"})
-			return
-		}
-		cm.updateGatewayCluster(c, cluster, req)
 		return
 	}
 	req.Name = strings.TrimSpace(req.Name)
@@ -349,7 +313,7 @@ func bindClusterJSON(c *gin.Context, target any) error {
 }
 
 func (cm *ClusterManager) DeleteCluster(c *gin.Context) {
-	if cm.gatewayCatalog == nil && common.IsSectionManaged("clusters") {
+	if common.IsSectionManaged("clusters") {
 		c.JSON(http.StatusForbidden, gin.H{"error": common.ManagedSectionError})
 		return
 	}
@@ -373,14 +337,6 @@ func (cm *ClusterManager) DeleteCluster(c *gin.Context) {
 
 	if cluster.IsDefault {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "cannot delete default cluster"})
-		return
-	}
-	if cm.gatewayCatalog != nil {
-		if cluster.CatalogSource != gatewayCatalogSource {
-			c.JSON(http.StatusNotFound, gin.H{"error": "cluster not found"})
-			return
-		}
-		cm.deleteGatewayCluster(c, cluster)
 		return
 	}
 

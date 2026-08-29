@@ -29,7 +29,6 @@ interface ClusterDialogProps {
   onOpenChange: (open: boolean) => void
   cluster?: Cluster | null
   onSubmit: (clusterData: ClusterCreateRequest) => void
-  gatewayEnabled: boolean
   isSubmitting?: boolean
 }
 
@@ -52,7 +51,6 @@ export function ClusterDialog({
   onOpenChange,
   cluster,
   onSubmit,
-  gatewayEnabled,
   isSubmitting,
 }: ClusterDialogProps) {
   return (
@@ -63,7 +61,6 @@ export function ClusterDialog({
           cluster={cluster}
           onOpenChange={onOpenChange}
           onSubmit={onSubmit}
-          gatewayEnabled={gatewayEnabled}
           isSubmitting={isSubmitting}
         />
       ) : null}
@@ -75,7 +72,6 @@ function ClusterDialogContent({
   cluster,
   onOpenChange,
   onSubmit,
-  gatewayEnabled,
   isSubmitting,
 }: Omit<ClusterDialogProps, 'open'>) {
   const { t } = useTranslation()
@@ -113,13 +109,7 @@ function ClusterDialogContent({
           onSubmit(formData)
         }}
       >
-        <div
-          className={
-            gatewayEnabled
-              ? 'grid grid-cols-1 gap-4'
-              : 'grid grid-cols-1 gap-4 sm:grid-cols-2'
-          }
-        >
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="cluster-name">
               {t('clusterManagement.dialog.name', 'Cluster Name')} *
@@ -132,35 +122,30 @@ function ClusterDialogContent({
               required
             />
           </div>
-          {!gatewayEnabled ? (
-            <div className="space-y-2">
-              <Label htmlFor="cluster-connection-mode">
-                {t(
-                  'clusterManagement.dialog.connectionMode',
-                  'Connection Mode'
-                )}
-              </Label>
-              <Select
-                value={formData.connectionMode}
-                disabled={isEditMode}
-                onValueChange={(value: 'direct' | 'tunnel') =>
-                  change('connectionMode', value)
-                }
-              >
-                <SelectTrigger id="cluster-connection-mode">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="direct">
-                    {t('clusterManagement.type.direct', 'Direct')}
-                  </SelectItem>
-                  <SelectItem value="tunnel">
-                    {t('clusterManagement.type.tunnel', 'Private Tunnel')}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          ) : null}
+          <div className="space-y-2">
+            <Label htmlFor="cluster-connection-mode">
+              {t('clusterManagement.dialog.connectionMode', 'Connection Mode')}
+            </Label>
+            <Select
+              value={formData.connectionMode}
+              disabled={isEditMode}
+              onValueChange={(value: 'direct' | 'tunnel') =>
+                change('connectionMode', value)
+              }
+            >
+              <SelectTrigger id="cluster-connection-mode">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="direct">
+                  {t('clusterManagement.type.direct', 'Direct')}
+                </SelectItem>
+                <SelectItem value="tunnel">
+                  {t('clusterManagement.type.tunnel', 'Private Tunnel')}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         <div className="space-y-2">
@@ -194,14 +179,6 @@ function ClusterDialogContent({
                 required
               />
             </div>
-            {gatewayEnabled ? (
-              <p className="text-xs text-muted-foreground">
-                {t(
-                  'clusterManagement.dialog.directDescription',
-                  'Direct mode requires a publicly reachable API server with a publicly trusted TLS certificate.'
-                )}
-              </p>
-            ) : null}
           </>
         ) : (
           <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-700 dark:border-blue-800 dark:bg-blue-950/20 dark:text-blue-300">

@@ -72,7 +72,6 @@ func registerAdminRoutes(r *gin.RouterGroup, authHandler *auth.AuthHandler, cm *
 	adminAPI.Use(authHandler.RequireAuth(), authHandler.RequireAdmin())
 
 	adminAPI.GET("/audit-logs", audit.ListAuditLogs)
-	adminAPI.GET("/agent-audit-events", cm.GetGatewayAuditEvents)
 	adminAPI.GET("/general-setting/", settings.HandleGetGeneralSetting)
 	adminAPI.PUT("/general-setting/", settings.HandleUpdateGeneralSetting)
 

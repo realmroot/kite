@@ -1,5 +1,4 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
-import { useAuth } from '@/contexts/auth-context'
 import {
   IconCopy,
   IconEdit,
@@ -49,7 +48,6 @@ import { ClusterDialog } from './cluster-dialog'
 
 export function ClusterManagement() {
   const { t } = useTranslation()
-  const { capabilities } = useAuth()
   const queryClient = useQueryClient()
 
   const {
@@ -461,7 +459,6 @@ export function ClusterManagement() {
         }}
         cluster={editingCluster}
         onSubmit={handleSubmitCluster}
-        gatewayEnabled={capabilities.clusterGatewayEnabled}
         isSubmitting={createMutation.isPending || updateMutation.isPending}
       />
 

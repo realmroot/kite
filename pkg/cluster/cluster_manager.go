@@ -33,7 +33,7 @@ type ClientSet struct {
 
 type ClusterManager struct {
 	clusterAgentManager *clusteragent.Manager
-	gatewayCatalog      *gatewayCatalog
+	inventoryCatalog    *inventoryCatalog
 	runtimeMu           sync.Mutex
 	runtimes            map[uint]*clusterRuntime
 	transportFor        func(*rest.Config) (http.RoundTripper, error)
@@ -155,24 +155,16 @@ func (t *k8sProxyTransport) RoundTrip(req *http.Request) (*http.Response, error)
 	return t.transport.RoundTrip(req)
 }
 
-func (cm *ClusterManager) GetClientSet(clusterName, idToken, catalogToken string) (*ClientSet, error) {
+func (cm *ClusterManager) GetClientSet(clusterName, idToken string) (*ClientSet, error) {
 	if idToken == "" {
 		return nil, errors.New("OIDC ID token is required")
 	}
 	if clusterName == "" {
-		if cm.gatewayCatalog != nil {
-			if _, err := cm.syncGatewayCatalog(context.Background(), catalogToken); err != nil {
-				return nil, err
-			}
-		}
 		clusters, err := model.ListClusters()
 		if err != nil {
 			return nil, err
 		}
 		for _, candidate := range clusters {
-			if cm.gatewayCatalog != nil && candidate.CatalogSource != gatewayCatalogSource {
-				continue
-			}
 			if candidate.Enable && (clusterName == "" || candidate.IsDefault) {
 				clusterName = candidate.Name
 				if candidate.IsDefault {
@@ -180,31 +172,22 @@ func (cm *ClusterManager) GetClientSet(clusterName, idToken, catalogToken string
 				}
 			}
 		}
+		if clusterName == "" && cm.inventoryCatalog != nil {
+			contexts := cm.inventoryCatalog.list()
+			if len(contexts) > 0 {
+				clusterName = contexts[0].name
+			}
+		}
 	}
 	if clusterName == "" {
 		return nil, errors.New("no clusters available")
 	}
-	var cluster *model.Cluster
-	var err error
-	if cm.gatewayCatalog != nil {
-		var projected model.Cluster
-		err = model.DB.Where("catalog_source = ? AND name = ?", gatewayCatalogSource, clusterName).First(&projected).Error
-		cluster = &projected
-	} else {
-		cluster, err = model.GetClusterByName(clusterName)
+	if cm.inventoryCatalog != nil && strings.HasPrefix(clusterName, inventoryContextPrefix) {
+		return cm.inventoryCatalog.clientSet(clusterName, idToken)
 	}
+	cluster, err := model.GetClusterByName(clusterName)
 	if err != nil || !cluster.Enable {
 		return nil, fmt.Errorf("cluster not found: %s", clusterName)
-	}
-	if cm.gatewayCatalog != nil && cluster.CatalogSource == gatewayCatalogSource {
-		remote, err := cm.gatewayCatalog.Get(context.Background(), catalogToken, cluster.CatalogID)
-		if err != nil {
-			return nil, err
-		}
-		cluster, err = cm.projectGatewayCluster(remote)
-		if err != nil {
-			return nil, err
-		}
 	}
 	runtime, err := cm.runtimeForCluster(cluster)
 	if err != nil {
@@ -364,16 +347,20 @@ func newUserClientSet(name string, config *rest.Config, httpClient *http.Client,
 }
 
 func NewClusterManager() (*ClusterManager, error) {
+	return NewClusterManagerWithContext(context.Background())
+}
+
+func NewClusterManagerWithContext(ctx context.Context) (*ClusterManager, error) {
 	cm := &ClusterManager{
 		runtimes:     make(map[uint]*clusterRuntime),
 		transportFor: rest.TransportFor,
 	}
-	if common.ClusterGatewayURL != "" {
-		catalog, err := newGatewayCatalog(common.ClusterGatewayURL)
+	if common.ClusterInventoryEnabled {
+		catalog, err := newInventoryCatalog(ctx)
 		if err != nil {
 			return nil, err
 		}
-		cm.gatewayCatalog = catalog
+		cm.inventoryCatalog = catalog
 	}
 	cm.clusterAgentManager = clusteragent.NewManager(func() {})
 	return cm, nil

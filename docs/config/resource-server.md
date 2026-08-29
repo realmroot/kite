@@ -1,19 +1,12 @@
 # External tool access
 
-Kite is a dashboard client. Agent access is exposed by Kube Cluster Hub,
-not by the Kite process.
+Kite is a dashboard client, not an Agent Resource Server. Agent access is
+provided by a Cluster Inventory access provider such as Kube Cluster Hub.
 
-Configure Kite with the Hub root URL:
-
-```text
-CLUSTER_GATEWAY_URL=https://clusters.example.com
-```
-
-Kite requests the catalog's RFC 8707 resource indicator during Authorization
-Code + PKCE login. It uses the resulting Access Token for catalog calls and the
-same session's ID Token for Kubernetes calls. Kubernetes RBAC remains
-authoritative. The Hub independently publishes RFC 9728
-metadata, OpenAPI, DPoP-protected Agent operations, and Agent audit events.
+Kite discovers access providers from standard `ClusterProfile` resources. It
+does not call a Hub-private catalog API and does not request Hub-specific OAuth
+scopes. Human Kubernetes calls carry the current user's OIDC ID token; the
+target kube-apiserver remains the resource authorizer.
 
 Kite contains no Resource Server signing key, DPoP replay store, Agent token
-validator, or privileged Kubernetes execution credential.
+validator, catalog credential, or privileged target-cluster credential.
