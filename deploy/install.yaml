@@ -1,20 +1,20 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: kite-system
+  name: lightkite-system
 ---
 kind: ServiceAccount
 apiVersion: v1
 metadata:
-  name: kite
-  namespace: kite-system
+  name: lightkite
+  namespace: lightkite-system
 automountServiceAccountToken: false
 ---
 apiVersion: v1
 kind: Secret
 metadata:
-  name: kite
-  namespace: kite-system
+  name: lightkite
+  namespace: lightkite-system
 type: Opaque
 stringData:
   # Replace every placeholder before applying this manifest.
@@ -24,8 +24,8 @@ stringData:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: kite-data
-  namespace: kite-system
+  name: lightkite-data
+  namespace: lightkite-system
 spec:
   accessModes:
     - ReadWriteOnce
@@ -37,22 +37,22 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
-    app: kite
-  name: kite
-  namespace: kite-system
+    app: lightkite
+  name: lightkite
+  namespace: lightkite-system
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: kite
+      app: lightkite
   strategy:
     type: Recreate
   template:
     metadata:
       labels:
-        app: kite
+        app: lightkite
     spec:
-      serviceAccountName: kite
+      serviceAccountName: lightkite
       automountServiceAccountToken: false
       terminationGracePeriodSeconds: 30
       securityContext:
@@ -64,9 +64,9 @@ spec:
           type: RuntimeDefault
       containers:
         # Replace OWNER and VERSION with the immutable image published by this fork.
-        - image: ghcr.io/OWNER/kite:VERSION
+        - image: ghcr.io/OWNER/lightkite:VERSION
           imagePullPolicy: IfNotPresent
-          name: kite
+          name: lightkite
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -75,10 +75,10 @@ spec:
                 - ALL
           envFrom:
             - secretRef:
-                name: kite
+                name: lightkite
           env:
             # Replace these values and register
-            # https://kite.example.com/api/auth/callback at the provider.
+            # https://lightkite.example.com/api/auth/callback at the provider.
             - name: OIDC_ISSUER
               value: https://identity.example.com
             - name: OIDC_PROVIDER_NAME
@@ -90,13 +90,13 @@ spec:
             - name: OIDC_GROUPS_CLAIM
               value: groups
             - name: PLATFORM_ADMIN_GROUPS
-              value: kite-platform-admins
+              value: lightkite-platform-admins
             # Optional standard Cluster Inventory discovery. This manifest must
             # also grant the ServiceAccount get/list/watch on ClusterProfiles.
             - name: CLUSTER_INVENTORY_ENABLED
               value: "false"
             - name: HOST
-              value: https://kite.example.com
+              value: https://lightkite.example.com
             - name: DB_TYPE
               value: sqlite
             - name: KUBECTL_TERMINAL_IMAGE
@@ -104,7 +104,7 @@ spec:
             - name: NODE_TERMINAL_IMAGE
               value: busybox:1.37.0
             - name: RELEASE_API_URL
-              value: https://api.github.com/repos/OWNER/kite/releases/latest
+              value: https://api.github.com/repos/OWNER/lightkite/releases/latest
             - name: DB_DSN
               value: /data/kite.db?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)
           resources:
@@ -143,7 +143,7 @@ spec:
       volumes:
         - name: data
           persistentVolumeClaim:
-            claimName: kite-data
+            claimName: lightkite-data
         - name: tmp
           emptyDir: {}
 ---
@@ -151,9 +151,9 @@ apiVersion: v1
 kind: Service
 metadata:
   labels:
-    app: kite
-  name: kite
-  namespace: kite-system
+    app: lightkite
+  name: lightkite
+  namespace: lightkite-system
 spec:
   ports:
     - name: http
@@ -161,5 +161,5 @@ spec:
       protocol: TCP
       targetPort: 8080
   selector:
-    app: kite
+    app: lightkite
   type: ClusterIP

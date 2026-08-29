@@ -8,8 +8,8 @@ import (
 
 	semver "github.com/blang/semver/v4"
 	"github.com/gin-gonic/gin"
-	"github.com/zxh326/kite/pkg/helmutil"
-	"github.com/zxh326/kite/pkg/model"
+	"github.com/realmroot/lightkite/pkg/helmutil"
+	"github.com/realmroot/lightkite/pkg/model"
 	"helm.sh/helm/v4/pkg/chart/common"
 	chart "helm.sh/helm/v4/pkg/chart/v2"
 	repo "helm.sh/helm/v4/pkg/repo/v1"

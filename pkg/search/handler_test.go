@@ -11,10 +11,10 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/zxh326/kite/pkg/common"
-	"github.com/zxh326/kite/pkg/middleware"
-	"github.com/zxh326/kite/pkg/model"
-	"github.com/zxh326/kite/pkg/resources"
+	"github.com/realmroot/lightkite/pkg/common"
+	"github.com/realmroot/lightkite/pkg/middleware"
+	"github.com/realmroot/lightkite/pkg/model"
+	"github.com/realmroot/lightkite/pkg/resources"
 )
 
 func TestSearchPropagatesRequestCancellation(t *testing.T) {

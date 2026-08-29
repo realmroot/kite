@@ -340,7 +340,7 @@
     "unsetGlobalError": "取消全局侧边栏失败",
     "expand": "展开",
     "collapse": "收起",
-    "updateAvailable": "有新的 Kite 版本可用"
+    "updateAvailable": "有新的 Lightkite 版本可用"
   },
   "nav": {
     "overview": "概览",
@@ -482,7 +482,7 @@
     },
     "tabs": {
       "rolloutRevisions": "发布版本历史",
-      "kiteAudit": "Kite 审计记录"
+      "lightkiteAudit": "Lightkite 审计记录"
     }
   },
   "daemonsets": {
@@ -724,7 +724,7 @@
     "errors": {
       "loadFailed": "加载集群失败"
     },
-    "deleteConfirmation": "此操作仅移除 Kite 中的集群配置，不会删除集群内的任何资源。",
+    "deleteConfirmation": "此操作仅移除 Lightkite 中的集群配置，不会删除集群内的任何资源。",
     "dialog": {
       "createTitle": "添加集群",
       "editTitle": "编辑集群",
@@ -735,7 +735,7 @@
       "type": "类型",
       "prometheusUrl": "Prometheus URL",
       "prometheusUrlPlaceholder": "http://prometheus.monitoring.svc:9090",
-      "prometheusUrlDescription": "可选的集群内 Service 地址。Kite 使用当前登录用户身份通过 Kubernetes Service Proxy 访问。",
+      "prometheusUrlDescription": "可选的集群内 Service 地址。Lightkite 使用当前登录用户身份通过 Kubernetes Service Proxy 访问。",
       "enabled": "启用",
       "isDefault": "设为默认",
       "apiServerUrl": "API Server 地址"
@@ -892,7 +892,7 @@
       "addRepositoryDescription": "添加 Helm Repository 后，它的 Charts 会显示在列表中。",
       "repositoryAdded": "Repository 已添加",
       "repositoryDeleted": "Repository 已删除",
-      "deleteRepositoryDescription": "这里只会从 Kite 移除这个受管理的 Chart 来源，不会删除远端 Chart，也不会卸载已安装的 Helm Release。",
+      "deleteRepositoryDescription": "这里只会从 Lightkite 移除这个受管理的 Chart 来源，不会删除远端 Chart，也不会卸载已安装的 Helm Release。",
       "noCharts": "未找到 Chart",
       "noReadme": "未找到 README",
       "noValues": "未找到 Values",
@@ -900,7 +900,7 @@
       "noVersions": "未找到版本",
       "noChartUrl": "缺少 Chart 包 URL。",
       "invalidValues": "Values 必须是 YAML 对象。",
-      "artifactHubTrafficNotice": "从该来源搜索或查看 Chart 信息时，Kite 会访问 <artifactHub>Artifact Hub</artifactHub>。Kite 仅展示第三方数据，不对其中内容负责。",
+      "artifactHubTrafficNotice": "从该来源搜索或查看 Chart 信息时，Lightkite 会访问 <artifactHub>Artifact Hub</artifactHub>。Lightkite 仅展示第三方数据，不对其中内容负责。",
       "installed": "Helm Release 已安装"
     },
     "placeholders": {

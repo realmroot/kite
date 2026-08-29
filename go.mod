@@ -1,4 +1,4 @@
-module github.com/zxh326/kite
+module github.com/realmroot/lightkite
 
 go 1.26.0
 

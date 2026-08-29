@@ -46,7 +46,7 @@ function bindOIDCUsers(kubeconfigPath: string) {
       {
         apiVersion: "rbac.authorization.k8s.io/v1",
         kind: "ClusterRoleBinding",
-        metadata: { name: "kite-e2e-admin" },
+        metadata: { name: "lightkite-e2e-admin" },
         subjects: [
           {
             kind: "User",
@@ -63,11 +63,11 @@ function bindOIDCUsers(kubeconfigPath: string) {
       {
         apiVersion: "rbac.authorization.k8s.io/v1",
         kind: "RoleBinding",
-        metadata: { name: "kite-e2e-viewer", namespace: "default" },
+        metadata: { name: "lightkite-e2e-viewer", namespace: "default" },
         subjects: [
           {
             kind: "User",
-            name: "viewer@kite.test",
+            name: "viewer@lightkite.test",
             apiGroup: "rbac.authorization.k8s.io",
           },
         ],

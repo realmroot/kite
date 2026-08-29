@@ -12,13 +12,13 @@ import (
 
 	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
-	"github.com/zxh326/kite/internal"
-	"github.com/zxh326/kite/pkg/auth"
-	"github.com/zxh326/kite/pkg/cluster"
-	"github.com/zxh326/kite/pkg/common"
-	"github.com/zxh326/kite/pkg/middleware"
-	"github.com/zxh326/kite/pkg/model"
-	"github.com/zxh326/kite/pkg/templates"
+	"github.com/realmroot/lightkite/internal"
+	"github.com/realmroot/lightkite/pkg/auth"
+	"github.com/realmroot/lightkite/pkg/cluster"
+	"github.com/realmroot/lightkite/pkg/common"
+	"github.com/realmroot/lightkite/pkg/middleware"
+	"github.com/realmroot/lightkite/pkg/model"
+	"github.com/realmroot/lightkite/pkg/templates"
 	"k8s.io/klog/v2"
 	controllerlog "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -38,7 +38,7 @@ func initializeApp(ctx context.Context) (*application, error) {
 	if err := validateAnalyticsConfiguration(); err != nil {
 		return nil, err
 	}
-	if common.KiteEncryptKey == "kite-default-encryption-key-change-in-production" {
+	if common.LightkiteEncryptKey == "kite-default-encryption-key-change-in-production" {
 		return nil, errors.New("KITE_ENCRYPT_KEY must be set because OIDC tokens are stored server-side")
 	}
 	if klog.V(1).Enabled() {

@@ -6,7 +6,7 @@ on:
       - 'v[0-9]+\.[0-9]+\.[0-9]+'
 
 env:
-  IMAGE_NAME: kite
+  IMAGE_NAME: lightkite
   GO_VERSION: "1.26"
   NODE_VERSION: "24"
 
@@ -16,9 +16,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     env:
-      E2E_KIND_NAME: kite-release-e2e
+      E2E_KIND_NAME: lightkite-release-e2e
       E2E_NODE_IMAGE: kindest/node:v1.36.1@sha256:3489c7674813ba5d8b1a9977baea8a6e553784dab7b84759d1014dbd78f7ebd5
-      E2E_KUBECONFIG: ${{ github.workspace }}/kite-release-e2e.kubeconfig
+      E2E_KUBECONFIG: ${{ github.workspace }}/lightkite-release-e2e.kubeconfig
       E2E_PORT: "38080"
       KITE_E2E_USE_SYSTEM_CHROME: "true"
     steps:
@@ -140,21 +140,21 @@ jobs:
           OWNER_LC=${{ steps.check_version.outputs.owner_lc }}
           TAG_NAME=${{ steps.check_version.outputs.tag_name }}
           VERSION=${TAG_NAME#v}
-          sed -i "s|repository: \"\"|repository: ghcr.io/${OWNER_LC}/kite|" charts/kite/values.yaml
-          sed -i "s|releaseAPIURL: \"\"|releaseAPIURL: \"https://api.github.com/repos/${{ github.repository }}/releases/latest\"|" charts/kite/values.yaml
-          helm package charts/kite/ --version "$VERSION" --app-version "$TAG_NAME"
+          sed -i "s|repository: \"\"|repository: ghcr.io/${OWNER_LC}/lightkite|" charts/lightkite/values.yaml
+          sed -i "s|releaseAPIURL: \"\"|releaseAPIURL: \"https://api.github.com/repos/${{ github.repository }}/releases/latest\"|" charts/lightkite/values.yaml
+          helm package charts/lightkite/ --version "$VERSION" --app-version "$TAG_NAME"
 
       - name: Render versioned installation manifest
         run: |
           OWNER_LC=${{ steps.check_version.outputs.owner_lc }}
           TAG_NAME=${{ steps.check_version.outputs.tag_name }}
-          sed -e "s|ghcr.io/OWNER/kite:VERSION|ghcr.io/${OWNER_LC}/kite:${TAG_NAME}|g" \
-            -e "s|https://api.github.com/repos/OWNER/kite/releases/latest|https://api.github.com/repos/${{ github.repository }}/releases/latest|" \
+          sed -e "s|ghcr.io/OWNER/lightkite:VERSION|ghcr.io/${OWNER_LC}/lightkite:${TAG_NAME}|g" \
+            -e "s|https://api.github.com/repos/OWNER/lightkite/releases/latest|https://api.github.com/repos/${{ github.repository }}/releases/latest|" \
             deploy/install.yaml > install.yaml
 
       - name: Push Helm chart to OCI registry
         run: |
-          CHART_PACKAGE=$(ls kite-*.tgz)
+          CHART_PACKAGE=$(ls lightkite-*.tgz)
           helm push "$CHART_PACKAGE" oci://ghcr.io/${{ steps.check_version.outputs.owner_lc }}/charts
 
       - name: Create Release
@@ -166,8 +166,8 @@ jobs:
           prerelease: false
           generate_release_notes: true
           files: |
-            bin/kite-*-${{ steps.check_version.outputs.tag_name }}.tar.gz
-            kite-*.tgz
+            bin/lightkite-*-${{ steps.check_version.outputs.tag_name }}.tar.gz
+            lightkite-*.tgz
             install.yaml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -191,7 +191,7 @@ jobs:
           VERSION=$(echo $TAG_NAME | sed 's/^v//')
 
           # Download the helm chart from the release
-          gh release download $TAG_NAME --pattern "kite-$VERSION.tgz"
+          gh release download $TAG_NAME --pattern "lightkite-$VERSION.tgz"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

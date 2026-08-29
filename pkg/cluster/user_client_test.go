@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/zxh326/kite/pkg/model"
+	"github.com/realmroot/lightkite/pkg/model"
 )
 
 func TestBaseRESTConfigContainsOnlyClusterConnectionMetadata(t *testing.T) {

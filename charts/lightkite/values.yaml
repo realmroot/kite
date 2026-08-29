@@ -1,4 +1,4 @@
-# Default values for kite.
+# Default values for lightkite.
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
@@ -60,13 +60,13 @@ debug: false
 # External Host for the application
 # Used in generate OAuth redirect URLs
 # Required. Use the public HTTPS origin without a path.
-# Example: https://kite.example.com
+# Example: https://lightkite.example.com
 host: ""
 
 # Base path for the application
-# If you are serving kite under a subpath, set this value accordingly.
+# If you are serving lightkite under a subpath, set this value accordingly.
 # Remember to also set the ingress path to match.
-# Example: "/kite"
+# Example: "/lightkite"
 basePath: ""
 
 # This is the key used for encrypting sensitive data
@@ -87,10 +87,10 @@ oidc:
   ca:
     # Optional Secret containing the CA certificate used to verify a private
     # OIDC issuer. The certificate is mounted read-only and never stored in the
-    # Kite database.
+    # Lightkite database.
     existingSecret: ""
     key: ca.crt
-    mountPath: /etc/kite/oidc
+    mountPath: /etc/lightkite/oidc
 
 # OIDC groups allowed to manage shared metadata. Comma-separated values are
 # supported; use a JSON string array when a claim value contains separators.
@@ -101,7 +101,7 @@ platformAdminSubjects: ""
 
 clusterInventory:
   # Discover additional clusters from the standard Cluster Inventory API.
-  # The chart grants read-only ClusterProfile access to Kite's ServiceAccount.
+  # The chart grants read-only ClusterProfile access to Lightkite's ServiceAccount.
   enabled: false
   namespace: cluster-inventory
   labelSelector: ""
@@ -172,7 +172,7 @@ config:
   # Name of an existing Secret containing a `config.yaml` key.
   # When set, the inline config below is ignored.
   # The user is responsible for creating and managing this Secret.
-  # Example: kubectl create secret generic kite-config --from-file=config.yaml=./my-config.yaml
+  # Example: kubectl create secret generic lightkite-config --from-file=config.yaml=./my-config.yaml
   existingSecret: ""
   # --- Inline credential-free cluster catalog (used when existingSecret is empty) ---
   # clusters:
@@ -231,15 +231,15 @@ ingress:
   className: "nginx"
   annotations: {}
   hosts:
-    - host: kite.example.com
+    - host: lightkite.example.com
       paths:
         - path: /
           pathType: ImplementationSpecific
   # tls:
   #  - hosts:
-  #      - kite.example.com
+  #      - lightkite.example.com
 
-# Gateway API resources for exposing Kite
+# Gateway API resources for exposing Lightkite
 # Requires Gateway API CRDs to be installed in the cluster
 # For more information: https://gateway-api.sigs.k8s.io/
 gateway:
@@ -271,22 +271,22 @@ gateway:
     # - name: https
     #   port: 443
     #   protocol: HTTPS
-    #   hostname: "kite.example.com"
+    #   hostname: "lightkite.example.com"
     #   allowedRoutes:
     #     namespaces:
     #       from: Same
     #   tls:
     #     mode: Terminate
     #     certificateRefs:
-    #       - name: kite-tls-secret
+    #       - name: lightkite-tls-secret
   # HTTPRoute configuration (supports multiple routes)
   httpRoutes:
-    - name: kite
+    - name: lightkite
       # Annotations for the HTTPRoute
       annotations: {}
       # Hostnames to match (optional, matches all if empty)
       hostnames: []
-        # - kite.example.com
+        # - lightkite.example.com
       # Routing rules
       rules:
         - matches:
@@ -296,7 +296,7 @@ gateway:
           timeouts:
             request: "120s"
     # Example: additional route for different hostname/path
-    # - name: kite-api
+    # - name: lightkite-api
     #   annotations: {}
     #   hostnames:
     #     - api.example.com

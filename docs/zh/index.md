@@ -3,12 +3,12 @@
 layout: home
 
 hero:
-  name: "Kite"
+  name: "Lightkite"
   text: "现代 Kubernetes 仪表盘"
   tagline: "跨集群查看、操作与排查 Kubernetes 资源"
   image:
     src: /logo.svg
-    alt: Kite Logo
+    alt: Lightkite Logo
   actions:
     - theme: brand
       text: 开始使用

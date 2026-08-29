@@ -3,7 +3,7 @@ package model
 import (
 	"testing"
 
-	"github.com/zxh326/kite/pkg/common"
+	"github.com/realmroot/lightkite/pkg/common"
 )
 
 func TestDefaultGeneralNodeTerminalImageValue(t *testing.T) {

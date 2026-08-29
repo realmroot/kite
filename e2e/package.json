@@ -1,5 +1,5 @@
 {
-  "name": "kite-e2e",
+  "name": "lightkite-e2e",
   "private": true,
   "type": "module",
   "engines": {

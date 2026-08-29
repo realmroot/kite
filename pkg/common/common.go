@@ -13,8 +13,8 @@ import (
 const (
 	CookieExpirationSeconds = 48 * 60 * 60
 
-	NodeTerminalPodName    = "kite-node-terminal-agent"
-	KubectlTerminalPodName = "kite-kubectl-agent"
+	NodeTerminalPodName    = "lightkite-node-terminal-agent"
+	KubectlTerminalPodName = "lightkite-kubectl-agent"
 
 	KubectlAnnotation = "kubectl.kubernetes.io/last-applied-configuration"
 
@@ -54,7 +54,7 @@ var (
 	DBType                        = "sqlite"
 	DBDSN                         = "dev.db?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)"
 
-	KiteEncryptKey = "kite-default-encryption-key-change-in-production"
+	LightkiteEncryptKey = "kite-default-encryption-key-change-in-production"
 
 	AllNamespaces = "_all"
 
@@ -142,7 +142,7 @@ func LoadEnvs() {
 	loadDatabaseEnvs()
 
 	if key := os.Getenv("KITE_ENCRYPT_KEY"); key != "" {
-		KiteEncryptKey = key
+		LightkiteEncryptKey = key
 	} else {
 		klog.Warningf("KITE_ENCRYPT_KEY is not set, using default key, this is not secure for production!")
 	}

@@ -92,7 +92,7 @@ export function DaemonSetDetail(props: { namespace: string; name: string }) {
         updated.spec!.template!.metadata!.annotations = {}
       }
       updated.spec!.template!.metadata!.annotations[
-        'kite.kubernetes.io/restartedAt'
+        'lightkite.kubernetes.io/restartedAt'
       ] = new Date().toISOString()
       await updateResource('daemonsets', name, namespace, updated)
       toast.success('DaemonSet restart initiated')

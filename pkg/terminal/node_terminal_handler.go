@@ -8,12 +8,12 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/zxh326/kite/pkg/cluster"
-	"github.com/zxh326/kite/pkg/common"
-	"github.com/zxh326/kite/pkg/kube"
-	"github.com/zxh326/kite/pkg/model"
-	"github.com/zxh326/kite/pkg/utils"
-	"github.com/zxh326/kite/pkg/wsutil"
+	"github.com/realmroot/lightkite/pkg/cluster"
+	"github.com/realmroot/lightkite/pkg/common"
+	"github.com/realmroot/lightkite/pkg/kube"
+	"github.com/realmroot/lightkite/pkg/model"
+	"github.com/realmroot/lightkite/pkg/utils"
+	"github.com/realmroot/lightkite/pkg/wsutil"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -83,9 +83,9 @@ func buildNodeTerminalPod(nodeName, image string) *corev1.Pod {
 	hostPathType := corev1.HostPathDirectory
 	name := utils.GenerateNodeAgentName(nodeName)
 	labels := map[string]string{
-		"app.kubernetes.io/managed-by": "kite",
-		"kite.io/component":            "node-terminal",
-		"kite.io/session":              name,
+		"app.kubernetes.io/managed-by": "lightkite",
+		"lightkite.io/component":       "node-terminal",
+		"lightkite.io/session":         name,
 	}
 	return &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: common.AgentPodNamespace, Labels: labels},

@@ -5,8 +5,8 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/zxh326/kite/pkg/cluster"
-	"github.com/zxh326/kite/pkg/model"
+	"github.com/realmroot/lightkite/pkg/cluster"
+	"github.com/realmroot/lightkite/pkg/model"
 	"gorm.io/gorm"
 	"k8s.io/kubectl/pkg/describe"
 )

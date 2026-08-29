@@ -4,8 +4,8 @@ import (
 	"fmt"
 
 	"github.com/gin-gonic/gin"
-	"github.com/zxh326/kite/pkg/cluster"
-	"github.com/zxh326/kite/pkg/common"
+	"github.com/realmroot/lightkite/pkg/cluster"
+	"github.com/realmroot/lightkite/pkg/common"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	apiserverinternalv1alpha1 "k8s.io/api/apiserverinternal/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"

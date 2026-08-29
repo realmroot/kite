@@ -11,7 +11,7 @@ import (
 	"time"
 
 	semver "github.com/blang/semver/v4"
-	"github.com/zxh326/kite/pkg/common"
+	"github.com/realmroot/lightkite/pkg/common"
 	"k8s.io/klog/v2"
 )
 
@@ -61,7 +61,7 @@ func checkForUpdate(ctx context.Context, currentVersion string) updateCheckResul
 		return result
 	}
 
-	req.Header.Set("User-Agent", "kite-version-checker/"+currentVersion)
+	req.Header.Set("User-Agent", "lightkite-version-checker/"+currentVersion)
 	req.Header.Set("Accept", "application/vnd.github+json")
 
 	resp, err := http.DefaultClient.Do(req)

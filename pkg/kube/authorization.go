@@ -10,7 +10,7 @@ import (
 
 // CheckSelfSubjectAccess asks Kubernetes whether the current request identity
 // may perform the supplied resource operation. Kubernetes remains the policy
-// authority; Kite only uses the result to protect data obtained outside the
+// authority; Lightkite only uses the result to protect data obtained outside the
 // target resource endpoint, such as persisted history or Prometheus samples.
 func CheckSelfSubjectAccess(
 	ctx context.Context,

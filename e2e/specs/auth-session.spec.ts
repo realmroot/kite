@@ -17,7 +17,9 @@ test.describe("OIDC session", () => {
 
     await page.waitForURL("**/login");
     await expect(
-      page.getByRole("button", { name: "Continue with Kite E2E Identity" }),
+      page.getByRole("button", {
+        name: "Continue with Lightkite E2E Identity",
+      }),
     ).toBeVisible();
     const user = await page.request.get("/api/auth/user");
     expect(user.status()).toBe(401);

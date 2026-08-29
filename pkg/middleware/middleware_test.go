@@ -9,8 +9,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	dto "github.com/prometheus/client_model/go"
-	"github.com/zxh326/kite/pkg/cluster"
-	"github.com/zxh326/kite/pkg/model"
+	"github.com/realmroot/lightkite/pkg/cluster"
+	"github.com/realmroot/lightkite/pkg/model"
 )
 
 func TestStaticCache(t *testing.T) {

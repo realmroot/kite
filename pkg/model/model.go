@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/glebarez/sqlite"
-	"github.com/zxh326/kite/pkg/common"
+	"github.com/realmroot/lightkite/pkg/common"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -86,7 +86,7 @@ func InitDB() {
 		panic("failed to configure database pool: " + err.Error())
 	}
 	if common.DBType == "sqlite" {
-		// Kite's SQLite database stores low-volume product metadata. A single
+		// Lightkite's SQLite database stores low-volume product metadata. A single
 		// connection keeps transaction locking and connection-local PRAGMAs
 		// deterministic; multi-replica deployments use PostgreSQL or MySQL.
 		sqldb.SetMaxOpenConns(1)

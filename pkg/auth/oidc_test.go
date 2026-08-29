@@ -14,8 +14,8 @@ import (
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
-	"github.com/zxh326/kite/pkg/common"
-	"github.com/zxh326/kite/pkg/model"
+	"github.com/realmroot/lightkite/pkg/common"
+	"github.com/realmroot/lightkite/pkg/model"
 	"golang.org/x/oauth2"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -174,12 +174,12 @@ func TestIDTokenForSessionUsesCurrentUnexpiredCredential(t *testing.T) {
 		t.Fatal(err)
 	}
 	previousDB := model.DB
-	previousKey := common.KiteEncryptKey
+	previousKey := common.LightkiteEncryptKey
 	model.DB = db
-	common.KiteEncryptKey = "test-encryption-key"
+	common.LightkiteEncryptKey = "test-encryption-key"
 	t.Cleanup(func() {
 		model.DB = previousDB
-		common.KiteEncryptKey = previousKey
+		common.LightkiteEncryptKey = previousKey
 	})
 	session := model.OIDCSession{
 		TokenHash: "hash",
@@ -217,12 +217,12 @@ func TestSessionTokensUseCredentialsReloadedUnderRefreshLock(t *testing.T) {
 		t.Fatal(err)
 	}
 	previousDB := model.DB
-	previousKey := common.KiteEncryptKey
+	previousKey := common.LightkiteEncryptKey
 	model.DB = db
-	common.KiteEncryptKey = "refresh-race-test-key"
+	common.LightkiteEncryptKey = "refresh-race-test-key"
 	t.Cleanup(func() {
 		model.DB = previousDB
-		common.KiteEncryptKey = previousKey
+		common.LightkiteEncryptKey = previousKey
 	})
 
 	current := model.OIDCSession{
@@ -310,14 +310,14 @@ func TestAuthenticatedSessionRejectsPreviousConfiguredIssuer(t *testing.T) {
 		t.Fatal(err)
 	}
 	previousDB := model.DB
-	previousKey := common.KiteEncryptKey
+	previousKey := common.LightkiteEncryptKey
 	previousIssuer := common.OIDCIssuer
 	model.DB = db
-	common.KiteEncryptKey = "issuer-change-test-key"
+	common.LightkiteEncryptKey = "issuer-change-test-key"
 	common.OIDCIssuer = "https://current-issuer.example"
 	t.Cleanup(func() {
 		model.DB = previousDB
-		common.KiteEncryptKey = previousKey
+		common.LightkiteEncryptKey = previousKey
 		common.OIDCIssuer = previousIssuer
 	})
 

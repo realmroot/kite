@@ -137,7 +137,7 @@ func getRegistryResponse(ctx context.Context, targetURL string) (*http.Response,
 		return nil, err
 	}
 	request.Header.Set("Accept", "application/json")
-	request.Header.Set("User-Agent", "kite")
+	request.Header.Set("User-Agent", "lightkite")
 	client := &http.Client{
 		Timeout: registryRequestTimeout,
 		CheckRedirect: func(next *http.Request, via []*http.Request) error {

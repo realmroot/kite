@@ -2,14 +2,14 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-KIND_NAME="${E2E_KIND_NAME:-kite-e2e}"
-KUBECONFIG_PATH="${E2E_KUBECONFIG:-${TMPDIR:-/tmp}/kite-e2e.kubeconfig}"
-OIDC_CERT_DIR="${KITE_E2E_OIDC_CERT_DIR:-${TMPDIR:-/tmp}/kite-e2e-oidc}"
+KIND_NAME="${E2E_KIND_NAME:-lightkite-e2e}"
+KUBECONFIG_PATH="${E2E_KUBECONFIG:-${TMPDIR:-/tmp}/lightkite-e2e.kubeconfig}"
+OIDC_CERT_DIR="${KITE_E2E_OIDC_CERT_DIR:-${TMPDIR:-/tmp}/lightkite-e2e-oidc}"
 OIDC_CA_FILE="${OIDC_CERT_DIR}/ca.crt"
 NODE_IMAGE="${E2E_NODE_IMAGE:-}"
 CONTROL_PLANE="${KIND_NAME}-control-plane"
 FORWARDER="${KIND_NAME}-oidc-forwarder"
-RUNTIME_CONFIG="$(mktemp "${TMPDIR:-/tmp}/kite-kind.XXXXXX.yaml")"
+RUNTIME_CONFIG="$(mktemp "${TMPDIR:-/tmp}/lightkite-kind.XXXXXX.yaml")"
 
 cleanup() {
   rm -f "${RUNTIME_CONFIG}"
@@ -48,7 +48,7 @@ install_prometheus_api_fixture() {
   kubectl --kubeconfig "${KUBECONFIG_PATH}" apply -f \
     "${ROOT_DIR}/e2e/fixtures/kind/prometheus-api-fixture.yaml" >/dev/null
   kubectl --kubeconfig "${KUBECONFIG_PATH}" -n monitoring rollout status \
-    deployment/kite-prometheus-api --timeout=2m >/dev/null
+    deployment/lightkite-prometheus-api --timeout=2m >/dev/null
 }
 
 if kind get clusters | grep -qx "${KIND_NAME}"; then

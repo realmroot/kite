@@ -1,6 +1,6 @@
 # Helm Chart Values
 
-Chart 部署的 Kite 不挂载 ServiceAccount token，也不会为 Dashboard 的资源访问
+Chart 部署的 Lightkite 不挂载 ServiceAccount token，也不会为 Dashboard 的资源访问
 创建 Kubernetes RBAC 授权。请配置 OIDC，并在每个目标集群分别绑定用户/group。
 
 ## 必填身份配置
@@ -11,7 +11,7 @@ Chart 部署的 Kite 不挂载 ServiceAccount token，也不会为 Dashboard 的
 | `oidc.issuer` | 标准 OpenID Connect issuer URL |
 | `oidc.clientId` | 公开 PKCE 或机密 Client ID |
 | `oidc.clientSecret` | 可选的机密 Client Secret；公开 PKCE Client 留空 |
-| `platformAdminGroups` | 可管理 Kite 自有共享数据的 group；group 含空格、逗号或其他标点时使用 JSON 字符串数组 |
+| `platformAdminGroups` | 可管理 Lightkite 自有共享数据的 group；group 含空格、逗号或其他标点时使用 JSON 字符串数组 |
 | `platformAdminSubjects` | 具有相同平台权限的精确 OIDC `sub`；同样支持 JSON 字符串数组 |
 | `encryptKey` | 加密服务端提供方 token 的随机密钥 |
 | `jwtSecret` | 用于短时隧道注册凭据的独立随机密钥 |
@@ -83,7 +83,7 @@ SQLite 使用单个应用连接，并启用外键、Busy Timeout 与 WAL，从�
 
 | Value | 默认值 | 说明 |
 | --- | --- | --- |
-| `serviceAccount.create` | `true` | 为 Kite Pod 创建身份 |
+| `serviceAccount.create` | `true` | 为 Lightkite Pod 创建身份 |
 | `serviceAccount.automount` | `false` | 挂载 Kubernetes API token；应保持关闭 |
 | `podSecurityContext` | 非 root UID/GID 65532、RuntimeDefault seccomp | Pod Security Context |
 | `securityContext` | 禁止提权、只读根文件系统、删除全部 capabilities | Container Security Context |
@@ -93,4 +93,4 @@ SQLite 使用单个应用连接，并启用外键、Busy Timeout 与 WAL，从�
 | `volumes`、`volumeMounts` | 空 | 额外挂载 |
 
 包括 Gateway API 与 Probe 结构在内的完整权威默认值位于
-`charts/kite/values.yaml`。
+`charts/lightkite/values.yaml`。

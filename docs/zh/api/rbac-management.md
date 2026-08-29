@@ -1,13 +1,13 @@
 # 授权
 
-Kite 不提供应用层 RBAC 管理 API。Kubernetes 资源权限通过原生 `Role`、
+Lightkite 不提供应用层 RBAC 管理 API。Kubernetes 资源权限通过原生 `Role`、
 `ClusterRole`、`RoleBinding` 和 `ClusterRoleBinding` 对象在 Kubernetes 中配置。
 
 Binding 可以绑定精确的 OIDC 用户，也可以绑定 OIDC group；取值必须与 API
-Server 配置的 username/groups claim 一致。Kite 只转发当前用户已签名的 ID
+Server 配置的 username/groups claim 一致。Lightkite 只转发当前用户已签名的 ID
 token，不会模拟其他主体。
 
-Kite 自有共享数据采用独立且收窄的平台策略：`PLATFORM_ADMIN_GROUPS` 成员可
+Lightkite 自有共享数据采用独立且收窄的平台策略：`PLATFORM_ADMIN_GROUPS` 成员可
 管理集群目录、共享模板/偏好、Helm Repository 元数据及审计视图。该策略绝不
 扩大用户的 Kubernetes 权限。
 

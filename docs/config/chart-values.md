@@ -1,6 +1,6 @@
 # Helm chart values
 
-The chart deploys Kite without a mounted ServiceAccount token and does not
+The chart deploys Lightkite without a mounted ServiceAccount token and does not
 create Kubernetes RBAC grants for dashboard resource access. Configure OIDC and
 bind users/groups in every target cluster separately.
 
@@ -12,7 +12,7 @@ bind users/groups in every target cluster separately.
 | `oidc.issuer` | Standard OpenID Connect issuer URL |
 | `oidc.clientId` | Public PKCE or confidential client ID |
 | `oidc.clientSecret` | Optional confidential-client secret; empty for a public PKCE client |
-| `platformAdminGroups` | Groups allowed to manage Kite-owned shared metadata; use a JSON string array when a group contains spaces, commas, or other punctuation |
+| `platformAdminGroups` | Groups allowed to manage Lightkite-owned shared metadata; use a JSON string array when a group contains spaces, commas, or other punctuation |
 | `platformAdminSubjects` | Exact OIDC `sub` values with the same platform access; accepts the same JSON string-array form |
 | `encryptKey` | Random key used to encrypt server-side provider tokens |
 
@@ -87,7 +87,7 @@ policy are rejected.
 
 | Value | Default | Description |
 | --- | --- | --- |
-| `serviceAccount.create` | `true` | Create an identity for the Kite Pod |
+| `serviceAccount.create` | `true` | Create an identity for the Lightkite Pod |
 | `serviceAccount.automount` | `false` | Mount a Kubernetes API token; keep disabled |
 | `podSecurityContext` | non-root UID/GID 65532, RuntimeDefault seccomp | Pod security context |
 | `securityContext` | no privilege escalation, read-only root, all capabilities dropped | Container security context |
@@ -97,4 +97,4 @@ policy are rejected.
 | `volumes`, `volumeMounts` | empty | Additional mounts |
 
 The authoritative exhaustive defaults, including Gateway API and probe
-structures, are in `charts/kite/values.yaml`.
+structures, are in `charts/lightkite/values.yaml`.

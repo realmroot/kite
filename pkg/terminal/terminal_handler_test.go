@@ -7,9 +7,9 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/zxh326/kite/pkg/cluster"
-	"github.com/zxh326/kite/pkg/common"
-	"github.com/zxh326/kite/pkg/kube"
+	"github.com/realmroot/lightkite/pkg/cluster"
+	"github.com/realmroot/lightkite/pkg/common"
+	"github.com/realmroot/lightkite/pkg/kube"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
@@ -39,7 +39,7 @@ func TestBuildKubectlSessionResourcesUsesOnlyCurrentUserIdentity(t *testing.T) {
 		}},
 	}
 
-	secret, pod, err := buildKubectlSessionResources(clientSet, "kite-kubectl-test", "kubectl:test")
+	secret, pod, err := buildKubectlSessionResources(clientSet, "lightkite-kubectl-test", "kubectl:test")
 	if err != nil {
 		t.Fatalf("build resources: %v", err)
 	}

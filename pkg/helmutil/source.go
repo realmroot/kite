@@ -12,7 +12,7 @@ import (
 	"time"
 
 	semver "github.com/blang/semver/v4"
-	"github.com/zxh326/kite/pkg/model"
+	"github.com/realmroot/lightkite/pkg/model"
 	repo "helm.sh/helm/v4/pkg/repo/v1"
 )
 
@@ -100,7 +100,7 @@ func LoadRepositoryIndexContext(ctx context.Context, repository model.HelmReposi
 	if err != nil {
 		return nil, err
 	}
-	indexFile, err := os.CreateTemp("", "kite-helm-index-*.yaml")
+	indexFile, err := os.CreateTemp("", "lightkite-helm-index-*.yaml")
 	if err != nil {
 		return nil, err
 	}
@@ -125,7 +125,7 @@ func artifactHubChartPackage(ctx context.Context, repositoryName, chartName, ver
 	if err != nil {
 		return ChartPackage{}, err
 	}
-	req.Header.Set("User-Agent", "kite")
+	req.Header.Set("User-Agent", "lightkite")
 
 	client := http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-OIDC_CERT_DIR="${KITE_E2E_OIDC_CERT_DIR:-${TMPDIR:-/tmp}/kite-e2e-oidc}"
+OIDC_CERT_DIR="${KITE_E2E_OIDC_CERT_DIR:-${TMPDIR:-/tmp}/lightkite-e2e-oidc}"
 OIDC_CA_KEY="${OIDC_CERT_DIR}/ca.key"
 OIDC_CA_CERT="${OIDC_CERT_DIR}/ca.crt"
 OIDC_SERVER_KEY="${OIDC_CERT_DIR}/tls.key"
@@ -22,7 +22,7 @@ openssl req -x509 -newkey rsa:2048 -sha256 -nodes \
   -keyout "${OIDC_CA_KEY}" \
   -out "${OIDC_CA_CERT}" \
   -days 3650 \
-  -subj "/CN=Kite E2E OIDC CA" >/dev/null 2>&1
+  -subj "/CN=Lightkite E2E OIDC CA" >/dev/null 2>&1
 
 openssl req -newkey rsa:2048 -sha256 -nodes \
   -keyout "${OIDC_SERVER_KEY}" \

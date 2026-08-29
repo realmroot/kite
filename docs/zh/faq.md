@@ -2,9 +2,9 @@
 
 ## 数据共享
 
-默认情况下，Kite 不会收集任何分析数据。
+默认情况下，Lightkite 不会收集任何分析数据。
 
-Kite 不内置统计账户或数据接收端。运维人员可以配置自己的 Umami 兼容
+Lightkite 不内置统计账户或数据接收端。运维人员可以配置自己的 Umami 兼容
 `ANALYTICS_SCRIPT_URL` 和 `ANALYTICS_WEBSITE_ID`，再通过
 `ENABLE_ANALYTICS=true` 或管理设置页面启用；关闭时浏览器不会加载统计脚本。
 
@@ -13,17 +13,17 @@ Kite 不内置统计账户或数据接收端。运维人员可以配置自己的
 如果在访问资源时，遇到如下错误提示，
 
 ```txt
-用户 admin 没有权限在集群 in-cluster 的命名空间 kite 中执行 获取 configmaps
+用户 admin 没有权限在集群 in-cluster 的命名空间 lightkite 中执行 获取 configmaps
 ```
 
-这表示 Kubernetes 已认证显示的 OIDC 身份，但原生 RBAC 不允许它读取 `kite`
+这表示 Kubernetes 已认证显示的 OIDC 身份，但原生 RBAC 不允许它读取 `lightkite`
 命名空间中的 `configmaps`。
 
 你需要参考 [RBAC 配置指南](./config/rbac-config) 来配置用户的权限。
 
 ## 托管 Kubernetes 集群连接问题
 
-Kite 不使用云 CLI kubeconfig 或 `exec` 插件。托管 API Server 必须接受 Kite
+Lightkite 不使用云 CLI kubeconfig 或 `exec` 插件。托管 API Server 必须接受 Lightkite
 登录使用的同一外部 OIDC issuer 与 audience，否则目前无法直接传递用户 token。
 不要通过创建共享 ServiceAccount token 绕过这一限制。
 
@@ -31,7 +31,7 @@ Kite 不使用云 CLI kubeconfig 或 `exec` 插件。托管 API Server 必须接
 
 ## 持久化相关
 
-Kite 支持使用 SQLite、MySQL 或 PostgreSQL 作为数据库。
+Lightkite 支持使用 SQLite、MySQL 或 PostgreSQL 作为数据库。
 
 你可以通过环境变量 `DB_DSN` 来配置数据库连接字符串，`DB_TYPE` 来指定数据库类型（默认为 `sqlite`）。
 
@@ -48,7 +48,7 @@ Kite 支持使用 SQLite、MySQL 或 PostgreSQL 作为数据库。
 panic: failed to connect database: unable to open database file: out of memory (14)
 ```
 
-此问题与 Kite 使用的纯 Go SQLite 驱动有关（为避免 CGO 依赖）。该驱动在访问某些存储后端上的数据
+此问题与 Lightkite 使用的纯 Go SQLite 驱动有关（为避免 CGO 依赖）。该驱动在访问某些存储后端上的数据
 库文件时存在限制。
 
 **解决方案**：添加 SQLite 连接选项以提高与 hostPath 存储的兼容性。在 Helm values 中设置：
@@ -65,11 +65,11 @@ db:
 
 ## 如何更改字体
 
-Kite 默认提供三种字体：系统默认、`Maple Mono` 和 `JetBrains Mono`。
+Lightkite 默认提供三种字体：系统默认、`Maple Mono` 和 `JetBrains Mono`。
 
 如果您想使用其他字体，则需要自己构建项目。
 
-用 make 构建 kite，并在 `./ui/src/index.css` 中更改字体
+用 make 构建 lightkite，并在 `./ui/src/index.css` 中更改字体
 
 ```css
 @font-face {
@@ -89,11 +89,11 @@ body {
 }
 ```
 
-## 我如何为 Kite 做出贡献？
+## 我如何为 Lightkite 做出贡献？
 
 我们欢迎贡献！您可以：
 
-- 在发布当前 Kite 构建的仓库 Issue Tracker 中报告错误和功能请求
+- 在发布当前 Lightkite 构建的仓库 Issue Tracker 中报告错误和功能请求
 - 提交拉取请求
 - 改进文档
 - 分享反馈和使用案例
@@ -107,5 +107,5 @@ body {
 
 ---
 
-**没有找到您要找的内容？** 请在发布当前 Kite 构建的仓库中提交 Issue，
+**没有找到您要找的内容？** 请在发布当前 Lightkite 构建的仓库中提交 Issue，
 并附上版本接口的输出。

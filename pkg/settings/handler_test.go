@@ -9,8 +9,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
-	"github.com/zxh326/kite/pkg/common"
-	"github.com/zxh326/kite/pkg/model"
+	"github.com/realmroot/lightkite/pkg/common"
+	"github.com/realmroot/lightkite/pkg/model"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
@@ -18,7 +18,7 @@ import (
 func TestGeneralSettingHandlersReadAndUpdateRuntimeSettings(t *testing.T) {
 	setupGeneralSettingTestDB(t)
 	common.AnalyticsScriptURL = "https://analytics.example.test/script.js"
-	common.AnalyticsWebsiteID = "kite-test"
+	common.AnalyticsWebsiteID = "lightkite-test"
 	router := generalSettingTestRouter()
 
 	getResponse := performGeneralSettingRequest(t, router, http.MethodGet, "")
@@ -58,13 +58,13 @@ func TestGeneralSettingHandlerRejectsAnalyticsWithoutOperatorConfiguration(t *te
 func setupGeneralSettingTestDB(t *testing.T) {
 	t.Helper()
 	originalDB := model.DB
-	originalEncryptKey := common.KiteEncryptKey
+	originalEncryptKey := common.LightkiteEncryptKey
 	originalAnalytics := common.EnableAnalytics
 	originalAnalyticsScriptURL := common.AnalyticsScriptURL
 	originalAnalyticsWebsiteID := common.AnalyticsWebsiteID
 	originalVersionCheck := common.EnableVersionCheck
 
-	common.KiteEncryptKey = "settings-handler-test-key"
+	common.LightkiteEncryptKey = "settings-handler-test-key"
 	common.EnableAnalytics = false
 	common.AnalyticsScriptURL = ""
 	common.AnalyticsWebsiteID = ""
@@ -95,7 +95,7 @@ func setupGeneralSettingTestDB(t *testing.T) {
 			_ = sqlDB.Close()
 		}
 		model.DB = originalDB
-		common.KiteEncryptKey = originalEncryptKey
+		common.LightkiteEncryptKey = originalEncryptKey
 		common.EnableAnalytics = originalAnalytics
 		common.AnalyticsScriptURL = originalAnalyticsScriptURL
 		common.AnalyticsWebsiteID = originalAnalyticsWebsiteID

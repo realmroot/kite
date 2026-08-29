@@ -10,7 +10,7 @@ Kubernetes 资源权限。
 | --- | --- |
 | `name` | 唯一展示名称 |
 | `description` | 可选说明 |
-| `apiServerUrl` | Kite 可连接的 Kubernetes HTTPS 地址 |
+| `apiServerUrl` | Lightkite 可连接的 Kubernetes HTTPS 地址 |
 | `caBundle` | 可选 PEM 或 base64 PEM 信任链 |
 | `tlsServerName` | 可选 TLS 名称覆盖 |
 | `prometheusURL` | 可选 Prometheus Service URL |
@@ -53,8 +53,8 @@ Content-Type: application/json
 }
 ```
 
-`apiServerUrl` 必须使用 HTTPS，并且 Kite 必须可以连接该地址。私网路由、DNS
-及隧道属于部署基础设施，不是 Kite 私有协议。
+`apiServerUrl` 必须使用 HTTPS，并且 Lightkite 必须可以连接该地址。私网路由、DNS
+及隧道属于部署基础设施，不是 Lightkite 私有协议。
 
 ## 更新与删除
 

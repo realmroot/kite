@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/glebarez/sqlite"
-	"github.com/zxh326/kite/pkg/common"
+	"github.com/realmroot/lightkite/pkg/common"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
@@ -426,9 +426,9 @@ func TestRemoveClusterCredentialsMigrationKeepsOnlyConnectionMetadata(t *testing
 		t.Fatalf("create legacy cluster Agent index: %v", err)
 	}
 
-	oldKey := common.KiteEncryptKey
-	common.KiteEncryptKey = "migration-test-encryption-key"
-	t.Cleanup(func() { common.KiteEncryptKey = oldKey })
+	oldKey := common.LightkiteEncryptKey
+	common.LightkiteEncryptKey = "migration-test-encryption-key"
+	t.Cleanup(func() { common.LightkiteEncryptKey = oldKey })
 	kubeconfig := `apiVersion: v1
 kind: Config
 current-context: production

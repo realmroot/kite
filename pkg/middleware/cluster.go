@@ -5,7 +5,7 @@ import (
 	"net/url"
 
 	"github.com/gin-gonic/gin"
-	"github.com/zxh326/kite/pkg/cluster"
+	"github.com/realmroot/lightkite/pkg/cluster"
 )
 
 const (

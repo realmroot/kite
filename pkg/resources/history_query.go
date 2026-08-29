@@ -1,7 +1,7 @@
 package resources
 
 import (
-	"github.com/zxh326/kite/pkg/cluster"
+	"github.com/realmroot/lightkite/pkg/cluster"
 	"gorm.io/gorm"
 )
 

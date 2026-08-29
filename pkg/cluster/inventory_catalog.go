@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/zxh326/kite/pkg/common"
-	"github.com/zxh326/kite/pkg/kube"
+	"github.com/realmroot/lightkite/pkg/common"
+	"github.com/realmroot/lightkite/pkg/kube"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/rest"

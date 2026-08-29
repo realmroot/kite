@@ -9,8 +9,8 @@ export const oidcIssuer =
   process.env.KITE_E2E_OIDC_ISSUER || "https://localhost:5556";
 
 export const adminUser = {
-  username: process.env.KITE_E2E_ADMIN_USERNAME || "admin@kite.test",
-  name: process.env.KITE_E2E_ADMIN_NAME || "Kite Admin",
+  username: process.env.KITE_E2E_ADMIN_USERNAME || "admin@lightkite.test",
+  name: process.env.KITE_E2E_ADMIN_NAME || "Lightkite Admin",
   password: process.env.KITE_E2E_ADMIN_PASSWORD || "KiteE2E!2345",
   subject:
     process.env.KITE_E2E_ADMIN_SUBJECT ||
@@ -18,15 +18,16 @@ export const adminUser = {
 };
 
 export const viewerUser = {
-  username: process.env.KITE_E2E_VIEWER_USERNAME || "viewer@kite.test",
-  name: process.env.KITE_E2E_VIEWER_NAME || "Kite Viewer",
+  username: process.env.KITE_E2E_VIEWER_USERNAME || "viewer@lightkite.test",
+  name: process.env.KITE_E2E_VIEWER_NAME || "Lightkite Viewer",
   password: process.env.KITE_E2E_VIEWER_PASSWORD || "KiteViewer!2345",
   subject:
     process.env.KITE_E2E_VIEWER_SUBJECT ||
     "CiQyMjIyMjIyMi0yMjIyLTQyMjItODIyMi0yMjIyMjIyMjIyMjISBWxvY2Fs",
 };
 
-export const kindClusterName = process.env.KITE_E2E_CLUSTER_NAME || "kite-e2e";
+export const kindClusterName =
+  process.env.KITE_E2E_CLUSTER_NAME || "lightkite-e2e";
 
 export function ensureAuthDir() {
   mkdirSync(dirname(authFile), { recursive: true });

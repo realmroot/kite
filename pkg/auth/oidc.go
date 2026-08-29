@@ -18,8 +18,8 @@ import (
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/gin-gonic/gin"
-	"github.com/zxh326/kite/pkg/common"
-	"github.com/zxh326/kite/pkg/model"
+	"github.com/realmroot/lightkite/pkg/common"
+	"github.com/realmroot/lightkite/pkg/model"
 	"golang.org/x/oauth2"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"

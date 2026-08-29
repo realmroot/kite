@@ -9,10 +9,10 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/zxh326/kite/pkg/cluster"
-	"github.com/zxh326/kite/pkg/common"
-	"github.com/zxh326/kite/pkg/helmutil"
-	"github.com/zxh326/kite/pkg/model"
+	"github.com/realmroot/lightkite/pkg/cluster"
+	"github.com/realmroot/lightkite/pkg/common"
+	"github.com/realmroot/lightkite/pkg/helmutil"
+	"github.com/realmroot/lightkite/pkg/model"
 	"helm.sh/helm/v4/pkg/action"
 	release "helm.sh/helm/v4/pkg/release/v1"
 	"helm.sh/helm/v4/pkg/storage/driver"
@@ -130,9 +130,9 @@ func (h *HelmReleaseHandler) runInstall(c *gin.Context, dryRun bool) (rel *relea
 	}
 	description := req.Description
 	if description == "" {
-		description = "Install requested from Kite"
+		description = "Install requested from Lightkite"
 		if dryRun {
-			description = "Dry run install requested from Kite"
+			description = "Dry run install requested from Lightkite"
 		}
 	}
 
@@ -245,7 +245,7 @@ func (h *HelmReleaseHandler) Delete(c *gin.Context) {
 
 	if err := helmutil.UninstallRelease(cfg, c.Param("name"), helmutil.UninstallReleaseOptions{
 		Timeout:     helmActionTimeout,
-		Description: "Deleted from Kite",
+		Description: "Deleted from Lightkite",
 	}); err != nil {
 		runErr = err
 		writeHelmError(c, err)
@@ -341,9 +341,9 @@ func (h *HelmReleaseHandler) runUpgrade(c *gin.Context, dryRun bool) (result hel
 	}
 	description := req.Description
 	if description == "" {
-		description = "Dry run upgrade requested from Kite"
+		description = "Dry run upgrade requested from Lightkite"
 		if !dryRun {
-			description = "Upgrade requested from Kite"
+			description = "Upgrade requested from Lightkite"
 		}
 	}
 

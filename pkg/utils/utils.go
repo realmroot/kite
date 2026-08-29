@@ -9,7 +9,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/rand"
 )
 
-const kiteBasePlaceholder = "__KITE_BASE__"
+const lightkiteBasePlaceholder = "__KITE_BASE__"
 
 func InjectAnalytics(htmlContent, scriptURL, websiteID string) string {
 	analyticsScript := fmt.Sprintf(
@@ -22,13 +22,13 @@ func InjectAnalytics(htmlContent, scriptURL, websiteID string) string {
 	return re.ReplaceAllString(htmlContent, "  "+analyticsScript+"\n  </head>")
 }
 
-func InjectKiteBase(htmlContent string, base string) string {
+func InjectLightkiteBase(htmlContent string, base string) string {
 	assetBase := base
 	if assetBase == "/" {
 		assetBase = ""
 	}
 
-	htmlContent = strings.ReplaceAll(htmlContent, kiteBasePlaceholder, html.EscapeString(assetBase))
+	htmlContent = strings.ReplaceAll(htmlContent, lightkiteBasePlaceholder, html.EscapeString(assetBase))
 
 	baseScript := fmt.Sprintf(`<script>window.__dynamic_base__=%q;</script>`, assetBase)
 	re := regexp.MustCompile(`<head>`)

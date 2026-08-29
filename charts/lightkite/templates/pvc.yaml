@@ -2,10 +2,10 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: {{ include "kite.fullname" . }}-storage
+  name: {{ include "lightkite.fullname" . }}-storage
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "kite.labels" . | nindent 4 }}
+    {{- include "lightkite.labels" . | nindent 4 }}
 spec:
   accessModes:
     {{- toYaml .Values.db.sqlite.persistence.pvc.accessModes | nindent 4 }}

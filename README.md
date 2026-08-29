@@ -1,27 +1,29 @@
-# Kite — OIDC-native Kubernetes Console
+# Lightkite — A standards-based Kubernetes dashboard
 
 <div align="center">
 
-<img src="./docs/assets/logo.svg" alt="Kite Logo" width="128" height="128">
+<img src="./docs/assets/logo.svg" alt="Lightkite logo" width="128" height="128">
 
-_A Kubernetes dashboard where the user identity reaches the API server_
+_A lightweight Kubernetes dashboard where the user's identity reaches the API server_
 
 [![License](https://img.shields.io/badge/License-Apache-green.svg)](LICENSE)
 
-[**Documentation**](docs/index.md) | [**Architecture**](docs/oidc-kubernetes.md)
+[**Documentation**](docs/index.md) | [**Architecture**](docs/oidc-kubernetes.md) | [**Differences from Kite**](docs/architecture/upstream-kite.md)
 <br>
 **English** | [中文](./README_zh.md)
 
 </div>
 
-This fork keeps Kite's Kubernetes UI and replaces its local identity, local
+Lightkite is an independent fork of [Kite](https://github.com/kite-org/kite).
+It keeps Kite's Kubernetes UI and replaces its local identity, local
 authorization, and shared privileged kubeconfigs with standard OpenID Connect
 and Kubernetes-native RBAC. The browser signs in through the configured OIDC
-provider; Kite sends that user's validated ID token to the selected Kubernetes
+provider; Lightkite sends that user's validated ID token to the selected Kubernetes
 API server. Configured group claims therefore map directly to Kubernetes
 RoleBindings and ClusterRoleBindings.
 
-See the [OIDC Kubernetes architecture](docs/oidc-kubernetes.md). Provider-specific
+See the [OIDC Kubernetes architecture](docs/oidc-kubernetes.md) and the detailed
+[comparison with upstream Kite](docs/architecture/upstream-kite.md). Provider-specific
 configuration belongs under `examples/` and never enters the core runtime.
 The backend also provides a transparent [Kubernetes API gateway](docs/kubernetes-api-gateway.md)
 for moving UI data access onto canonical Kubernetes resource APIs.
@@ -87,20 +89,20 @@ closed if they are absent or use the upstream development defaults.
 
 #### Using Helm (Recommended)
 
-1. **Install the versioned OCI chart published by your fork**
+1. **Install the versioned OCI chart published by Lightkite**
 
    ```bash
-   helm install kite oci://ghcr.io/<owner>/charts/kite \
-     --version <version> -n kite-system --create-namespace -f values.yaml
+   helm install lightkite oci://ghcr.io/realmroot/charts/lightkite \
+     --version <version> -n lightkite-system --create-namespace -f values.yaml
    ```
 
 2. **Or install from Helm repository**
 
    ```bash
-   helm repo add kite https://<owner>.github.io/kite/
+   helm repo add lightkite https://realmroot.github.io/lightkite/
    helm repo update
-   helm install kite kite/kite --version <version> \
-     -n kite-system --create-namespace -f values.yaml
+   helm install lightkite lightkite/lightkite --version <version> \
+     -n lightkite-system --create-namespace -f values.yaml
    ```
 
 #### Using kubectl
@@ -110,7 +112,7 @@ closed if they are absent or use the upstream development defaults.
    ```bash
    kubectl apply -f deploy/install.yaml
    # Release assets contain the same manifest with an immutable image tag.
-   curl -fLO https://github.com/<owner>/kite/releases/download/vX.Y.Z/install.yaml
+   curl -fLO https://github.com/realmroot/lightkite/releases/download/vX.Y.Z/install.yaml
    $EDITOR install.yaml
    kubectl apply -f install.yaml
    ```
@@ -118,7 +120,7 @@ closed if they are absent or use the upstream development defaults.
 2. **Access via port-forward**
 
    ```bash
-   kubectl port-forward -n kite-system svc/kite 8080:8080
+   kubectl port-forward -n lightkite-system svc/lightkite 8080:8080
    ```
 
 ### Build from Source
@@ -126,8 +128,8 @@ closed if they are absent or use the upstream development defaults.
 1. **Clone the repository**
 
    ```bash
-   git clone https://github.com/<owner>/kite.git
-   cd kite
+   git clone https://github.com/realmroot/lightkite.git
+   cd lightkite
    ```
 
 2. **Build the project**
@@ -152,6 +154,15 @@ For troubleshooting, see the local [FAQ](docs/faq.md) and configuration guides.
 ## 🤝 Contributing
 
 We welcome contributions! Please see our [contributing guidelines](./CONTRIBUTING.md) for details on how to get involved.
+
+## 🙏 Upstream Project
+
+Lightkite is based on Kite and remains grateful to its maintainers and
+contributors for the dashboard, resource views, and interaction model that made
+this fork possible. Lightkite is independently maintained, is not affiliated
+with or endorsed by the upstream project, and does not plan to merge this
+architecture fork back into Kite as a whole. Focused fixes may still be shared
+with upstream when they are generally useful.
 
 ## 📄 License
 

@@ -1,6 +1,6 @@
 # Authentication API
 
-Kite has one standards-compliant OpenID Connect provider configured by the
+Lightkite has one standards-compliant OpenID Connect provider configured by the
 operator. It does not expose password, LDAP, passkey, MFA-provider management,
 OAuth-provider CRUD, or API-key authentication endpoints.
 
@@ -17,7 +17,7 @@ returns the provider authorization URL:
 ```
 
 The browser navigates to `auth_url`. The provider redirects to
-`GET /api/auth/callback`; Kite validates state, nonce, issuer, signature,
+`GET /api/auth/callback`; Lightkite validates state, nonce, issuer, signature,
 audience, and token lifetime before creating the session.
 
 The browser receives only an opaque `HttpOnly`, `SameSite=Lax` cookie. ID,
@@ -34,7 +34,7 @@ GET  /api/v1/bootstrap
 ```
 
 `GET /api/auth/user` returns the local presentation profile, whether the user
-may administer Kite-owned shared metadata, and effective sidebar preferences.
+may administer Lightkite-owned shared metadata, and effective sidebar preferences.
 It does not return provider tokens.
 
 `POST /api/auth/refresh` refreshes and revalidates the upstream OIDC session.
@@ -44,9 +44,9 @@ It does not return provider tokens.
 
 The OIDC ID token from the current session is attached to that user's
 Kubernetes request. Kubernetes authenticates the token and authorizes the user
-or groups with native RBAC. Kite roles and API keys are not part of this path.
+or groups with native RBAC. Lightkite roles and API keys are not part of this path.
 
-`PLATFORM_ADMIN_GROUPS` is a separate policy for Kite-owned shared metadata,
+`PLATFORM_ADMIN_GROUPS` is a separate policy for Lightkite-owned shared metadata,
 such as the cluster catalog and global preferences. It cannot grant any
 Kubernetes permission.
 

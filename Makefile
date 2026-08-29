@@ -1,23 +1,23 @@
-# Makefile for Kite project
+# Makefile for Lightkite project
 .PHONY: help dev build clean test verify format-check verify-architecture verify-deployment verify-kubernetes-compatibility docker-build docker-run frontend static backend install deps e2e-install e2e-install-browser e2e-kind-up e2e-kind-down e2e-stop-app e2e-setup-dex e2e-run e2e-run-headed e2e-test e2e-test-headed
 
 -include .env
 export
 
 # Variables
-BINARY_NAME=kite
+BINARY_NAME=lightkite
 UI_DIR=ui
 E2E_DIR=e2e
-DOCKER_IMAGE=kite
-E2E_KIND_NAME ?= kite-e2e
+DOCKER_IMAGE=lightkite
+E2E_KIND_NAME ?= lightkite-e2e
 E2E_NODE_IMAGE ?=
 E2E_PORT ?= 38080
-E2E_KUBECONFIG ?= $(shell printf '%s' "$${TMPDIR:-/tmp/}kite-e2e.kubeconfig")
-E2E_AUTH_NETWORK ?= kite-e2e-auth
-E2E_DEX_CONTAINER ?= kite-e2e-dex
-E2E_DEX_VOLUME ?= kite-e2e-dex-data
+E2E_KUBECONFIG ?= $(shell printf '%s' "$${TMPDIR:-/tmp/}lightkite-e2e.kubeconfig")
+E2E_AUTH_NETWORK ?= lightkite-e2e-auth
+E2E_DEX_CONTAINER ?= lightkite-e2e-dex
+E2E_DEX_VOLUME ?= lightkite-e2e-dex-data
 E2E_OAUTH_PORT ?= 5556
-E2E_OIDC_CERT_DIR ?= $(shell printf '%s' "$${TMPDIR:-/tmp/}kite-e2e-oidc")
+E2E_OIDC_CERT_DIR ?= $(shell printf '%s' "$${TMPDIR:-/tmp/}lightkite-e2e-oidc")
 E2E_OIDC_FORWARDER ?= $(E2E_KIND_NAME)-oidc-forwarder
 SPEC ?=
 
@@ -28,9 +28,9 @@ COMMIT_ID ?= $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
 
 # Build flags
 LDFLAGS=-ldflags "-s -w \
-	-X 'github.com/zxh326/kite/pkg/version.Version=$(VERSION)' \
-	-X 'github.com/zxh326/kite/pkg/version.BuildDate=$(BUILD_DATE)' \
-	-X 'github.com/zxh326/kite/pkg/version.CommitID=$(COMMIT_ID)'"
+	-X 'github.com/realmroot/lightkite/pkg/version.Version=$(VERSION)' \
+	-X 'github.com/realmroot/lightkite/pkg/version.BuildDate=$(BUILD_DATE)' \
+	-X 'github.com/realmroot/lightkite/pkg/version.CommitID=$(COMMIT_ID)'"
 
 # Default target
 .DEFAULT_GOAL := build
@@ -86,17 +86,17 @@ package-release:
 	@echo "🔄 Packaging..."
 	tar -czvf bin/$(BINARY_NAME)-$(shell git describe --tags --match 'v*' | grep -oE 'v[0-9]+\.[0-9][0-9]*(\.[0-9]+)?').tar.gz bin/*
 
-package-binaries: ## Package each kite binary file separately
-	@echo "🔄 Packaging kite binaries separately..."
+package-binaries: ## Package each lightkite binary file separately
+	@echo "🔄 Packaging lightkite binaries separately..."
 	@VERSION=$$(git describe --tags --match 'v*' | grep -oE 'v[0-9]+\.[0-9][0-9]*(\.[0-9]+)?'); \
-	for file in bin/kite-*; do \
+	for file in bin/lightkite-*; do \
 		if [ -f "$$file" ]; then \
 			filename=$$(basename "$$file"); \
 			echo "📦 Packaging $$filename with version $$VERSION..."; \
 			tar -czvf "bin/$$filename-$$VERSION.tar.gz" "$$file"; \
 		fi; \
 	done
-	@echo "✅ All kite binaries packaged successfully!"
+	@echo "✅ All lightkite binaries packaged successfully!"
 
 frontend: static ## Build frontend only
 

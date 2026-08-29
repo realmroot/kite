@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/zxh326/kite/pkg/helmutil"
-	"github.com/zxh326/kite/pkg/model"
+	"github.com/realmroot/lightkite/pkg/helmutil"
+	"github.com/realmroot/lightkite/pkg/model"
 	repo "helm.sh/helm/v4/pkg/repo/v1"
 )
 

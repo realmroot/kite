@@ -4,8 +4,8 @@ The optional YAML configuration file manages the credential-free cluster
 catalog declaratively. OIDC client settings and platform policy are deployment
 environment settings, while Kubernetes authorization remains in Kubernetes.
 
-Set `KITE_CONFIG_FILE=/etc/kite/config.yaml`. Unknown fields are rejected so a
-legacy kubeconfig, identity-provider, or Kite-RBAC section cannot be accepted
+Set `KITE_CONFIG_FILE=/etc/lightkite/config.yaml`. Unknown fields are rejected so a
+legacy kubeconfig, identity-provider, or Lightkite-RBAC section cannot be accepted
 silently.
 
 ## Schema
@@ -39,11 +39,11 @@ client keys, ServiceAccount tokens, OAuth client secrets, users, LDAP settings,
 or role mappings.
 
 When `clusters` is present, the file is authoritative for the cluster catalog
-and the corresponding UI becomes read-only. Kite watches the file and applies
+and the corresponding UI becomes read-only. Lightkite watches the file and applies
 valid changes transactionally. Existing names are updated in place so their
 stable cluster identity and resource history remain intact. Removing a cluster
 deletes its catalog row, but does not change resources
-inside that Kubernetes cluster. Invalid startup configuration prevents Kite
+inside that Kubernetes cluster. Invalid startup configuration prevents Lightkite
 from becoming ready; an invalid hot reload leaves the last valid catalog and
 connections active until the file is corrected.
 
@@ -52,14 +52,14 @@ connections active until the file is corrected.
 Use an existing Secret:
 
 ```bash
-kubectl create secret generic kite-config \
+kubectl create secret generic lightkite-config \
   --from-file=config.yaml=./config.yaml
 ```
 
 ```yaml
 config:
   enabled: true
-  existingSecret: kite-config
+  existingSecret: lightkite-config
 ```
 
 Or place the same `clusters` array below `config` in chart values. Sensitive

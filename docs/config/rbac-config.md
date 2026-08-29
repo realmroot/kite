@@ -1,6 +1,6 @@
 # Kubernetes RBAC configuration
 
-Kubernetes is the sole authorizer for Kubernetes resources. Kite does not
+Kubernetes is the sole authorizer for Kubernetes resources. Lightkite does not
 define roles, resource filters, deny rules, or user-role mappings in its own
 database.
 
@@ -32,4 +32,4 @@ release's underlying Secrets plus managed resources. A UI action may therefore
 be visible while Kubernetes correctly rejects it with 403.
 
 `PLATFORM_ADMIN_GROUPS` is not Kubernetes RBAC. It controls only shared
-Kite-owned metadata and cannot make a denied Kubernetes operation succeed.
+Lightkite-owned metadata and cannot make a denied Kubernetes operation succeed.

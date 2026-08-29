@@ -1,11 +1,11 @@
 # Current-user preferences API
 
 User lifecycle and account security belong to the configured OIDC provider.
-Kite does not create, disable, delete, reset, or assign roles to users. A local
+Lightkite does not create, disable, delete, reset, or assign roles to users. A local
 profile is created or refreshed after a verified OIDC login and is keyed by
 `issuer + sub`.
 
-Kite persists only presentation data, last-login time, provider groups for
+Lightkite persists only presentation data, last-login time, provider groups for
 display/platform-policy evaluation, and dashboard preferences.
 
 ## Sidebar preference

@@ -1,6 +1,6 @@
-# 什么是 Kite？
+# 什么是 Lightkite？
 
-Kite 是一个轻量级、现代化的 Kubernetes Dashboard，专注于实时可观测性与多集群资源管理。
+Lightkite 是一个轻量级、现代化的 Kubernetes Dashboard，专注于实时可观测性与多集群资源管理。
 
 ![Dashboard Overview](/screenshots/overview.png)
 
@@ -46,9 +46,9 @@ Kite 是一个轻量级、现代化的 Kubernetes Dashboard，专注于实时可
 - 所有资源操作使用 Kubernetes 原生 RBAC
 - 不保存 kubeconfig、bearer token、客户端证书或高权限 ServiceAccount
 
-## Kite 与 Headlamp / Kubernetes Dashboard 的差异
+## Lightkite 与 Headlamp / Kubernetes Dashboard 的差异
 
-Headlamp 和 Kubernetes Dashboard 都是优秀的资源查看与操作工具。Kite 属于
+Headlamp 和 Kubernetes Dashboard 都是优秀的资源查看与操作工具。Lightkite 属于
 同一类专注的 Dashboard，并提供多集群界面：
 
 - 在同一个工作空间整合可观测性与多集群资源运维
@@ -56,9 +56,9 @@ Headlamp 和 Kubernetes Dashboard 都是优秀的资源查看与操作工具。K
 - 日志、Metrics、Helm、Search、终端与 Kube Proxy 等运维工作流
 - 无需第二套资源权限数据库即可记录可归因操作
 
-Kite 的产品边界是专业 Kubernetes 资源 Dashboard，而不是通用身份、自动化或
+Lightkite 的产品边界是专业 Kubernetes 资源 Dashboard，而不是通用身份、自动化或
 AI 平台。
 
 ## 开始使用
 
-准备好探索 Kite 了吗？查看[安装指南](./installation)。
+准备好探索 Lightkite 了吗？查看[安装指南](./installation)。

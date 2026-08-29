@@ -4,7 +4,7 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/zxh326/kite/pkg/common"
+	"github.com/realmroot/lightkite/pkg/common"
 	"gorm.io/gorm"
 )
 

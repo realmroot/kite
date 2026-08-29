@@ -22,16 +22,16 @@ RUN go mod download
 COPY . .
 
 COPY --from=frontend-builder /app/static ./static
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o kite .
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o lightkite .
 
 FROM gcr.io/distroless/static-debian12:nonroot
 
 WORKDIR /app
 
-COPY --from=backend-builder /app/kite .
+COPY --from=backend-builder /app/lightkite .
 
 USER nonroot:nonroot
 
 EXPOSE 8080
 
-CMD ["./kite"]
+CMD ["./lightkite"]

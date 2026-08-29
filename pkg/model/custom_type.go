@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/zxh326/kite/pkg/utils"
+	"github.com/realmroot/lightkite/pkg/utils"
 )
 
 type SecretString string

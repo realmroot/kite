@@ -10,9 +10,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
-	"github.com/zxh326/kite/pkg/cluster"
-	"github.com/zxh326/kite/pkg/kube"
-	"github.com/zxh326/kite/pkg/model"
+	"github.com/realmroot/lightkite/pkg/cluster"
+	"github.com/realmroot/lightkite/pkg/kube"
+	"github.com/realmroot/lightkite/pkg/model"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 	appsv1 "k8s.io/api/apps/v1"

@@ -84,7 +84,10 @@ test("encoded proxy paths cannot escape Kubernetes RBAC", async ({
           data: {
             apiVersion: "v1",
             kind: "Pod",
-            metadata: { name: podName, labels: { "e2e.kite.io/test": suffix } },
+            metadata: {
+              name: podName,
+              labels: { "e2e.lightkite.io/test": suffix },
+            },
             spec: {
               containers: [
                 { name: "pause", image: "registry.k8s.io/pause:3.10.1" },

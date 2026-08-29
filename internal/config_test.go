@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	"github.com/glebarez/sqlite"
-	"github.com/zxh326/kite/pkg/common"
-	"github.com/zxh326/kite/pkg/model"
+	"github.com/realmroot/lightkite/pkg/common"
+	"github.com/realmroot/lightkite/pkg/model"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
@@ -77,7 +77,7 @@ func TestApplyConfigReplacesOnlyClusterCatalog(t *testing.T) {
 	if err := model.AddCluster(&model.Cluster{Name: "old", APIServerURL: "https://old.example.test", Enable: true}); err != nil {
 		t.Fatalf("seed cluster: %v", err)
 	}
-	config := &KiteConfig{Clusters: []ClusterConfig{{
+	config := &LightkiteConfig{Clusters: []ClusterConfig{{
 		Name: "new", APIServerURL: "https://new.example.test", Default: true,
 	}}}
 	sections, err := applyConfig("fixture.yaml", config)

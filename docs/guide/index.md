@@ -1,6 +1,6 @@
-# What is Kite?
+# What is Lightkite?
 
-Kite is a lightweight, modern Kubernetes dashboard for real-time observability and multi-cluster resource management.
+Lightkite is a lightweight, modern Kubernetes dashboard for real-time observability and multi-cluster resource management.
 
 ![Dashboard Overview](/screenshots/overview.png)
 
@@ -46,19 +46,19 @@ Kite is a lightweight, modern Kubernetes dashboard for real-time observability a
 - Kubernetes-native RBAC for every resource operation
 - No stored kubeconfig, bearer token, client certificate, or privileged ServiceAccount
 
-## Kite vs Headlamp / Kubernetes Dashboard
+## Lightkite vs Headlamp / Kubernetes Dashboard
 
 Headlamp and Kubernetes Dashboard are strong resource inspection and operation
-tools. Kite follows the same focused dashboard category with a multi-cluster UI:
+tools. Lightkite follows the same focused dashboard category with a multi-cluster UI:
 
 - Unified workspace for observability and multi-cluster resource operations
 - Direct OIDC identity propagation to Kubernetes-native authorization
 - Operational workflows including logs, metrics, Helm, search, terminals, and kube proxy
 - Attributable operations without a second resource-permission database
 
-Kite's product boundary is a professional Kubernetes resource dashboard, not a
+Lightkite's product boundary is a professional Kubernetes resource dashboard, not a
 general-purpose identity, automation, or AI platform.
 
 ## Getting Started
 
-Ready to explore Kite? Check out the [installation guide](./installation).
+Ready to explore Lightkite? Check out the [installation guide](./installation).

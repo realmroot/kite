@@ -1,6 +1,6 @@
 # Global Search
 
-Kite provides global search for Kubernetes resources by name or exact label.
+Lightkite provides global search for Kubernetes resources by name or exact label.
 
 You can activate the global search via the search bar at the top or by using the shortcut `Ctrl + K` (Windows/Linux) or `Cmd + K` (macOS) on any page.
 
@@ -24,7 +24,7 @@ This will only search Pods whose names contain `nginx`.
 
 `pod` can also be abbreviated as `po`.
 
-Supported resource types and abbreviations come from Kite's Kubernetes resource
+Supported resource types and abbreviations come from Lightkite's Kubernetes resource
 registry, so aliases stay aligned with the resource pages shipped by this version.
 
 ## Limitations
@@ -36,5 +36,5 @@ registry, so aliases stay aligned with the resource pages shipped by this versio
 
 Each search list runs with the current user's OIDC token. Kubernetes RBAC
 therefore controls which resource types and namespaces can contribute results.
-Kite intentionally does not cache result sets, so every search re-evaluates the
+Lightkite intentionally does not cache result sets, so every search re-evaluates the
 user's current Kubernetes permissions. Results are capped at 100 entries.

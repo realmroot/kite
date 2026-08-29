@@ -6,7 +6,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// OIDCSession is the server-side half of Kite's BFF session. The browser only
+// OIDCSession is the server-side half of Lightkite's BFF session. The browser only
 // receives the opaque session token; provider tokens never leave the backend.
 type OIDCSession struct {
 	Model

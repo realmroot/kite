@@ -32,7 +32,7 @@ func TestRESTClientConfigPreservesUserOIDCCredentials(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if raw.AuthInfos["kite"].Token != source.BearerToken || !bytes.Equal(raw.Clusters["kite"].CertificateAuthorityData, source.CAData) {
+	if raw.AuthInfos["lightkite"].Token != source.BearerToken || !bytes.Equal(raw.Clusters["lightkite"].CertificateAuthorityData, source.CAData) {
 		t.Fatalf("raw config lost user identity or CA: %#v", raw)
 	}
 }

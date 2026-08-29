@@ -1,7 +1,7 @@
 package helmutil
 
 import (
-	"github.com/zxh326/kite/pkg/common"
+	"github.com/realmroot/lightkite/pkg/common"
 	"helm.sh/helm/v4/pkg/action"
 	"helm.sh/helm/v4/pkg/kube"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -71,7 +71,7 @@ type restClientConfig struct {
 func (c *restClientConfig) RawConfig() (clientcmdapi.Config, error) {
 	config := clientcmdapi.Config{
 		Clusters: map[string]*clientcmdapi.Cluster{
-			"kite": {
+			"lightkite": {
 				Server:                   c.config.Host,
 				CertificateAuthorityData: append([]byte(nil), c.config.CAData...),
 				InsecureSkipTLSVerify:    c.config.Insecure,
@@ -79,16 +79,16 @@ func (c *restClientConfig) RawConfig() (clientcmdapi.Config, error) {
 			},
 		},
 		AuthInfos: map[string]*clientcmdapi.AuthInfo{
-			"kite": {Token: c.config.BearerToken},
+			"lightkite": {Token: c.config.BearerToken},
 		},
 		Contexts: map[string]*clientcmdapi.Context{
-			"kite": {
-				Cluster:   "kite",
-				AuthInfo:  "kite",
+			"lightkite": {
+				Cluster:   "lightkite",
+				AuthInfo:  "lightkite",
 				Namespace: c.namespace,
 			},
 		},
-		CurrentContext: "kite",
+		CurrentContext: "lightkite",
 	}
 	return config, nil
 }

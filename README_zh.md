@@ -1,27 +1,28 @@
-# Kite - 现代化的 Kubernetes Dashboard
+# Lightkite — 基于标准协议的 Kubernetes Dashboard
 
 <div align="center">
 
-<img src="./docs/assets/logo.svg" alt="Kite Logo" width="128" height="128">
+<img src="./docs/assets/logo.svg" alt="Lightkite Logo" width="128" height="128">
 
 _让用户身份直达 API Server 的 Kubernetes Dashboard_
 
-[![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat&logo=go)](https://golang.org)
+[![Go Version](https://img.shields.io/badge/Go-1.26+-00ADD8?style=flat&logo=go)](https://go.dev)
 [![React](https://img.shields.io/badge/React-19+-61DAFB?style=flat&logo=react)](https://reactjs.org)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5+-3178C6?style=flat&logo=typescript)](https://www.typescriptlang.org)
+[![TypeScript](https://img.shields.io/badge/TypeScript-6+-3178C6?style=flat&logo=typescript)](https://www.typescriptlang.org)
 [![License](https://img.shields.io/badge/License-Apache-green.svg)](LICENSE)
-[**文档**](docs/zh/index.md) | [**架构**](docs/oidc-kubernetes.md)
+[**文档**](docs/zh/index.md) | [**架构**](docs/oidc-kubernetes.md) | [**与 Kite 的区别**](docs/zh/architecture/upstream-kite.md)
 <br>
 [English](./README.md) | **中文**
 
 </div>
 
-这个 fork 保留 Kite 的 Kubernetes 操作界面，并以标准 OpenID Connect 和
+Lightkite 是 [Kite](https://github.com/kite-org/kite) 的独立 Fork。它保留 Kite 的 Kubernetes 操作界面，并以标准 OpenID Connect 和
 Kubernetes 原生 RBAC 替换本地身份、本地授权以及共享高权限 kubeconfig。
-用户通过配置的 OIDC 提供方登录，Kite 将该用户验证后的 ID token 发送给所选
+用户通过配置的 OIDC 提供方登录，Lightkite 将该用户验证后的 ID token 发送给所选
 Kubernetes API Server；用户或 group 直接绑定 RoleBinding/ClusterRoleBinding。
 
-架构说明参见 [OIDC Kubernetes 架构](docs/oidc-kubernetes.md)。内置 AI/Agent
+架构说明参见 [OIDC Kubernetes 架构](docs/oidc-kubernetes.md)和
+[与上游 Kite 的详细对比](docs/zh/architecture/upstream-kite.md)。内置 AI/Agent
 已经移除；Helm、Metrics/Prometheus、Search 以及 Kubernetes 资源管理继续保留。
 
 <img width="1586" height="1167" alt="image" src="https://github.com/user-attachments/assets/a88a63b7-5b71-444d-8d98-66f147a68ef7" />
@@ -84,20 +85,20 @@ Kubernetes API Server；用户或 group 直接绑定 RoleBinding/ClusterRoleBind
 
 #### 使用 Helm (推荐)
 
-1.  **安装当前 fork 发布的版本化 OCI Chart**
+1.  **安装 Lightkite 发布的版本化 OCI Chart**
 
     ```bash
-    helm install kite oci://ghcr.io/<owner>/charts/kite \
-      --version <version> -n kite-system --create-namespace -f values.yaml
+    helm install lightkite oci://ghcr.io/realmroot/charts/lightkite \
+      --version <version> -n lightkite-system --create-namespace -f values.yaml
     ```
 
 2.  **或从 Helm 仓库安装**
 
     ```bash
-    helm repo add kite https://<owner>.github.io/kite/
+    helm repo add lightkite https://realmroot.github.io/lightkite/
     helm repo update
-    helm install kite kite/kite --version <version> \
-      -n kite-system --create-namespace -f values.yaml
+    helm install lightkite lightkite/lightkite --version <version> \
+      -n lightkite-system --create-namespace -f values.yaml
     ```
 
 #### 使用 kubectl
@@ -107,7 +108,7 @@ Kubernetes API Server；用户或 group 直接绑定 RoleBinding/ClusterRoleBind
     ```bash
     kubectl apply -f deploy/install.yaml
     # Release 资产包含带不可变镜像版本的同一清单。
-    curl -fLO https://github.com/<owner>/kite/releases/download/vX.Y.Z/install.yaml
+    curl -fLO https://github.com/realmroot/lightkite/releases/download/vX.Y.Z/install.yaml
     $EDITOR install.yaml
     kubectl apply -f install.yaml
     ```
@@ -115,7 +116,7 @@ Kubernetes API Server；用户或 group 直接绑定 RoleBinding/ClusterRoleBind
 2.  **通过端口转发访问**
 
     ```bash
-    kubectl port-forward -n kite-system svc/kite 8080:8080
+    kubectl port-forward -n lightkite-system svc/lightkite 8080:8080
     ```
 
 ### 从源码构建
@@ -123,8 +124,8 @@ Kubernetes API Server；用户或 group 直接绑定 RoleBinding/ClusterRoleBind
 1.  **克隆仓库**
 
     ```bash
-    git clone https://github.com/<owner>/kite.git
-    cd kite
+    git clone https://github.com/realmroot/lightkite.git
+    cd lightkite
     ```
 
 2.  **构建项目**
@@ -146,11 +147,16 @@ Kubernetes API Server；用户或 group 直接绑定 RoleBinding/ClusterRoleBind
 
 有关问题排查，请参阅本仓库的[常见问题](docs/zh/faq.md)和配置指南。
 
-感谢您的支持！❤️
-
 ## 🤝 贡献
 
 我们欢迎贡献！请参阅我们的[贡献指南](./CONTRIBUTING.md)了解如何参与。
+
+## 🙏 上游项目
+
+Lightkite 基于 Kite，并感谢其维护者和贡献者创建了本项目所依赖的 Dashboard、
+资源视图与交互基础。Lightkite 由独立团队维护，与上游项目不存在从属或背书
+关系，也不计划把这一架构 Fork 整体合并回 Kite。具有普遍价值的小型修复仍可
+根据情况贡献给上游。
 
 ## 📄 许可证
 

@@ -13,8 +13,8 @@ import (
 
 	_ "net/http/pprof"
 
-	"github.com/zxh326/kite/pkg/common"
-	"github.com/zxh326/kite/pkg/version"
+	"github.com/realmroot/lightkite/pkg/common"
+	"github.com/realmroot/lightkite/pkg/version"
 	"k8s.io/klog/v2"
 )
 
@@ -47,7 +47,7 @@ func main() {
 			klog.Fatalf("Failed to start server: %v", err)
 		}
 	}()
-	klog.Infof("Kite server started on port %s", common.Port)
+	klog.Infof("Lightkite server started on port %s", common.Port)
 	klog.Infof("Version: %s, Build Date: %s, Commit: %s",
 		version.Version, version.BuildDate, version.CommitID)
 

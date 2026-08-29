@@ -7,9 +7,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
-	"github.com/zxh326/kite/pkg/cluster"
-	"github.com/zxh326/kite/pkg/kube"
-	"github.com/zxh326/kite/pkg/wsutil"
+	"github.com/realmroot/lightkite/pkg/cluster"
+	"github.com/realmroot/lightkite/pkg/kube"
+	"github.com/realmroot/lightkite/pkg/wsutil"
 )
 
 func TestLogsWebSocketValidatesOptionsBeforeStreaming(t *testing.T) {

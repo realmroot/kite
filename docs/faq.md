@@ -2,9 +2,9 @@
 
 ## Data Sharing
 
-By default, Kite does not collect any analytics data.
+By default, Lightkite does not collect any analytics data.
 
-Kite has no built-in analytics account or destination. An operator may configure
+Lightkite has no built-in analytics account or destination. An operator may configure
 their own Umami-compatible `ANALYTICS_SCRIPT_URL` and `ANALYTICS_WEBSITE_ID`,
 then enable the integration with `ENABLE_ANALYTICS=true` or the admin settings
 page. The browser script is not loaded while the integration is disabled.
@@ -14,18 +14,18 @@ page. The browser script is not loaded while the integration is disabled.
 If you encounter an error message like the following when accessing resources:
 
 ```txt
-User admin does not have permission to get configmaps in namespace kite in cluster in-cluster
+User admin does not have permission to get configmaps in namespace lightkite in cluster in-cluster
 ```
 
 This means Kubernetes authenticated the displayed OIDC identity but native RBAC
-does not allow it to read `configmaps` in the `kite` namespace.
+does not allow it to read `configmaps` in the `lightkite` namespace.
 
 You need to refer to the [RBAC Configuration Guide](./config/rbac-config) to configure user permissions.
 
 ## Managed Kubernetes Cluster Connection Issues
 
-Cloud CLI kubeconfigs and `exec` plugins are not used by Kite. The managed API
-server must accept the same external OIDC issuer and audience used for Kite
+Cloud CLI kubeconfigs and `exec` plugins are not used by Lightkite. The managed API
+server must accept the same external OIDC issuer and audience used for Lightkite
 login; otherwise direct user-token propagation is not compatible as-is. Do not
 work around this by creating a shared ServiceAccount token.
 
@@ -33,7 +33,7 @@ See the [Managed Kubernetes authentication guide](./config/managed-k8s-auth).
 
 ## Persistence Issues
 
-Kite supports the use of SQLite, MySQL, or PostgreSQL as databases.
+Lightkite supports the use of SQLite, MySQL, or PostgreSQL as databases.
 
 You can configure the database connection string using the `DB_DSN` environment variable, and specify the type of database using `DB_TYPE` (default is `sqlite`).
 
@@ -41,7 +41,7 @@ You can configure the database connection string using the `DB_DSN` environment 
 
 - If MySQL or PostgreSQL is used, you need to provide the appropriate connection string, such as `DB_DSN=user:password@tcp(host:port)/dbname`.
 
-It’s recommended to install Kite using a Helm Chart. This makes it easier to configure persistent storage and database connections.
+It’s recommended to install Lightkite using a Helm Chart. This makes it easier to configure persistent storage and database connections.
 
 ## SQLite with hostPath Storage
 
@@ -51,7 +51,7 @@ If you're using SQLite as the database and encountering an "out of memory" error
 panic: failed to connect database: unable to open database file: out of memory (14)
 ```
 
-This issue is related to the pure Go SQLite driver used by Kite (to avoid CGO dependencies). The driver has limitations when accessing database files on certain storage backends.
+This issue is related to the pure Go SQLite driver used by Lightkite (to avoid CGO dependencies). The driver has limitations when accessing database files on certain storage backends.
 
 **Solution**: Add SQLite connection options to improve compatibility with hostPath storage. In your Helm values, set:
 
@@ -67,11 +67,11 @@ These options enable Write-Ahead Logging (WAL) mode and increase the busy timeou
 
 ## How to Change Font
 
-By default, Kite provides three fonts: system default, `Maple Mono`, and `JetBrains Mono`.
+By default, Lightkite provides three fonts: system default, `Maple Mono`, and `JetBrains Mono`.
 
 If you want to use a different font, you need to build the project yourself.
 
-Build kite with make and change the font in `./ui/src/index.css`:
+Build lightkite with make and change the font in `./ui/src/index.css`:
 
 ```css
 @font-face {
@@ -91,7 +91,7 @@ body {
 }
 ```
 
-## How Can I Contribute to Kite?
+## How Can I Contribute to Lightkite?
 
 We welcome contributions! You can:
 
@@ -110,4 +110,4 @@ You can get support through:
 ---
 
 **Didn't find what you're looking for?** Open an issue in the repository that
-published your Kite build and include the version endpoint output.
+published your Lightkite build and include the version endpoint output.

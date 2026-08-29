@@ -6,7 +6,7 @@ metadata:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: kite-prometheus-api
+  name: lightkite-prometheus-api
   namespace: monitoring
 data:
   default.conf: |
@@ -30,17 +30,17 @@ data:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: kite-prometheus-api
+  name: lightkite-prometheus-api
   namespace: monitoring
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: kite-prometheus-api
+      app: lightkite-prometheus-api
   template:
     metadata:
       labels:
-        app: kite-prometheus-api
+        app: lightkite-prometheus-api
     spec:
       automountServiceAccountToken: false
       containers:
@@ -61,16 +61,16 @@ spec:
       volumes:
         - name: config
           configMap:
-            name: kite-prometheus-api
+            name: lightkite-prometheus-api
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: kite-prometheus-api
+  name: lightkite-prometheus-api
   namespace: monitoring
 spec:
   selector:
-    app: kite-prometheus-api
+    app: lightkite-prometheus-api
   ports:
     - name: http
       port: 9090

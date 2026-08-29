@@ -1,14 +1,14 @@
-# Kite Helm chart
+# Lightkite Helm chart
 
 This chart deploys the standards-based OIDC Kubernetes dashboard without a
 mounted ServiceAccount token or dashboard-owned Kubernetes RBAC policy.
 
-Install the immutable chart version published by your fork:
+Install the immutable chart version published by Lightkite:
 
 ```bash
-helm upgrade --install kite oci://ghcr.io/<owner>/charts/kite \
+helm upgrade --install lightkite oci://ghcr.io/realmroot/charts/lightkite \
   --version <version> \
-  --namespace kite-system \
+  --namespace lightkite-system \
   --create-namespace \
   --values values.yaml
 ```
@@ -19,8 +19,7 @@ when rendering directly from a checkout.
 
 SQLite uses a one-replica `Recreate` deployment and a PVC by default. Use
 PostgreSQL or MySQL before enabling multiple replicas or rolling updates.
-The optional kubectl and node terminal images are versioned, and the generated
-Cluster Agent manifest uses this release's own Kite image unless overridden.
+The optional kubectl and node terminal images are versioned.
 Update checks make no outbound request unless `releaseAPIURL` is configured.
 Set `imageRegistryHosts` when image-tag lookup must contact a private or
 self-hosted registry; arbitrary registry hosts are denied by default.
@@ -34,5 +33,5 @@ Uninstall the workload while retaining its PVC according to Kubernetes and
 Helm retention behavior:
 
 ```bash
-helm uninstall kite --namespace kite-system
+helm uninstall lightkite --namespace lightkite-system
 ```

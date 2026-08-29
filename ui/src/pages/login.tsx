@@ -37,8 +37,8 @@ export function LoginPage() {
     <main className="flex min-h-screen items-center justify-center bg-muted/30 p-6">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <img src="./icon.svg" alt="Kite" className="mx-auto h-16 w-16" />
-          <CardTitle className="text-2xl">Sign in to Kite</CardTitle>
+          <img src="./icon.svg" alt="Lightkite" className="mx-auto h-16 w-16" />
+          <CardTitle className="text-2xl">Sign in to Lightkite</CardTitle>
           <p className="text-sm text-muted-foreground">
             Your Kubernetes permissions come directly from your identity.
           </p>

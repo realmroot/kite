@@ -336,7 +336,7 @@
     "unsetGlobal": "Unset global sidebar",
     "unsetGlobalSuccess": "Global sidebar disabled successfully",
     "unsetGlobalError": "Failed to disable global sidebar",
-    "updateAvailable": "A newer Kite version is available"
+    "updateAvailable": "A newer Lightkite version is available"
   },
   "nav": {
     "overview": "Overview",
@@ -477,7 +477,7 @@
     },
     "tabs": {
       "rolloutRevisions": "Rollout Revisions",
-      "kiteAudit": "Kite Audit"
+      "lightkiteAudit": "Lightkite Audit"
     }
   },
   "daemonsets": {
@@ -719,7 +719,7 @@
     "errors": {
       "loadFailed": "Failed to load clusters"
     },
-    "deleteConfirmation": "This action will only remove the current cluster's configuration in kite and will not delete any cluster resources.",
+    "deleteConfirmation": "This action will only remove the current cluster's configuration in Lightkite and will not delete any cluster resources.",
     "dialog": {
       "createTitle": "Add Cluster",
       "editTitle": "Edit Cluster",
@@ -730,7 +730,7 @@
       "type": "Type",
       "prometheusUrl": "Prometheus URL",
       "prometheusUrlPlaceholder": "http://prometheus.monitoring.svc:9090",
-      "prometheusUrlDescription": "Optional cluster-local Service URL. Kite accesses it through the Kubernetes Service proxy with the signed-in user's identity.",
+      "prometheusUrlDescription": "Optional cluster-local Service URL. Lightkite accesses it through the Kubernetes Service proxy with the signed-in user's identity.",
       "enabled": "Enabled",
       "isDefault": "Set as Default",
       "apiServerUrl": "API Server URL"
@@ -857,7 +857,7 @@
       "addRepositoryDescription": "Add a Helm repository to make its charts available.",
       "repositoryAdded": "Repository added",
       "repositoryDeleted": "Repository deleted",
-      "deleteRepositoryDescription": "This only removes the managed chart source from Kite. It does not delete remote charts or installed Helm releases.",
+      "deleteRepositoryDescription": "This only removes the managed chart source from Lightkite. It does not delete remote charts or installed Helm releases.",
       "noCharts": "No charts found",
       "noReadme": "No README found",
       "noValues": "No values found",
@@ -865,7 +865,7 @@
       "noVersions": "No versions found",
       "noChartUrl": "Chart package URL is missing.",
       "invalidValues": "Values must be a YAML object.",
-      "artifactHubTrafficNotice": "Security notice: Kite contacts <artifactHub>Artifact Hub</artifactHub> when searching or viewing chart information from this source. Kite only displays third-party data and is not responsible for its content.",
+      "artifactHubTrafficNotice": "Security notice: Lightkite contacts <artifactHub>Artifact Hub</artifactHub> when searching or viewing chart information from this source. Lightkite only displays third-party data and is not responsible for its content.",
       "installed": "Helm release installed"
     },
     "placeholders": {

@@ -10,8 +10,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
-	"github.com/zxh326/kite/pkg/common"
-	"github.com/zxh326/kite/pkg/model"
+	"github.com/realmroot/lightkite/pkg/common"
+	"github.com/realmroot/lightkite/pkg/model"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
@@ -205,15 +205,15 @@ func TestClusterMutationsHonorManagedConfiguration(t *testing.T) {
 func setupClusterHandlerTestDB(t *testing.T) {
 	t.Helper()
 	originalDB := model.DB
-	originalEncryptKey := common.KiteEncryptKey
+	originalEncryptKey := common.LightkiteEncryptKey
 	originalHost := common.Host
 	originalBase := common.Base
 	originalManagedSections := make(map[string]bool, len(common.ManagedSections))
 	for section, managed := range common.ManagedSections {
 		originalManagedSections[section] = managed
 	}
-	common.KiteEncryptKey = "cluster-handler-test-key"
-	common.Host = "https://kite.example.test"
+	common.LightkiteEncryptKey = "cluster-handler-test-key"
+	common.Host = "https://lightkite.example.test"
 	common.Base = ""
 	common.SetManagedSections(nil)
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
@@ -231,7 +231,7 @@ func setupClusterHandlerTestDB(t *testing.T) {
 			_ = sqlDB.Close()
 		}
 		model.DB = originalDB
-		common.KiteEncryptKey = originalEncryptKey
+		common.LightkiteEncryptKey = originalEncryptKey
 		common.Host = originalHost
 		common.Base = originalBase
 		common.SetManagedSections(originalManagedSections)

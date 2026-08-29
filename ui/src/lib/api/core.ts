@@ -524,7 +524,7 @@ export const restartWorkload = async (
         template: {
           metadata: {
             annotations: {
-              'kite.kubernetes.io/restartedAt': new Date().toISOString(),
+              'lightkite.kubernetes.io/restartedAt': new Date().toISOString(),
             },
           },
         },

@@ -8,7 +8,9 @@ test("node terminal is Kubernetes-authorized and cleans up its privileged sessio
   page,
   request,
 }) => {
-  const sessionSelector = encodeURIComponent("kite.io/component=node-terminal");
+  const sessionSelector = encodeURIComponent(
+    "lightkite.io/component=node-terminal",
+  );
   const listSessionNames = async () => {
     const response = await request.get(
       `/api/v1/kubernetes/api/v1/namespaces/kube-system/pods?labelSelector=${sessionSelector}`,

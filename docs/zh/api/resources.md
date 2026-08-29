@@ -1,6 +1,6 @@
 # Kubernetes 资源
 
-Kite 前端直接使用 Kubernetes API，不再为内置资源或自定义资源维护第二套 CRUD 协议。
+Lightkite 前端直接使用 Kubernetes API，不再为内置资源或自定义资源维护第二套 CRUD 协议。
 
 ## 网关
 
@@ -34,15 +34,15 @@ DELETE /api/v1/kubernetes/api/v1/namespaces/default/configmaps/example
 前端目录维护内置资源的标准 group/version。自定义资源则通过
 `apiextensions.k8s.io/v1` 读取 CRD，选择 storage version（没有时选择第一个
 served version），并使用 CRD 声明的 plural 和 scope。因此新增 CRD 不需要新增
-Kite handler。
+Lightkite handler。
 
 Pod 和 Node 表格中的指标由前端组合 core API 与标准
 `metrics.k8s.io/v1beta1` 得到。Metrics API 未安装或当前用户无权读取时，基础资源
 仍可正常显示。
 
-## Kite 专用资源操作
+## Lightkite 专用资源操作
 
-只有无法表达为单次 Kubernetes 资源操作的能力才保留 Kite API：
+只有无法表达为单次 Kubernetes 资源操作的能力才保留 Lightkite API：
 
 - 多文档 YAML apply 和历史回滚编排；
 - 资源历史与审计展示；
@@ -58,7 +58,7 @@ Pod 和 Node 表格中的指标由前端组合 core API 与标准
 ## 资源历史
 
 内置资源和自定义资源详情页通过 `/<resource>/<namespace>/<name>/history`
-读取分页历史；集群级资源使用 `_all`。读取 Kite 历史数据库之前，后端会使用当前
+读取分页历史；集群级资源使用 `_all`。读取 Lightkite 历史数据库之前，后端会使用当前
 用户 token 对准确的 group、plural、namespace 和 name 提交 Kubernetes
 `SelfSubjectAccessReview`。拒绝时返回 `403`，平台管理权限不能绕过此检查。
 

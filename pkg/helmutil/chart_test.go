@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zxh326/kite/pkg/model"
+	"github.com/realmroot/lightkite/pkg/model"
 )
 
 func TestLoadArchiveContextRejectsDeclaredOversize(t *testing.T) {

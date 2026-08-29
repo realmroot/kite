@@ -1,10 +1,10 @@
 # Prometheus Setup Guide
 
-This guide explains how to configure Kite's monitoring integration with Prometheus to achieve real-time metrics and monitoring functionality.
+This guide explains how to configure Lightkite's monitoring integration with Prometheus to achieve real-time metrics and monitoring functionality.
 
 ## Overview
 
-Kite's integration with Prometheus provides:
+Lightkite's integration with Prometheus provides:
 
 - Real-time cluster resource metrics
 - Historical data visualization
@@ -49,7 +49,7 @@ For more control over the installation, you can manually install Prometheus comp
 
 Follow the official documentation for each component for detailed installation instructions.
 
-## Connecting Kite to Prometheus
+## Connecting Lightkite to Prometheus
 
 Open **Settings > Clusters**, edit the cluster, and enter the cluster-local
 Prometheus Service URL, for example:
@@ -58,10 +58,10 @@ Prometheus Service URL, for example:
 http://prometheus-kube-prometheus-prometheus.monitoring.svc:9090
 ```
 
-Kite accepts only `<service>.<namespace>.svc` and
+Lightkite accepts only `<service>.<namespace>.svc` and
 `<service>.<namespace>.svc.cluster.local` base URLs. It sends each request
 through the Kubernetes API Service Proxy with the signed-in user's OIDC token.
-Kite does not store Prometheus credentials and does not connect anonymously to
+Lightkite does not store Prometheus credentials and does not connect anonymously to
 an external Prometheus endpoint.
 
 Grant users who need historical metrics `get` access to the Prometheus Service
@@ -71,7 +71,7 @@ proxy subresource. Adapt the Service name and namespace to your installation:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: kite-prometheus-reader
+  name: lightkite-prometheus-reader
   namespace: monitoring
 rules:
   - apiGroups: [""]
@@ -81,7 +81,7 @@ rules:
 ```
 
 Bind this Role to the required OIDC users or groups with a RoleBinding. The
-Kubernetes API server remains the authorization authority. Kite also performs
+Kubernetes API server remains the authorization authority. Lightkite also performs
 a Kubernetes `SelfSubjectAccessReview` before returning Prometheus data:
 
 - Pod history requires `get` on that exact Pod.
@@ -116,7 +116,7 @@ request, is capped globally, and is never duplicated per user.
      Service and port.
    - Verify the user can read the target Pod or Node as described above.
    - Verify the cluster's Kubernetes API server accepts the user's OIDC token.
-   - Kite intentionally has no shared Prometheus credential fallback.
+   - Lightkite intentionally has no shared Prometheus credential fallback.
 
 ### Verifying Prometheus Configuration
 

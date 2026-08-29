@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/zxh326/kite/pkg/common"
+	"github.com/realmroot/lightkite/pkg/common"
 	"gorm.io/gorm"
 	"k8s.io/client-go/tools/clientcmd"
 )
@@ -663,7 +663,7 @@ func removeClusterCredentials(db *gorm.DB) error {
 			updates["ca_bundle"] = metadata.caBundle
 			updates["tls_server_name"] = metadata.tlsServerName
 		case cluster.InCluster:
-			// The old in-cluster mode depended on Kite's mounted ServiceAccount.
+			// The old in-cluster mode depended on Lightkite's mounted ServiceAccount.
 			// Preserve the catalog row but require explicit connection setup.
 			updates["enable"] = false
 		}

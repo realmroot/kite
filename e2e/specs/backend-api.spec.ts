@@ -28,9 +28,9 @@ test("backend contracts follow OIDC and Kubernetes-native authorization", async 
 
   const suffix = Date.now().toString(36);
   const clusterPath = `/api/v1/_clusters/${encodeURIComponent(kindClusterName)}`;
-  const configMapName = `kite-e2e-${suffix}`;
-  const templateName = `Kite E2E ${suffix}`;
-  const repositoryName = `kite-e2e-${suffix}`;
+  const configMapName = `lightkite-e2e-${suffix}`;
+  const templateName = `Lightkite E2E ${suffix}`;
+  const repositoryName = `lightkite-e2e-${suffix}`;
   let dummyClusterId: number | undefined;
   let templateId: number | undefined;
   let repositoryId: number | undefined;
@@ -261,7 +261,7 @@ test("backend contracts follow OIDC and Kubernetes-native authorization", async 
           apiServerUrl: kindCluster!.apiServerUrl,
           caBundle: kindCluster!.caBundle,
           tlsServerName: kindCluster!.tlsServerName,
-          prometheusURL: "http://kite-prometheus-api.monitoring.svc:9090",
+          prometheusURL: "http://lightkite-prometheus-api.monitoring.svc:9090",
           isDefault: kindCluster!.isDefault,
           enabled: kindCluster!.enabled,
         },

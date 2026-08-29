@@ -1,10 +1,10 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "kite.fullname" . }}
+  name: {{ include "lightkite.fullname" . }}
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "kite.labels" . | nindent 4 }}
+    {{- include "lightkite.labels" . | nindent 4 }}
 spec:
   type: {{ .Values.service.type }}
   ports:
@@ -13,4 +13,4 @@ spec:
       protocol: TCP
       name: http
   selector:
-    {{- include "kite.selectorLabels" . | nindent 4 }}
+    {{- include "lightkite.selectorLabels" . | nindent 4 }}

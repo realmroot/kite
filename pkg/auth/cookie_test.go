@@ -10,8 +10,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
-	"github.com/zxh326/kite/pkg/common"
-	"github.com/zxh326/kite/pkg/model"
+	"github.com/realmroot/lightkite/pkg/common"
+	"github.com/realmroot/lightkite/pkg/model"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
@@ -43,7 +43,7 @@ func TestSetCookieSecureUsesCanonicalHostAndExactLifetime(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	t.Run("HTTPS host sets exact secure lifetime", func(t *testing.T) {
-		common.Host = "https://kite.example.test"
+		common.Host = "https://lightkite.example.test"
 		cookie := emittedCookie(t, 600, "")
 		if !cookie.Secure || !cookie.HttpOnly || cookie.MaxAge != 600 || cookie.SameSite != http.SameSiteLaxMode {
 			t.Fatalf("cookie = %#v", cookie)
@@ -51,7 +51,7 @@ func TestSetCookieSecureUsesCanonicalHostAndExactLifetime(t *testing.T) {
 	})
 
 	t.Run("deletion remains immediate", func(t *testing.T) {
-		common.Host = "https://kite.example.test"
+		common.Host = "https://lightkite.example.test"
 		cookie := emittedCookie(t, -1, "")
 		if cookie.MaxAge >= 0 {
 			t.Fatalf("deletion MaxAge = %d, want negative", cookie.MaxAge)
@@ -95,16 +95,16 @@ func TestRefreshTokenRenewsBrowserCookieAndServerSessionActivity(t *testing.T) {
 	}
 
 	previousDB := model.DB
-	previousKey := common.KiteEncryptKey
+	previousKey := common.LightkiteEncryptKey
 	previousIssuer := common.OIDCIssuer
 	previousHost := common.Host
 	model.DB = db
-	common.KiteEncryptKey = "session-renewal-test-key"
+	common.LightkiteEncryptKey = "session-renewal-test-key"
 	common.OIDCIssuer = "https://identity.example.test"
-	common.Host = "https://kite.example.test"
+	common.Host = "https://lightkite.example.test"
 	t.Cleanup(func() {
 		model.DB = previousDB
-		common.KiteEncryptKey = previousKey
+		common.LightkiteEncryptKey = previousKey
 		common.OIDCIssuer = previousIssuer
 		common.Host = previousHost
 	})

@@ -62,9 +62,9 @@ jobs:
             nodeImage: kindest/node:v1.36.1@sha256:3489c7674813ba5d8b1a9977baea8a6e553784dab7b84759d1014dbd78f7ebd5
 
     env:
-      E2E_KIND_NAME: kite-e2e-${{ matrix.suffix }}
+      E2E_KIND_NAME: lightkite-e2e-${{ matrix.suffix }}
       E2E_NODE_IMAGE: ${{ matrix.nodeImage }}
-      E2E_KUBECONFIG: ${{ github.workspace }}/kite-e2e-${{ matrix.suffix }}.kubeconfig
+      E2E_KUBECONFIG: ${{ github.workspace }}/lightkite-e2e-${{ matrix.suffix }}.kubeconfig
       KIND_LOGS_DIR: ${{ github.workspace }}/kind-logs
       E2E_PORT: "38080"
       KITE_E2E_USE_SYSTEM_CHROME: "true"
@@ -127,7 +127,7 @@ jobs:
       - name: Collect identity provider logs
         if: always()
         run: |
-          docker logs kite-e2e-dex > "${GITHUB_WORKSPACE}/kite-e2e-dex.log" 2>&1 || true
+          docker logs lightkite-e2e-dex > "${GITHUB_WORKSPACE}/lightkite-e2e-dex.log" 2>&1 || true
 
       - name: Upload E2E artifacts
         if: always()
@@ -138,4 +138,4 @@ jobs:
             e2e/playwright-report
             e2e/test-results
             ${{ env.KIND_LOGS_DIR }}
-            ${{ github.workspace }}/kite-e2e-dex.log
+            ${{ github.workspace }}/lightkite-e2e-dex.log

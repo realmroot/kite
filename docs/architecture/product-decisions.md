@@ -1,4 +1,4 @@
-# Kite product and architecture decisions
+# Lightkite product and architecture decisions
 
 Status: normative for this fork.
 
@@ -10,7 +10,7 @@ documentation, and shipped UI must follow the decisions below.
 
 ## Product scope
 
-Kite's long-term direction is a professional multi-cluster Kubernetes resource
+Lightkite's long-term direction is a professional multi-cluster Kubernetes resource
 dashboard. New features should normally help discover, inspect, operate, or
 troubleshoot Kubernetes resources. This direction is a product filter, not an
 instruction to delete existing capabilities without an explicit decision.
@@ -19,7 +19,7 @@ accepted for removal.
 
 Kubernetes itself is the compatibility contract. Resource support is driven by
 API discovery, REST mapping, OpenAPI, and unstructured objects wherever a
-specialized UI is not justified. Kite follows supported Kubernetes releases
+specialized UI is not justified. Lightkite follows supported Kubernetes releases
 with an explicit compatibility matrix and tests API removal, feature-gate, and
 version-skew boundaries. A Kubernetes release should normally require dependency
 and compatibility validation, not a product rewrite or a new hard-coded model.
@@ -29,27 +29,27 @@ and compatibility validation, not a product rewrite or a new hard-coded model.
 1. Human sign-in uses standard OAuth 2.1/OpenID Connect Authorization Code with
    PKCE. Issuer-specific claims or proprietary provider behavior are forbidden
    in the browser authentication path.
-2. Kite keeps an opaque browser session and encrypted upstream tokens. It sends
+2. Lightkite keeps an opaque browser session and encrypted upstream tokens. It sends
    the signed-in user's ID token through the selected Gateway access URL to the
    Kubernetes API server. It never
    replaces that identity with a shared kubeconfig, bearer token, client
    certificate, ServiceAccount, or Kubernetes impersonation headers.
 3. Kubernetes authenticates the OIDC token and is the sole authority for
    Kubernetes API permissions. A RoleBinding may target either an exact OIDC
-   username/subject or a group; Kite does not require group-only authorization
+   username/subject or a group; Lightkite does not require group-only authorization
    and does not reproduce Kubernetes RBAC in its database.
-4. Kite-owned objects (cluster projection metadata, templates, Helm repository
+4. Lightkite-owned objects (cluster projection metadata, templates, Helm repository
    metadata, UI preferences, and audit records) are not Kubernetes objects.
    Their management policy is deliberately separate from Kubernetes resource
    authorization. Platform-management access is derived from standard OIDC
    claims configured by the operator and may never grant additional Kubernetes
    permissions.
-5. Kube Cluster Hub owns connection metadata. Kite keeps
+5. Kube Cluster Hub owns connection metadata. Lightkite keeps
    a credential-free local projection only to preserve stable resource-history
    keys and UI state. The user's token remains the Kubernetes request
    credential.
 6. Machine and Agent access uses the Gateway's standards-based OAuth Resource
-   Server. Kite contains no DPoP verifier, replay store, Agent execution
+   Server. Lightkite contains no DPoP verifier, replay store, Agent execution
    credential, API key, or embedded Agent loop.
 
 ## Explicitly removed now
@@ -61,20 +61,20 @@ documentation, except for migration notes that explicitly state their removal:
 - Built-in AI chat, LLM providers, prompts, tool execution, approval sessions,
   and every embedded Agent/AI loop.
 - Local users, passwords, bootstrap/setup administrator, anonymous login, LDAP,
-  WebAuthn/passkeys, and Kite-managed MFA.
+  WebAuthn/passkeys, and Lightkite-managed MFA.
 - Stored OAuth provider records or provider-management UI. Deployment has one
   standards-compliant OIDC issuer configured outside the product database.
-- Kite roles, role assignments, permission rules, Kubernetes-resource filters,
+- Lightkite roles, role assignments, permission rules, Kubernetes-resource filters,
   and all other parallel application RBAC for Kubernetes operations.
 - User and service API keys.
 - Cluster kubeconfig import that retains credentials, shared bearer tokens,
   client certificates, privileged ServiceAccounts, and Kubernetes
   impersonation.
-- Kite-local OAuth Resource Server routes, DPoP replay state, Agent access-token
+- Lightkite-local OAuth Resource Server routes, DPoP replay state, Agent access-token
   verification, and Agent Kubernetes execution.
 - Scheduled Helm auto-upgrade, its scheduler, retained execution credentials,
   configuration UI, and persisted task table.
-- Kite's private reverse-tunnel protocol, Cluster Agent binary, enrollment
+- Lightkite's private reverse-tunnel protocol, Cluster Agent binary, enrollment
   grants, signing secret, manifests, settings, and connection-mode fields.
 
 No other original product capability belongs in this list by inference. Moving
@@ -107,7 +107,7 @@ Kubernetes-native, but they must not be removed as architectural cleanup.
 ## External tools
 
 External tools discover and call Kube Cluster Hub directly. Hub owns and
-displays its Agent audit events. Kite neither consumes a private Hub audit API
+displays its Agent audit events. Lightkite neither consumes a private Hub audit API
 nor terminates Agent OAuth tokens or proxies Agent traffic. The dashboards and
 Agents share standard Cluster Inventory and canonical Kubernetes resource
 identity without sharing an authentication credential.
@@ -157,9 +157,9 @@ A release is blocked until all of the following pass:
 - A local end-to-end environment proves OIDC login, cluster selection, a
   user-specific allow and deny from Kubernetes RBAC, logs, exec,
   and representative retained operations. The API server audit identity must be
-  the actual OIDC user, never Kite or a shared ServiceAccount.
+  the actual OIDC user, never Lightkite or a shared ServiceAccount.
 - Documentation and deployment examples describe only the shipped architecture
-  and do not instruct operators to provide Kite with cluster-admin credentials.
+  and do not instruct operators to provide Lightkite with cluster-admin credentials.
 
 The system acceptance suite additionally verifies the Gateway's Resource Server
 metadata, OpenAPI/scopes, token validation, DPoP replay rejection, actor

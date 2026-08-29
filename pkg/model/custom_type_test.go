@@ -3,7 +3,7 @@ package model
 import (
 	"testing"
 
-	"github.com/zxh326/kite/pkg/common"
+	"github.com/realmroot/lightkite/pkg/common"
 )
 
 func TestSliceString_Scan(t *testing.T) {
@@ -62,10 +62,10 @@ func TestSliceString_Value(t *testing.T) {
 }
 
 func TestSecretString_ScanAndValue(t *testing.T) {
-	originalKey := common.KiteEncryptKey
-	common.KiteEncryptKey = "test-encryption-key"
+	originalKey := common.LightkiteEncryptKey
+	common.LightkiteEncryptKey = "test-encryption-key"
 	t.Cleanup(func() {
-		common.KiteEncryptKey = originalKey
+		common.LightkiteEncryptKey = originalKey
 	})
 
 	secret := SecretString("super-secret")

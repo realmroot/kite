@@ -11,7 +11,7 @@ import (
 )
 
 // User is a local presentation profile for a verified OIDC principal. Identity
-// and account security remain owned by the issuer; Kite persists no password,
+// and account security remain owned by the issuer; Lightkite persists no password,
 // role, API key, MFA, passkey, or enable/disable state.
 type User struct {
 	Model

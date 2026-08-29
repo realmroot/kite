@@ -1,10 +1,10 @@
 # Prometheus 设置指南
 
-本指南介绍如何配置 Kite 与 Prometheus 的监控集成，以实现实时指标和监控功能。
+本指南介绍如何配置 Lightkite 与 Prometheus 的监控集成，以实现实时指标和监控功能。
 
 ## 概述
 
-Kite 与 Prometheus 集成提供：
+Lightkite 与 Prometheus 集成提供：
 
 - 实时集群资源指标
 - 历史数据可视化
@@ -48,7 +48,7 @@ helm install prometheus prometheus-community/kube-prometheus-stack \
 
 按照每个组件的官方文档获取详细的安装说明。
 
-## 连接 Kite 到 Prometheus
+## 连接 Lightkite 到 Prometheus
 
 进入 **设置 > 集群**，编辑目标集群并填写集群内 Prometheus Service 地址，例如：
 
@@ -56,9 +56,9 @@ helm install prometheus prometheus-community/kube-prometheus-stack \
 http://prometheus-kube-prometheus-prometheus.monitoring.svc:9090
 ```
 
-Kite 只接受 `<service>.<namespace>.svc` 或
+Lightkite 只接受 `<service>.<namespace>.svc` 或
 `<service>.<namespace>.svc.cluster.local` 形式的基础地址。每个请求都会使用
-当前登录用户的 OIDC Token，通过 Kubernetes API 的 Service Proxy 转发。Kite
+当前登录用户的 OIDC Token，通过 Kubernetes API 的 Service Proxy 转发。Lightkite
 不保存 Prometheus 凭据，也不会匿名直连外部 Prometheus。
 
 需要查看历史指标的用户必须有权读取该 Prometheus Service 的 proxy 子资源。
@@ -68,7 +68,7 @@ Kite 只接受 `<service>.<namespace>.svc` 或
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: kite-prometheus-reader
+  name: lightkite-prometheus-reader
   namespace: monitoring
 rules:
   - apiGroups: [""]
@@ -78,7 +78,7 @@ rules:
 ```
 
 再通过 RoleBinding 将该 Role 绑定到所需的 OIDC 用户或组。最终授权仍由
-Kubernetes API Server 决定。返回 Prometheus 数据前，Kite 还会向 Kubernetes
+Kubernetes API Server 决定。返回 Prometheus 数据前，Lightkite 还会向 Kubernetes
 发起 `SelfSubjectAccessReview`：
 
 - Pod 历史指标要求对该 Pod 执行 `get`；
@@ -112,7 +112,7 @@ Kubernetes 资源指标。metrics-server 降级路径也始终使用同一个用
      `get services/proxy`。
    - 检查用户是否有权读取上面所述的目标 Pod 或 Node。
    - 检查集群 API Server 是否接受当前用户的 OIDC Token。
-   - Kite 明确不提供共享 Prometheus 凭据作为降级路径。
+   - Lightkite 明确不提供共享 Prometheus 凭据作为降级路径。
 
 ### 验证 Prometheus 配置
 

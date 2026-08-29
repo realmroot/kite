@@ -6,7 +6,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/zxh326/kite/pkg/model"
+	"github.com/realmroot/lightkite/pkg/model"
 	"k8s.io/client-go/rest"
 )
 

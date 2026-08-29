@@ -4,10 +4,10 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-chart=charts/kite
+chart=charts/lightkite
 common_values=(
-  --set image.repository=example.invalid/kite
-  --set host=https://kite.example.com
+  --set image.repository=example.invalid/lightkite
+  --set host=https://lightkite.example.com
   --set oidc.issuer=https://identity.example.com
   --set oidc.clientId=test-client
   --set oidc.clientSecret=test-secret
@@ -19,7 +19,7 @@ helm lint "$chart" "${common_values[@]}"
 
 rendered="$(mktemp)"
 trap 'rm -f "$rendered"' EXIT
-helm template kite "$chart" --namespace kite-system "${common_values[@]}" >"$rendered"
+helm template lightkite "$chart" --namespace lightkite-system "${common_values[@]}" >"$rendered"
 
 required_patterns=(
   'kind: PersistentVolumeClaim'
@@ -44,7 +44,7 @@ done
 expect_failure() {
   local description="$1"
   shift
-  if helm template kite "$chart" --namespace kite-system "${common_values[@]}" "$@" >/dev/null 2>&1; then
+  if helm template lightkite "$chart" --namespace lightkite-system "${common_values[@]}" "$@" >/dev/null 2>&1; then
     echo "chart accepted invalid configuration: $description" >&2
     exit 1
   fi
@@ -59,10 +59,10 @@ expect_failure "unsupported database type" --set db.type=oracle
 expect_failure "analytics enabled without destination" --set analytics.enabled=true
 expect_failure "partial analytics configuration" --set analytics.scriptURL=https://analytics.example.com/script.js
 
-helm template kite "$chart" --namespace kite-system "${common_values[@]}" \
+helm template lightkite "$chart" --namespace lightkite-system "${common_values[@]}" \
   --set analytics.enabled=true \
   --set analytics.scriptURL=https://analytics.example.com/script.js \
-  --set analytics.websiteID=kite-site >"$rendered"
+  --set analytics.websiteID=lightkite-site >"$rendered"
 for pattern in 'name: ENABLE_ANALYTICS' 'name: ANALYTICS_SCRIPT_URL' 'name: ANALYTICS_WEBSITE_ID'; do
   if ! rg -q "$pattern" "$rendered"; then
     echo "operator-owned analytics wiring is missing: $pattern" >&2
@@ -70,9 +70,9 @@ for pattern in 'name: ENABLE_ANALYTICS' 'name: ANALYTICS_SCRIPT_URL' 'name: ANAL
   fi
 done
 
-helm template kite "$chart" --namespace kite-system "${common_values[@]}" \
+helm template lightkite "$chart" --namespace lightkite-system "${common_values[@]}" \
   --set oidc.ca.existingSecret=private-issuer-ca >"$rendered"
-for pattern in 'name: OIDC_CA_FILE' 'secretName: private-issuer-ca' 'mountPath: /etc/kite/oidc'; do
+for pattern in 'name: OIDC_CA_FILE' 'secretName: private-issuer-ca' 'mountPath: /etc/lightkite/oidc'; do
   if ! rg -q "$pattern" "$rendered"; then
     echo "private OIDC CA wiring is missing: $pattern" >&2
     exit 1
@@ -81,7 +81,7 @@ done
 
 public_values=("${common_values[@]}")
 public_values+=(--set oidc.clientSecret=)
-helm template kite "$chart" --namespace kite-system "${public_values[@]}" >"$rendered"
+helm template lightkite "$chart" --namespace lightkite-system "${public_values[@]}" >"$rendered"
 if rg -q 'OIDC_CLIENT_SECRET' "$rendered"; then
   echo "public PKCE client unexpectedly rendered OIDC_CLIENT_SECRET" >&2
   exit 1
@@ -93,9 +93,9 @@ for pattern in 'name: OIDC_ISSUER' 'OIDC_CLIENT_ID:'; do
   fi
 done
 
-helm template kite "$chart" --namespace kite-system "${common_values[@]}" \
+helm template lightkite "$chart" --namespace lightkite-system "${common_values[@]}" \
   --set secret.create=false \
-  --set secret.existingSecret=kite-runtime \
+  --set secret.existingSecret=lightkite-runtime \
   --set db.type=postgres >"$rendered"
 if rg -q 'kind: PersistentVolumeClaim' "$rendered"; then
   echo "external database deployment unexpectedly rendered a SQLite PVC" >&2

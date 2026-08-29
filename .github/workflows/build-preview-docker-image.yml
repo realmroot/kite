@@ -74,7 +74,7 @@ jobs:
         id: tags
         run: |
           OWNER_LC=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          echo "tags=ghcr.io/${OWNER_LC}/kite:main" >> $GITHUB_OUTPUT
+          echo "tags=ghcr.io/${OWNER_LC}/lightkite:main" >> $GITHUB_OUTPUT
           echo "image_tag=main" >> $GITHUB_OUTPUT
 
       - name: Build

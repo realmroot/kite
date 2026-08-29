@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/glebarez/sqlite"
-	"github.com/zxh326/kite/pkg/common"
+	"github.com/realmroot/lightkite/pkg/common"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )

@@ -11,7 +11,7 @@ Kubernetes resource access.
 | --- | --- |
 | `name` | Unique display name |
 | `description` | Optional context |
-| `apiServerUrl` | HTTPS Kubernetes endpoint reachable from Kite |
+| `apiServerUrl` | HTTPS Kubernetes endpoint reachable from Lightkite |
 | `caBundle` | Optional PEM or base64-encoded PEM trust bundle |
 | `tlsServerName` | Optional TLS name override |
 | `prometheusURL` | Optional Prometheus Service URL |
@@ -55,8 +55,8 @@ Content-Type: application/json
 }
 ```
 
-`apiServerUrl` must be HTTPS and reachable from Kite. Private network routing,
-DNS, and any tunnel are deployment infrastructure, not a Kite protocol.
+`apiServerUrl` must be HTTPS and reachable from Lightkite. Private network routing,
+DNS, and any tunnel are deployment infrastructure, not a Lightkite protocol.
 
 ## Update and delete
 

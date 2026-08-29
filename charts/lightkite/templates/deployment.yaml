@@ -22,15 +22,15 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "kite.fullname" . }}
+  name: {{ include "lightkite.fullname" . }}
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "kite.labels" . | nindent 4 }}
+    {{- include "lightkite.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-      {{- include "kite.selectorLabels" . | nindent 6 }}
+      {{- include "lightkite.selectorLabels" . | nindent 6 }}
   {{- with .Values.deploymentStrategy }}
   strategy:
     {{- toYaml . | nindent 4 }}
@@ -42,7 +42,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       labels:
-        {{- include "kite.labels" . | nindent 8 }}
+        {{- include "lightkite.labels" . | nindent 8 }}
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -51,7 +51,7 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "kite.serviceAccountName" . }}
+      serviceAccountName: {{ include "lightkite.serviceAccountName" . }}
       automountServiceAccountToken: {{ or .Values.serviceAccount.automount .Values.clusterInventory.enabled }}
       terminationGracePeriodSeconds: 30
       {{- with .Values.podSecurityContext }}
@@ -66,7 +66,7 @@ spec:
           {{- end }}
           image: "{{ required "image.repository is required" .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: ["/app/kite"]
+          command: ["/app/lightkite"]
           {{- if .Values.debug }}
           args: ["-v", "1"]
           {{- end }}
@@ -76,7 +76,7 @@ spec:
               protocol: TCP
           envFrom:
             - secretRef:
-                name: {{ include "kite.secret" . }}
+                name: {{ include "lightkite.secret" . }}
           env:
             - name: HOST
               value: {{ required "host is required" .Values.host | quote }}
@@ -142,7 +142,7 @@ spec:
             {{- end }}
             {{- if .Values.config.enabled }}
             - name: KITE_CONFIG_FILE
-              value: /etc/kite/config.yaml
+              value: /etc/lightkite/config.yaml
             {{- end }}
           {{- with .Values.extraEnvs }}
           {{- toYaml . | nindent 12 }}
@@ -168,8 +168,8 @@ spec:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           {{- if .Values.config.enabled }}
-            - name: kite-config
-              mountPath: /etc/kite
+            - name: lightkite-config
+              mountPath: /etc/lightkite
               readOnly: true
           {{- end }}
           {{- if .Values.oidc.ca.existingSecret }}
@@ -180,7 +180,7 @@ spec:
             - name: tmp
               mountPath: /tmp
           {{- if and (eq .Values.db.type "sqlite")}}
-            - name: {{ include "kite.fullname" . }}-storage
+            - name: {{ include "lightkite.fullname" . }}-storage
               mountPath: {{ .Values.db.sqlite.persistence.mountPath }}
           {{- end }}
       volumes:
@@ -195,18 +195,18 @@ spec:
                 path: {{ .Values.oidc.ca.key }}
       {{- end }}
       {{- if .Values.config.enabled }}
-        - name: kite-config
+        - name: lightkite-config
           secret:
-            secretName: {{ .Values.config.existingSecret | default (printf "%s-config" (include "kite.fullname" .)) }}
+            secretName: {{ .Values.config.existingSecret | default (printf "%s-config" (include "lightkite.fullname" .)) }}
             items:
               - key: config.yaml
                 path: config.yaml
       {{- end }}
       {{- if eq .Values.db.type "sqlite"}}
-        - name: {{ include "kite.fullname" . }}-storage
+        - name: {{ include "lightkite.fullname" . }}-storage
       {{- if .Values.db.sqlite.persistence.pvc.enabled }}
           persistentVolumeClaim:
-            claimName: {{ .Values.db.sqlite.persistence.pvc.existingClaim | default (printf "%s-storage" (include "kite.fullname" .)) }}
+            claimName: {{ .Values.db.sqlite.persistence.pvc.existingClaim | default (printf "%s-storage" (include "lightkite.fullname" .)) }}
       {{- else if .Values.db.sqlite.persistence.hostPath.enabled }}
           hostPath:
             path: {{ .Values.db.sqlite.persistence.hostPath.path }}

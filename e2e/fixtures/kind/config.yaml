@@ -6,7 +6,7 @@ nodes:
   - role: control-plane
     extraMounts:
       - hostPath: __OIDC_CA_FILE__
-        containerPath: /etc/kubernetes/pki/kite-e2e-oidc-ca.crt
+        containerPath: /etc/kubernetes/pki/lightkite-e2e-oidc-ca.crt
         readOnly: true
     kubeadmConfigPatches:
       - |
@@ -14,8 +14,8 @@ nodes:
         apiServer:
           extraArgs:
             oidc-issuer-url: https://localhost:5556
-            oidc-ca-file: /etc/kubernetes/pki/kite-e2e-oidc-ca.crt
-            oidc-client-id: kite-e2e
+            oidc-ca-file: /etc/kubernetes/pki/lightkite-e2e-oidc-ca.crt
+            oidc-client-id: lightkite-e2e
             oidc-username-claim: email
             oidc-username-prefix: "-"
             oidc-groups-claim: groups

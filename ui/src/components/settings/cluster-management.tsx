@@ -238,7 +238,7 @@ export function ClusterManagement() {
         resourceType="cluster"
         additionalNote={t(
           'clusterManagement.deleteConfirmation',
-          "This action will only remove the current cluster's configuration in Kite and will not delete any cluster resources."
+          "This action will only remove the current cluster's configuration in Lightkite and will not delete any cluster resources."
         )}
       />
     </div>

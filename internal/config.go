@@ -7,17 +7,17 @@ import (
 	"os"
 	"strings"
 
-	"github.com/zxh326/kite/pkg/cluster"
-	"github.com/zxh326/kite/pkg/common"
-	"github.com/zxh326/kite/pkg/model"
+	"github.com/realmroot/lightkite/pkg/cluster"
+	"github.com/realmroot/lightkite/pkg/common"
+	"github.com/realmroot/lightkite/pkg/model"
 	"gopkg.in/yaml.v3"
 	"gorm.io/gorm"
 	"k8s.io/klog/v2"
 )
 
-// KiteConfig is intentionally limited to transport-only cluster metadata.
-// Identity provider and Kubernetes authorization policy live outside Kite.
-type KiteConfig struct {
+// LightkiteConfig is intentionally limited to transport-only cluster metadata.
+// Identity provider and Kubernetes authorization policy live outside Lightkite.
+type LightkiteConfig struct {
 	Clusters []ClusterConfig `yaml:"clusters"`
 }
 
@@ -51,7 +51,7 @@ func LoadConfigFromFile(path string) error {
 	return nil
 }
 
-func readConfigFile(path string) (*KiteConfig, [sha256.Size]byte, error) {
+func readConfigFile(path string) (*LightkiteConfig, [sha256.Size]byte, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, [sha256.Size]byte{}, fmt.Errorf("failed to read config file %s: %w", path, err)
@@ -60,14 +60,14 @@ func readConfigFile(path string) (*KiteConfig, [sha256.Size]byte, error) {
 
 	decoder := yaml.NewDecoder(bytes.NewBufferString(os.ExpandEnv(string(data))))
 	decoder.KnownFields(true)
-	var cfg KiteConfig
+	var cfg LightkiteConfig
 	if err := decoder.Decode(&cfg); err != nil {
 		return nil, hash, fmt.Errorf("failed to parse config file %s: %w", path, err)
 	}
 	return &cfg, hash, nil
 }
 
-func applyConfig(path string, cfg *KiteConfig) (AppliedSections, error) {
+func applyConfig(path string, cfg *LightkiteConfig) (AppliedSections, error) {
 	sections := AppliedSections{}
 	klog.Infof("Loading configuration from file: %s", path)
 	if cfg.Clusters == nil {

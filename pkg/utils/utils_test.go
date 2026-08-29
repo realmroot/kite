@@ -4,15 +4,15 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/zxh326/kite/pkg/common"
+	"github.com/realmroot/lightkite/pkg/common"
 	"k8s.io/apimachinery/pkg/util/validation"
 )
 
-func TestInjectKiteBase(t *testing.T) {
+func TestInjectLightkiteBase(t *testing.T) {
 	html := `<html><head><link rel="modulepreload" href="__KITE_BASE__/assets/index.js"><script type="module" src="__KITE_BASE__/assets/main.js"></script></head></html>`
 
 	t.Run("subpath", func(t *testing.T) {
-		got := InjectKiteBase(html, "/kite")
+		got := InjectLightkiteBase(html, "/kite")
 
 		if strings.Contains(got, "__KITE_BASE__") {
 			t.Fatalf("placeholder should be replaced: %s", got)
@@ -32,7 +32,7 @@ func TestInjectKiteBase(t *testing.T) {
 	})
 
 	t.Run("root", func(t *testing.T) {
-		got := InjectKiteBase(html, "")
+		got := InjectLightkiteBase(html, "")
 
 		if !strings.Contains(got, `href="/assets/index.js"`) {
 			t.Fatalf("expected root asset href: %s", got)
@@ -46,7 +46,7 @@ func TestInjectKiteBase(t *testing.T) {
 	})
 
 	t.Run("escapes html attribute injection", func(t *testing.T) {
-		got := InjectKiteBase(html, `/ki"te`)
+		got := InjectLightkiteBase(html, `/ki"te`)
 
 		if strings.Contains(got, `href="/ki"te/assets/index.js"`) {
 			t.Fatalf("expected asset href to be escaped: %s", got)

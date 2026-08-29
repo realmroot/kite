@@ -6,7 +6,7 @@ import { loginWithOIDC } from "../helpers/oidc";
 test.describe("Kubernetes-native authorization", () => {
   test.use({ storageState: { cookies: [], origins: [] } });
 
-  test("viewer permissions come from Kubernetes RBAC, not Kite roles", async ({
+  test("viewer permissions come from Kubernetes RBAC, not Lightkite roles", async ({
     page,
   }) => {
     await loginWithOIDC(page, viewerUser);

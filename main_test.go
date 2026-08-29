@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/zxh326/kite/pkg/common"
-	"github.com/zxh326/kite/pkg/version"
+	"github.com/realmroot/lightkite/pkg/common"
+	"github.com/realmroot/lightkite/pkg/version"
 )
 
 func TestStartPprofServerIsDisabledByDefault(t *testing.T) {
@@ -158,7 +158,7 @@ func TestSetupStatic(t *testing.T) {
 	common.Base = "/kite"
 	common.EnableAnalytics = true
 	common.AnalyticsScriptURL = "https://analytics.example.com/script.js"
-	common.AnalyticsWebsiteID = "kite-test"
+	common.AnalyticsWebsiteID = "lightkite-test"
 
 	r := gin.New()
 	setupStatic(r)
@@ -188,7 +188,7 @@ func TestSetupStatic(t *testing.T) {
 		if !strings.Contains(body, `window.__dynamic_base__="/kite"`) {
 			t.Fatalf("body missing dynamic base injection")
 		}
-		if !strings.Contains(body, "analytics.example.com/script.js") || !strings.Contains(body, `data-website-id="kite-test"`) {
+		if !strings.Contains(body, "analytics.example.com/script.js") || !strings.Contains(body, `data-website-id="lightkite-test"`) {
 			t.Fatalf("body missing analytics injection")
 		}
 	})

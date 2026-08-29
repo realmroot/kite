@@ -2,10 +2,10 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: {{ include "kite.fullname" . }}-cluster-inventory-reader
+  name: {{ include "lightkite.fullname" . }}-cluster-inventory-reader
   namespace: {{ .Values.clusterInventory.namespace }}
   labels:
-    {{- include "kite.labels" . | nindent 4 }}
+    {{- include "lightkite.labels" . | nindent 4 }}
 rules:
   - apiGroups: ["multicluster.x-k8s.io"]
     resources: ["clusterprofiles"]
@@ -14,16 +14,16 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: {{ include "kite.fullname" . }}-cluster-inventory-reader
+  name: {{ include "lightkite.fullname" . }}-cluster-inventory-reader
   namespace: {{ .Values.clusterInventory.namespace }}
   labels:
-    {{- include "kite.labels" . | nindent 4 }}
+    {{- include "lightkite.labels" . | nindent 4 }}
 subjects:
   - kind: ServiceAccount
-    name: {{ include "kite.serviceAccountName" . }}
+    name: {{ include "lightkite.serviceAccountName" . }}
     namespace: {{ .Release.Namespace }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: {{ include "kite.fullname" . }}-cluster-inventory-reader
+  name: {{ include "lightkite.fullname" . }}-cluster-inventory-reader
 {{- end }}

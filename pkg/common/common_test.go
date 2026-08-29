@@ -17,7 +17,7 @@ func TestLoadEnvs(t *testing.T) {
 		KubectlTerminalImage      string
 		DBDSN                     string
 		DBType                    string
-		KiteEncryptKey            string
+		LightkiteEncryptKey       string
 		Host                      string
 		DisableGZIP               bool
 		EnableVersionCheck        bool
@@ -47,7 +47,7 @@ func TestLoadEnvs(t *testing.T) {
 		KubectlTerminalImage:      KubectlTerminalImage,
 		DBDSN:                     DBDSN,
 		DBType:                    DBType,
-		KiteEncryptKey:            KiteEncryptKey,
+		LightkiteEncryptKey:       LightkiteEncryptKey,
 		Host:                      Host,
 		DisableGZIP:               DisableGZIP,
 		EnableVersionCheck:        EnableVersionCheck,
@@ -78,7 +78,7 @@ func TestLoadEnvs(t *testing.T) {
 		KubectlTerminalImage = old.KubectlTerminalImage
 		DBDSN = old.DBDSN
 		DBType = old.DBType
-		KiteEncryptKey = old.KiteEncryptKey
+		LightkiteEncryptKey = old.LightkiteEncryptKey
 		Host = old.Host
 		DisableGZIP = old.DisableGZIP
 		EnableVersionCheck = old.EnableVersionCheck
@@ -122,7 +122,7 @@ func TestLoadEnvs(t *testing.T) {
 	t.Setenv("TRUSTED_PROXIES", "10.42.0.0/16, 192.0.2.10 ,, ")
 	t.Setenv("OIDC_ISSUER", "https://identity.example.com/")
 	t.Setenv("OIDC_CA_FILE", "/etc/kite/identity-ca.pem")
-	t.Setenv("OIDC_CLIENT_ID", "kite-client")
+	t.Setenv("OIDC_CLIENT_ID", "lightkite-client")
 	t.Setenv("OIDC_CLIENT_SECRET", "client-secret")
 	t.Setenv("OIDC_PROVIDER_NAME", "Company Login")
 	t.Setenv("OIDC_SCOPES", "openid profile,email roles")
@@ -158,8 +158,8 @@ func TestLoadEnvs(t *testing.T) {
 	if DBType != "mysql" {
 		t.Fatalf("DBType = %q, want %q", DBType, "mysql")
 	}
-	if KiteEncryptKey != "test-encrypt-key" {
-		t.Fatalf("KiteEncryptKey = %q, want %q", KiteEncryptKey, "test-encrypt-key")
+	if LightkiteEncryptKey != "test-encrypt-key" {
+		t.Fatalf("LightkiteEncryptKey = %q, want %q", LightkiteEncryptKey, "test-encrypt-key")
 	}
 	if Host != "example.com" {
 		t.Fatalf("Host = %q, want %q", Host, "example.com")
@@ -189,7 +189,7 @@ func TestLoadEnvs(t *testing.T) {
 	if !reflect.DeepEqual(TrustedProxies, wantTrustedProxies) {
 		t.Fatalf("TrustedProxies = %#v, want %#v", TrustedProxies, wantTrustedProxies)
 	}
-	if OIDCIssuer != "https://identity.example.com" || OIDCClientID != "kite-client" || OIDCClientSecret != "client-secret" {
+	if OIDCIssuer != "https://identity.example.com" || OIDCClientID != "lightkite-client" || OIDCClientSecret != "client-secret" {
 		t.Fatalf("OIDC client configuration was not loaded")
 	}
 	if OIDCCAFile != "/etc/kite/identity-ca.pem" {
@@ -231,16 +231,16 @@ func assertAnalyticsConfigurationLoaded(t *testing.T) {
 
 func TestLoadEnvs_BaseAlreadyHasLeadingSlash(t *testing.T) {
 	old := struct {
-		KiteEncryptKey     string
-		Base               string
-		CORSAllowedOrigins []string
+		LightkiteEncryptKey string
+		Base                string
+		CORSAllowedOrigins  []string
 	}{
-		KiteEncryptKey:     KiteEncryptKey,
-		Base:               Base,
-		CORSAllowedOrigins: append([]string(nil), CORSAllowedOrigins...),
+		LightkiteEncryptKey: LightkiteEncryptKey,
+		Base:                Base,
+		CORSAllowedOrigins:  append([]string(nil), CORSAllowedOrigins...),
 	}
 	defer func() {
-		KiteEncryptKey = old.KiteEncryptKey
+		LightkiteEncryptKey = old.LightkiteEncryptKey
 		Base = old.Base
 		CORSAllowedOrigins = append([]string(nil), old.CORSAllowedOrigins...)
 	}()

@@ -9,11 +9,11 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/zxh326/kite/pkg/common"
+	"github.com/realmroot/lightkite/pkg/common"
 )
 
 func EncryptString(input string) string {
-	keyHash := sha256.Sum256([]byte(common.KiteEncryptKey))
+	keyHash := sha256.Sum256([]byte(common.LightkiteEncryptKey))
 	block, err := aes.NewCipher(keyHash[:])
 	if err != nil {
 		return fmt.Sprintf("encryption_error: %v", err)
@@ -32,7 +32,7 @@ func EncryptString(input string) string {
 }
 
 func DecryptString(encrypted string) (string, error) {
-	keyHash := sha256.Sum256([]byte(common.KiteEncryptKey))
+	keyHash := sha256.Sum256([]byte(common.LightkiteEncryptKey))
 	ciphertext, err := base64.StdEncoding.DecodeString(encrypted)
 	if err != nil {
 		return "", fmt.Errorf("failed to decode base64: %w", err)

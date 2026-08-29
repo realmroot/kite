@@ -8,7 +8,7 @@ test("kubectl terminal uses the current OIDC user and cleans up its session", as
 }) => {
   const clusterPath = "/api/v1/kubernetes/api/v1/namespaces/kube-system/pods";
   const sessionSelector = encodeURIComponent(
-    "kite.io/component=kubectl-terminal",
+    "lightkite.io/component=kubectl-terminal",
   );
   const listSessionNames = async () => {
     const response = await request.get(

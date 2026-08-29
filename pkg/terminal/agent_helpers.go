@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/zxh326/kite/pkg/cluster"
-	"github.com/zxh326/kite/pkg/common"
-	"github.com/zxh326/kite/pkg/utils"
-	"github.com/zxh326/kite/pkg/wsutil"
+	"github.com/realmroot/lightkite/pkg/cluster"
+	"github.com/realmroot/lightkite/pkg/common"
+	"github.com/realmroot/lightkite/pkg/utils"
+	"github.com/realmroot/lightkite/pkg/wsutil"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )

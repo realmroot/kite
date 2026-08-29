@@ -1,6 +1,6 @@
 # Kubernetes compatibility
 
-Kite follows the three most recent Kubernetes minor releases and validates the
+Lightkite follows the three most recent Kubernetes minor releases and validates the
 same browser and API end-to-end suite against each release before shipping.
 
 | Kubernetes API server | Client libraries | Release status |
@@ -14,7 +14,7 @@ OIDC login, Kubernetes RBAC allow and deny behavior, discovery and generic
 resources, metrics, Search, Helm, logs, exec, browser terminals, and direct and
 reachable clusters. The release workflow repeats the suite on the newest minor.
 
-Kite prefers stable Kubernetes APIs and API discovery. Specialized code must
+Lightkite prefers stable Kubernetes APIs and API discovery. Specialized code must
 move off deprecated APIs before the oldest supported minor removes them. For
 example, Service-to-Pod relationships use `discovery.k8s.io/v1` EndpointSlice;
 the legacy `v1 Endpoints` path is used only when EndpointSlice is unavailable.

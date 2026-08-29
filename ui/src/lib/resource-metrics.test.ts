@@ -10,7 +10,7 @@ afterEach(() => {
 })
 
 describe('standard Kubernetes metrics composition', () => {
-  it('preserves pod usage, requests, and limits without a Kite list handler', async () => {
+  it('preserves pod usage, requests, and limits without a Lightkite list handler', async () => {
     vi.spyOn(apiClient, 'get').mockImplementation(async (path) => {
       if (path === '/kubernetes/apis') {
         return {

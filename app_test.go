@@ -7,8 +7,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
-	"github.com/zxh326/kite/pkg/common"
-	"github.com/zxh326/kite/pkg/model"
+	"github.com/realmroot/lightkite/pkg/common"
+	"github.com/realmroot/lightkite/pkg/model"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
@@ -38,9 +38,9 @@ func withValidOIDCConfiguration(t *testing.T) {
 		common.PlatformAdminSubjects = previousAdminSubjects
 	})
 	common.OIDCIssuer = "https://identity.example.com/tenant"
-	common.OIDCClientID = "kite"
+	common.OIDCClientID = "lightkite"
 	common.OIDCClientSecret = "secret"
-	common.Host = "https://kite.example.com"
+	common.Host = "https://lightkite.example.com"
 	common.OIDCScopes = []string{"openid", "profile", "offline_access"}
 	common.OIDCUsernameClaim = "email"
 	common.OIDCGroupsClaim = "groups"
@@ -62,9 +62,9 @@ func TestValidateOIDCConfigurationRejectsUnsafeOrIncompleteURLs(t *testing.T) {
 		mutate func()
 	}{
 		{name: "missing public host", mutate: func() { common.Host = "" }},
-		{name: "host path", mutate: func() { common.Host = "https://kite.example.com/app" }},
-		{name: "host credentials", mutate: func() { common.Host = "https://user@kite.example.com" }},
-		{name: "insecure public host", mutate: func() { common.Host = "http://kite.example.com" }},
+		{name: "host path", mutate: func() { common.Host = "https://lightkite.example.com/app" }},
+		{name: "host credentials", mutate: func() { common.Host = "https://user@lightkite.example.com" }},
+		{name: "insecure public host", mutate: func() { common.Host = "http://lightkite.example.com" }},
 		{name: "insecure issuer", mutate: func() { common.OIDCIssuer = "http://identity.example.com" }},
 		{name: "issuer query", mutate: func() { common.OIDCIssuer = "https://identity.example.com?tenant=one" }},
 		{name: "insecure release API", mutate: func() { common.ReleaseAPIURL = "http://code.example.com/releases/latest" }},

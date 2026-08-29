@@ -3,12 +3,12 @@
 layout: home
 
 hero:
-  name: "Kite"
+  name: "Lightkite"
   text: "A modern Kubernetes dashboard"
   tagline: "Inspect, operate, and troubleshoot Kubernetes resources across clusters"
   image:
     src: /logo.svg
-    alt: Kite Logo
+    alt: Lightkite Logo
   actions:
     - theme: brand
       text: Get Started

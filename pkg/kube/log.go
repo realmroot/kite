@@ -9,7 +9,7 @@ import (
 	"sync"
 
 	"github.com/gorilla/websocket"
-	"github.com/zxh326/kite/pkg/wsutil"
+	"github.com/realmroot/lightkite/pkg/wsutil"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"
 )

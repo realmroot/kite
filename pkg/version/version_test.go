@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/zxh326/kite/pkg/common"
+	"github.com/realmroot/lightkite/pkg/common"
 )
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
@@ -265,7 +265,7 @@ func TestCheckForUpdateFromConfiguredReleaseAPI(t *testing.T) {
 				if req.Method != http.MethodGet || req.URL.String() != common.ReleaseAPIURL {
 					t.Fatalf("unexpected request: %s %s", req.Method, req.URL)
 				}
-				if got := req.Header.Get("User-Agent"); got != "kite-version-checker/"+tt.currentVersion {
+				if got := req.Header.Get("User-Agent"); got != "lightkite-version-checker/"+tt.currentVersion {
 					t.Fatalf("unexpected user agent: %q", got)
 				}
 				return &http.Response{
