@@ -4,15 +4,15 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/zxh326/kite/pkg/common"
+	"github.com/realmroot/lightkite/pkg/common"
 	"k8s.io/apimachinery/pkg/util/validation"
 )
 
-func TestInjectKiteBase(t *testing.T) {
+func TestInjectLightkiteBase(t *testing.T) {
 	html := `<html><head><link rel="modulepreload" href="__KITE_BASE__/assets/index.js"><script type="module" src="__KITE_BASE__/assets/main.js"></script></head></html>`
 
 	t.Run("subpath", func(t *testing.T) {
-		got := InjectKiteBase(html, "/kite")
+		got := InjectLightkiteBase(html, "/kite")
 
 		if strings.Contains(got, "__KITE_BASE__") {
 			t.Fatalf("placeholder should be replaced: %s", got)
@@ -32,7 +32,7 @@ func TestInjectKiteBase(t *testing.T) {
 	})
 
 	t.Run("root", func(t *testing.T) {
-		got := InjectKiteBase(html, "")
+		got := InjectLightkiteBase(html, "")
 
 		if !strings.Contains(got, `href="/assets/index.js"`) {
 			t.Fatalf("expected root asset href: %s", got)
@@ -46,7 +46,7 @@ func TestInjectKiteBase(t *testing.T) {
 	})
 
 	t.Run("escapes html attribute injection", func(t *testing.T) {
-		got := InjectKiteBase(html, `/ki"te`)
+		got := InjectLightkiteBase(html, `/ki"te`)
 
 		if strings.Contains(got, `href="/ki"te/assets/index.js"`) {
 			t.Fatalf("expected asset href to be escaped: %s", got)
@@ -63,43 +63,19 @@ func TestInjectKiteBase(t *testing.T) {
 func TestInjectAnalytics(t *testing.T) {
 	html := `<html><head><title>kite</title></head><body></body></html>`
 
-	got := InjectAnalytics(html)
-	if !strings.Contains(got, `https://cloud.umami.is/script.js`) {
+	got := InjectAnalytics(html, `https://analytics.example.com/script.js?a="unsafe`, `site"><unsafe`)
+	if !strings.Contains(got, `https://analytics.example.com/script.js?a=&#34;unsafe`) {
 		t.Fatalf("expected analytics script to be injected: %s", got)
 	}
-	if strings.Index(got, `https://cloud.umami.is/script.js`) > strings.Index(got, `</head>`) {
+	if !strings.Contains(got, `data-website-id="site&#34;&gt;&lt;unsafe"`) {
+		t.Fatalf("expected analytics attributes to be escaped: %s", got)
+	}
+	if strings.Index(got, `analytics.example.com/script.js`) > strings.Index(got, `</head>`) {
 		t.Fatalf("expected analytics script before </head>: %s", got)
 	}
 
-	if unchanged := InjectAnalytics("<html><body></body></html>"); unchanged != "<html><body></body></html>" {
+	if unchanged := InjectAnalytics("<html><body></body></html>", "https://analytics.example.com/script.js", "site"); unchanged != "<html><body></body></html>" {
 		t.Fatalf("InjectAnalytics() = %q, want unchanged input", unchanged)
-	}
-}
-
-func TestGetImageRegistryAndRepo(t *testing.T) {
-	testcase := []struct {
-		image    string
-		registry string
-		repo     string
-	}{
-		{"nginx", "", "library/nginx"},
-		{"nginx:latest", "", "library/nginx"},
-		{"zzde/kite:latest", "", "zzde/kite"},
-		{"docker.io/library/nginx", "docker.io", "library/nginx"},
-		{"docker.io/library/nginx:latest", "docker.io", "library/nginx"},
-		{"gcr.io/my-project/my-image", "gcr.io", "my-project/my-image"},
-		{"gcr.io/my-project/my-image:tag", "gcr.io", "my-project/my-image"},
-		{"quay.io/my-org/my-repo", "quay.io", "my-org/my-repo"},
-		{"quay.io/my-org/my-repo:tag", "quay.io", "my-org/my-repo"},
-		{"registry.example.com/my-repo/test", "registry.example.com", "my-repo/test"},
-		{"localhost:5000/team/api:1.2.3", "localhost:5000", "team/api"},
-		{"registry.example.com:5000/team/api@sha256:abcdef", "registry.example.com:5000", "team/api"},
-	}
-	for _, tc := range testcase {
-		registry, repo := GetImageRegistryAndRepo(tc.image)
-		if registry != tc.registry || repo != tc.repo {
-			t.Errorf("GetImageRegistryAndRepo(%q) = (%q, %q), want (%q, %q)", tc.image, registry, repo, tc.registry, tc.repo)
-		}
 	}
 }
 
@@ -120,27 +96,6 @@ func TestGenerateNodeAgentName(t *testing.T) {
 		if errs := validation.IsDNS1123Subdomain(podName); len(errs) > 0 {
 			t.Errorf("GenerateNodeAgentName(%q) = %q, invalid DNS subdomain: %v", tc.nodeName, podName, errs)
 		}
-	}
-}
-
-func TestToEnvName(t *testing.T) {
-	testCases := []struct {
-		name string
-		in   string
-		want string
-	}{
-		{name: "hyphen and dot", in: "a-b.c", want: "A_B_C"},
-		{name: "slash", in: "kube/system", want: "KUBE_SYSTEM"},
-		{name: "mixed case", in: "KiteBase", want: "KITEBASE"},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			got := ToEnvName(tc.in)
-			if got != tc.want {
-				t.Fatalf("ToEnvName(%q) = %q, want %q", tc.in, got, tc.want)
-			}
-		})
 	}
 }
 

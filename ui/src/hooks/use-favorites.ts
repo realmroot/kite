@@ -9,14 +9,14 @@ import {
   toggleFavorite as toggleFavoriteStorage,
 } from '@/lib/favorites'
 
-export function useFavorites() {
+export function useFavorites(principalKey = 'local') {
   const [favorites, setFavorites] = useState<SearchResult[]>([])
   const [refreshKey, setRefreshKey] = useState(0)
 
   // Load favorites on mount
   useEffect(() => {
-    setFavorites(getFavoritesFromStorage())
-  }, [refreshKey])
+    setFavorites(getFavoritesFromStorage(principalKey))
+  }, [principalKey, refreshKey])
 
   // Refresh favorites list
   const refreshFavorites = useCallback(() => {
@@ -26,34 +26,37 @@ export function useFavorites() {
   // Add to favorites
   const addToFavorites = useCallback(
     (resource: SearchResult) => {
-      addToFavoritesStorage(resource)
+      addToFavoritesStorage(resource, principalKey)
       refreshFavorites()
     },
-    [refreshFavorites]
+    [principalKey, refreshFavorites]
   )
 
   // Remove from favorites
   const removeFromFavorites = useCallback(
     (resourceId: string) => {
-      removeFromFavoritesStorage(resourceId)
+      removeFromFavoritesStorage(resourceId, principalKey)
       refreshFavorites()
     },
-    [refreshFavorites]
+    [principalKey, refreshFavorites]
   )
 
   // Check if resource is favorite
-  const isFavorite = useCallback((resourceId: string) => {
-    return isFavoriteStorage(resourceId)
-  }, []) // No dependencies needed as we always check current storage state
+  const isFavorite = useCallback(
+    (resourceId: string) => {
+      return isFavoriteStorage(resourceId, principalKey)
+    },
+    [principalKey]
+  )
 
   // Toggle favorite status
   const toggleFavorite = useCallback(
     (resource: SearchResult) => {
-      const isFavorite = toggleFavoriteStorage(resource)
+      const isFavorite = toggleFavoriteStorage(resource, principalKey)
       refreshFavorites()
       return isFavorite
     },
-    [refreshFavorites]
+    [principalKey, refreshFavorites]
   )
 
   return {

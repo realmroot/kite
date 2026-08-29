@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Kite Helm Repository</title>
+    <title>Lightkite Helm Repository</title>
     <style>
       body {
         font-family: -apple-system, BlinkMacSystemFont, sans-serif;
@@ -60,7 +60,7 @@
   <body>
     <div class="container">
       <div class="header">
-        <h1>🪁 Kite Helm Charts</h1>
+        <h1>🪁 Lightkite Helm Charts</h1>
         <p>Modern Kubernetes Dashboard</p>
       </div>
 
@@ -69,23 +69,27 @@
       <div class="step">
         <h3>1. Install from OCI registry</h3>
         <div class="code">
-          helm install kite oci://ghcr.io/kite-org/charts/kite -n kube-system
+          helm install lightkite oci://ghcr.io/&lt;owner&gt;/charts/lightkite --version
+          &lt;version&gt; -n lightkite-system --create-namespace -f values.yaml
         </div>
       </div>
 
       <div class="step">
         <h3>2. Or add repository</h3>
         <div class="code">
-          helm repo add kite https://kite-org.github.io/kite/<br />helm repo update
+          helm repo add lightkite &lt;repository-url&gt;<br />helm repo update
         </div>
       </div>
 
       <div class="step">
         <h3>3. Install Chart</h3>
-        <div class="code">helm install kite kite/kite -n kube-system</div>
+        <div class="code">
+          helm install lightkite lightkite/lightkite --version &lt;version&gt; -n lightkite-system
+          --create-namespace -f values.yaml
+        </div>
       </div>
       <h2>Available Versions</h2>
-      <div class="code">helm search repo kite</div>
+      <div class="code">helm search repo lightkite</div>
       or view the <a href="./index.yaml">Repository Index</a>.
     </div>
   </body>

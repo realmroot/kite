@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for contributing to Kite.
+Thanks for contributing to Lightkite.
 
 ## Before Opening a PR
 

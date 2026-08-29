@@ -4,7 +4,7 @@ outline: deep
 
 # Kube Proxy
 
-Kite 内置了 kubectl Proxy 功能，让您可以直接通过 Kite 访问 Pods 或 Services，无需在本地运行 `kubectl port-forward`。
+Lightkite 内置了 kubectl Proxy 功能，让您可以直接通过 Lightkite 访问 Pods 或 Services，无需在本地运行 `kubectl port-forward`。
 
 ## 如何使用
 

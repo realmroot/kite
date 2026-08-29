@@ -5,176 +5,122 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
-
-	"github.com/zxh326/kite/pkg/cluster"
-	"github.com/zxh326/kite/pkg/common"
-	"github.com/zxh326/kite/pkg/kube"
-	"github.com/zxh326/kite/pkg/model"
-	"github.com/zxh326/kite/pkg/rbac"
-	"github.com/zxh326/kite/pkg/utils"
-	"github.com/zxh326/kite/pkg/wsutil"
+	"github.com/realmroot/lightkite/pkg/cluster"
+	"github.com/realmroot/lightkite/pkg/common"
+	"github.com/realmroot/lightkite/pkg/kube"
+	"github.com/realmroot/lightkite/pkg/model"
+	"github.com/realmroot/lightkite/pkg/utils"
+	"github.com/realmroot/lightkite/pkg/wsutil"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
 )
 
-type NodeTerminalHandler struct {
-}
+type NodeTerminalHandler struct{}
 
 func NewNodeTerminalHandler() *NodeTerminalHandler {
 	return &NodeTerminalHandler{}
 }
 
-// HandleNodeTerminalWebSocket handles WebSocket connections for node terminal access
 func (h *NodeTerminalHandler) HandleNodeTerminalWebSocket(c *gin.Context) {
 	cs := c.MustGet("cluster").(*cluster.ClientSet)
-
-	nodeName := c.Param("nodeName")
+	nodeName := strings.TrimSpace(c.Param("nodeName"))
 	if nodeName == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Node name is required"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "node name is required"})
 		return
 	}
-
-	user := c.MustGet("user").(model.User)
+	if cs.K8sClient.Configuration == nil || strings.TrimSpace(cs.K8sClient.Configuration.BearerToken) == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "the current OIDC session has no Kubernetes bearer token"})
+		return
+	}
+	setting, err := model.GetGeneralSetting()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load node terminal settings"})
+		return
+	}
+	image := strings.TrimSpace(setting.NodeTerminalImage)
+	if image == "" {
+		image = common.NodeTerminalImage
+	}
 
 	wsutil.Serve(c.Writer, c.Request, func(ws *wsutil.Session) {
-		ctx := ws.Context
-		if !rbac.CanAccess(user, string(common.Nodes), "exec", cs.Name, "") {
-			ws.SendErrorMessage(rbac.NoAccess(user.Key(), string(common.VerbExec), string(common.Nodes), "", cs.Name))
-			return
-		}
-		node, err := cs.K8sClient.ClientSet.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
-		if err != nil {
-			klog.Errorf("Failed to get node %s: %v", nodeName, err)
-			ws.SendErrorMessage(fmt.Sprintf("Failed to get node %s: %v", nodeName, err))
-			return
-		}
-		if node == nil {
-			klog.Errorf("Node %s not found", nodeName)
-			ws.SendErrorMessage(fmt.Sprintf("Node %s not found", nodeName))
-			return
-		}
-		setting, err := model.GetGeneralSetting()
-		if err != nil {
-			klog.Errorf("Failed to load general setting: %v", err)
-			ws.SendErrorMessage(fmt.Sprintf("Failed to load settings: %v", err))
-			return
-		}
-		nodeTerminalImage := strings.TrimSpace(setting.NodeTerminalImage)
-		if nodeTerminalImage == "" {
-			nodeTerminalImage = common.NodeTerminalImage
-		}
-		nodeAgentName, err := h.createNodeAgent(ctx, cs, nodeName, nodeTerminalImage)
-		if err != nil {
-			klog.Errorf("Failed to create node agent pod: %v", err)
-			ws.SendErrorMessage(fmt.Sprintf("Failed to create node agent pod: %v", err))
+		if _, err := cs.K8sClient.ClientSet.CoreV1().Nodes().Get(ws.Context, nodeName, metav1.GetOptions{}); err != nil {
+			ws.SendErrorMessage(fmt.Sprintf("failed to get node %s: %v", nodeName, err))
 			return
 		}
 
-		// Ensure cleanup of the node agent pod
-		defer func() {
-			klog.Infof("Cleaning up node agent pod %s", nodeAgentName)
-			if err := h.cleanupNodeAgentPod(cs, nodeAgentName); err != nil {
-				klog.Errorf("Failed to cleanup node agent pod %s: %v", nodeAgentName, err)
-			}
-		}()
+		pod := buildNodeTerminalPod(nodeName, image)
+		if err := cs.K8sClient.Create(ws.Context, pod); err != nil {
+			ws.SendErrorMessage(fmt.Sprintf("failed to create node terminal pod: %v", err))
+			return
+		}
+		defer h.cleanupPod(cs, pod.Name)
 
-		if err := waitForAgentPodReady(ctx, cs, ws, nodeAgentName, "ready!"); err != nil {
-			klog.Errorf("Failed to wait for pod ready: %v", err)
-			ws.SendErrorMessage(fmt.Sprintf("Failed to wait for pod ready: %v", err))
+		if err := waitForAgentPodReady(ws.Context, cs, ws, pod.Name, "node terminal ready"); err != nil {
+			klog.V(2).Infof("node terminal pod %s did not become ready: %v", pod.Name, err)
 			return
 		}
 
-		session := kube.NewTerminalSession(cs.K8sClient, ws.Conn, common.AgentPodNamespace, nodeAgentName, common.NodeTerminalPodName)
-		if err := session.Start(ctx, "attach"); err != nil {
-			klog.Errorf("Terminal session error: %v", err)
+		session := kube.NewTerminalSession(cs.K8sClient, ws.Conn, common.AgentPodNamespace, pod.Name, common.NodeTerminalPodName)
+		defer session.Close()
+		command := []string{"sh", "-c", "exec chroot /host /bin/sh -l || exec chroot /host /bin/bash || exec /bin/sh"}
+		if err := session.StartCommand(ws.Context, "exec", command); err != nil {
+			klog.V(2).Infof("node terminal session %s ended: %v", pod.Name, err)
 		}
 	})
 }
 
-func (h *NodeTerminalHandler) createNodeAgent(ctx context.Context, cs *cluster.ClientSet, nodeName, image string) (string, error) {
-	podName := utils.GenerateNodeAgentName(nodeName)
-	// Define the kite node agent pod spec
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      podName,
-			Namespace: common.AgentPodNamespace,
-			Labels: map[string]string{
-				"app": podName,
-			},
-		},
+func buildNodeTerminalPod(nodeName, image string) *corev1.Pod {
+	privileged := true
+	automount := false
+	readOnly := false
+	gracePeriod := int64(0)
+	activeDeadline := int64(60 * 60)
+	hostPathType := corev1.HostPathDirectory
+	name := utils.GenerateNodeAgentName(nodeName)
+	labels := map[string]string{
+		"app.kubernetes.io/managed-by": "lightkite",
+		"lightkite.io/component":       "node-terminal",
+		"lightkite.io/session":         name,
+	}
+	return &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: common.AgentPodNamespace, Labels: labels},
 		Spec: corev1.PodSpec{
-			NodeName:      nodeName,
-			HostNetwork:   true,
-			HostPID:       true,
-			HostIPC:       true,
-			RestartPolicy: corev1.RestartPolicyNever,
-			Tolerations: []corev1.Toleration{
-				{
-					Operator: corev1.TolerationOpExists,
-				},
-			},
-			Volumes: []corev1.Volume{
-				{
-					Name: "host",
-					VolumeSource: corev1.VolumeSource{
-						HostPath: &corev1.HostPathVolumeSource{
-							Path: "/",
-						},
-					},
-				},
-			},
-			Containers: []corev1.Container{
-				{
-					Name:            common.NodeTerminalPodName,
-					Image:           image,
-					ImagePullPolicy: corev1.PullIfNotPresent,
-					Stdin:           true,
-					StdinOnce:       true,
-					TTY:             true,
-					Command:         []string{"/bin/sh", "-c", "chroot /host || (exec /bin/zsh || exec /bin/bash || exec /bin/sh)"},
-					SecurityContext: &corev1.SecurityContext{
-						Privileged: &[]bool{true}[0],
-					},
-					VolumeMounts: []corev1.VolumeMount{
-						{
-							Name:      "host",
-							MountPath: "/host",
-						},
-					},
-				},
-			},
+			NodeName:                      nodeName,
+			AutomountServiceAccountToken:  &automount,
+			RestartPolicy:                 corev1.RestartPolicyNever,
+			ActiveDeadlineSeconds:         &activeDeadline,
+			TerminationGracePeriodSeconds: &gracePeriod,
+			Tolerations:                   []corev1.Toleration{{Operator: corev1.TolerationOpExists}},
+			Volumes: []corev1.Volume{{
+				Name: "host",
+				VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{
+					Path: "/",
+					Type: &hostPathType,
+				}},
+			}},
+			Containers: []corev1.Container{{
+				Name:            common.NodeTerminalPodName,
+				Image:           image,
+				ImagePullPolicy: corev1.PullIfNotPresent,
+				Command:         []string{"sh", "-c", "trap : TERM INT; sleep 86400 & wait"},
+				SecurityContext: &corev1.SecurityContext{Privileged: &privileged},
+				VolumeMounts:    []corev1.VolumeMount{{Name: "host", MountPath: "/host", ReadOnly: readOnly}},
+			}},
 		},
 	}
-
-	object := &corev1.Pod{}
-	namespacedName := types.NamespacedName{Name: podName, Namespace: common.AgentPodNamespace}
-	if err := cs.K8sClient.Get(ctx, namespacedName, object); err == nil {
-		if utils.IsPodErrorOrSuccess(object) {
-			if err := cs.K8sClient.Delete(ctx, object); err != nil {
-				return "", fmt.Errorf("failed to delete existing kite node agent pod: %w", err)
-			}
-		} else {
-			return podName, nil
-		}
-	}
-
-	// Create the pod
-	err := cs.K8sClient.Create(ctx, pod)
-	if err != nil {
-		return "", fmt.Errorf("failed to create kite node agent pod: %w", err)
-	}
-
-	return podName, nil
 }
 
-func (h *NodeTerminalHandler) cleanupNodeAgentPod(cs *cluster.ClientSet, podName string) error {
-	return cs.K8sClient.ClientSet.CoreV1().Pods(common.AgentPodNamespace).Delete(
-		context.TODO(),
-		podName,
-		metav1.DeleteOptions{},
-	)
+func (h *NodeTerminalHandler) cleanupPod(cs *cluster.ClientSet, name string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	gracePeriod := int64(0)
+	err := cs.K8sClient.ClientSet.CoreV1().Pods(common.AgentPodNamespace).Delete(ctx, name, metav1.DeleteOptions{GracePeriodSeconds: &gracePeriod})
+	if err != nil && !apierrors.IsNotFound(err) {
+		klog.Warningf("failed to clean up node terminal pod %s/%s: %v", common.AgentPodNamespace, name, err)
+	}
 }

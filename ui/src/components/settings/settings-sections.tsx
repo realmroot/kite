@@ -1,14 +1,10 @@
 import type { ComponentType, ReactNode } from 'react'
 import type { TFunction } from 'i18next'
 
-import { APIKeyManagement } from './apikey-management'
 import { AuditLog } from './audit-log'
-import { AuthenticationManagement } from './authentication-management'
 import { ClusterManagement } from './cluster-management'
 import { GeneralManagement } from './general-management'
-import { RBACManagement } from './rbac-management'
 import { TemplateManagement } from './template-management'
-import { UserManagement } from './user-management'
 
 export interface SettingsSectionDefinition {
   value: string
@@ -45,41 +41,17 @@ export const settingsSectionRegistry: SettingsSectionDefinition[] = [
     ClusterManagement
   ),
   createSettingsSectionDefinition(
-    'oauth',
-    'settings.tabs.oauth',
-    'Authentication',
-    AuthenticationManagement
-  ),
-  createSettingsSectionDefinition(
-    'rbac',
-    'settings.tabs.rbac',
-    'RBAC',
-    RBACManagement
-  ),
-  createSettingsSectionDefinition(
-    'users',
-    'settings.tabs.users',
-    'User',
-    UserManagement
-  ),
-  createSettingsSectionDefinition(
-    'apikeys',
-    'settings.tabs.apikeys',
-    'API Keys',
-    APIKeyManagement
-  ),
-  createSettingsSectionDefinition(
     'templates',
     'settings.tabs.templates',
     'Templates',
     TemplateManagement
   ),
-  createSettingsSectionDefinition(
-    'audit',
-    'settings.tabs.audit',
-    'Audit',
-    AuditLog
-  ),
+  {
+    value: 'audit',
+    labelKey: 'settings.tabs.audit',
+    defaultLabel: 'Audit',
+    render: () => <AuditLog />,
+  },
 ]
 
 export function createSettingsTabs(t: TFunction) {

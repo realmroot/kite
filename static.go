@@ -6,9 +6,9 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/zxh326/kite/pkg/common"
-	"github.com/zxh326/kite/pkg/middleware"
-	"github.com/zxh326/kite/pkg/utils"
+	"github.com/realmroot/lightkite/pkg/common"
+	"github.com/realmroot/lightkite/pkg/middleware"
+	"github.com/realmroot/lightkite/pkg/utils"
 )
 
 //go:embed static
@@ -44,9 +44,9 @@ func setupStatic(r *gin.Engine) {
 			return
 		}
 
-		htmlContent := utils.InjectKiteBase(string(content), base)
+		htmlContent := utils.InjectLightkiteBase(string(content), base)
 		if common.EnableAnalytics {
-			htmlContent = utils.InjectAnalytics(htmlContent)
+			htmlContent = utils.InjectAnalytics(htmlContent, common.AnalyticsScriptURL, common.AnalyticsWebsiteID)
 		}
 
 		c.Header("Content-Type", "text/html; charset=utf-8")

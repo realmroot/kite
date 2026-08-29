@@ -2,6 +2,7 @@ package images
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 )
 
 func TestGetRegistry(t *testing.T) {
+	t.Setenv("KITE_IMAGE_REGISTRY_HOSTS", "localhost:5000")
 	tests := []struct {
 		name       string
 		image      string
@@ -29,7 +31,10 @@ func TestGetRegistry(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			reg := getRegistry(tt.image)
+			reg, err := getRegistry(tt.image)
+			if err != nil {
+				t.Fatalf("getRegistry(%q) error = %v", tt.image, err)
+			}
 			if tt.wantDocker {
 				dockerReg, ok := reg.(dockerRegistry)
 				if !ok {
@@ -55,6 +60,19 @@ func TestGetRegistry(t *testing.T) {
 	}
 }
 
+func TestGetRegistryRejectsInvalidAndUnconfiguredHosts(t *testing.T) {
+	t.Setenv("KITE_IMAGE_REGISTRY_HOSTS", "")
+	for _, image := range []string{
+		"not a valid image",
+		"localhost:5000/team/app:latest",
+		"169.254.169.254/metadata:latest",
+	} {
+		if _, err := getRegistry(image); err == nil {
+			t.Fatalf("getRegistry(%q) succeeded, want rejection", image)
+		}
+	}
+}
+
 func TestGetImageTagsRequiresImage(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	rec := httptest.NewRecorder()
@@ -65,6 +83,47 @@ func TestGetImageTagsRequiresImage(t *testing.T) {
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status code = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+}
+
+func TestGetImageTagsRejectsUnconfiguredRegistry(t *testing.T) {
+	t.Setenv("KITE_IMAGE_REGISTRY_HOSTS", "")
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/image-tags?image=localhost:5000/team/app:latest", nil)
+
+	GetImageTags(ctx)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body=%s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestRegistryRequestPropagatesContextCancellation(t *testing.T) {
+	started := make(chan struct{})
+	server := httptest.NewTLSServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		close(started)
+		<-r.Context().Done()
+	}))
+	t.Cleanup(server.Close)
+
+	originalTransport := http.DefaultTransport
+	http.DefaultTransport = server.Client().Transport
+	t.Cleanup(func() { http.DefaultTransport = originalTransport })
+	ctx, cancel := context.WithCancel(context.Background())
+	result := make(chan error, 1)
+	go func() {
+		response, err := getRegistryResponse(ctx, server.URL)
+		if response != nil {
+			_ = response.Body.Close()
+		}
+		result <- err
+	}()
+	<-started
+	cancel()
+	if err := <-result; !errors.Is(err, context.Canceled) {
+		t.Fatalf("getRegistryResponse() error = %v, want context.Canceled", err)
 	}
 }
 

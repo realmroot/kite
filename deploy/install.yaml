@@ -1,45 +1,112 @@
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
+apiVersion: v1
+kind: Namespace
 metadata:
-  name: kite
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: cluster-admin
-subjects:
-  - kind: ServiceAccount
-    name: kite
-    namespace: kube-system
+  name: lightkite-system
 ---
 kind: ServiceAccount
 apiVersion: v1
 metadata:
-  name: kite
-  namespace: kube-system
+  name: lightkite
+  namespace: lightkite-system
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: lightkite
+  namespace: lightkite-system
+type: Opaque
+stringData:
+  # Replace every placeholder before applying this manifest.
+  OIDC_CLIENT_ID: replace-me
+  KITE_ENCRYPT_KEY: replace-with-an-independent-random-secret
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: lightkite-data
+  namespace: lightkite-system
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
-    app: kite
-  name: kite
-  namespace: kube-system
+    app: lightkite
+  name: lightkite
+  namespace: lightkite-system
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: kite
-  strategy: {}
+      app: lightkite
+  strategy:
+    type: Recreate
   template:
     metadata:
       labels:
-        app: kite
+        app: lightkite
     spec:
-      serviceAccountName: kite
+      serviceAccountName: lightkite
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
       containers:
-        - image: ghcr.io/kite-org/kite:latest
+        # Replace OWNER and VERSION with the immutable image published by this fork.
+        - image: ghcr.io/OWNER/lightkite:VERSION
           imagePullPolicy: IfNotPresent
-          name: kite
+          name: lightkite
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          envFrom:
+            - secretRef:
+                name: lightkite
+          env:
+            # Replace these values and register
+            # https://lightkite.example.com/api/auth/callback at the provider.
+            - name: OIDC_ISSUER
+              value: https://identity.example.com
+            - name: OIDC_PROVIDER_NAME
+              value: OpenID Connect
+            - name: OIDC_SCOPES
+              value: openid profile email groups offline_access
+            - name: OIDC_USERNAME_CLAIM
+              value: email
+            - name: OIDC_GROUPS_CLAIM
+              value: groups
+            - name: PLATFORM_ADMIN_GROUPS
+              value: lightkite-platform-admins
+            # Optional standard Cluster Inventory discovery. This manifest must
+            # also grant the ServiceAccount get/list/watch on ClusterProfiles.
+            - name: CLUSTER_INVENTORY_ENABLED
+              value: "false"
+            - name: HOST
+              value: https://lightkite.example.com
+            - name: DB_TYPE
+              value: sqlite
+            - name: KUBECTL_TERMINAL_IMAGE
+              value: alpine/kubectl:1.36.3
+            - name: NODE_TERMINAL_IMAGE
+              value: busybox:1.37.0
+            - name: RELEASE_API_URL
+              value: https://api.github.com/repos/OWNER/lightkite/releases/latest
+            - name: DB_DSN
+              value: /data/lightkite.db?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)
           resources:
             limits:
               cpu: 1000m
@@ -55,21 +122,38 @@ spec:
             periodSeconds: 10
           readinessProbe:
             httpGet:
-              path: /healthz
+              path: /readyz
               port: 8080
             initialDelaySeconds: 5
             periodSeconds: 5
+          startupProbe:
+            httpGet:
+              path: /readyz
+              port: 8080
+            periodSeconds: 2
+            failureThreshold: 30
           ports:
             - containerPort: 8080
               protocol: TCP
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: lightkite-data
+        - name: tmp
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
 metadata:
   labels:
-    app: kite
-  name: kite
-  namespace: kube-system
+    app: lightkite
+  name: lightkite
+  namespace: lightkite-system
 spec:
   ports:
     - name: http
@@ -77,5 +161,5 @@ spec:
       protocol: TCP
       targetPort: 8080
   selector:
-    app: kite
+    app: lightkite
   type: ClusterIP

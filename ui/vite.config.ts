@@ -53,7 +53,7 @@ function runtimeBaseHtmlPlugin(): Plugin {
   let buildOutDir = ''
 
   return {
-    name: 'kite-runtime-base-html',
+    name: 'lightkite-runtime-base-html',
     apply: 'build',
     configResolved(config) {
       buildOutDir = path.resolve(config.root, config.build.outDir)

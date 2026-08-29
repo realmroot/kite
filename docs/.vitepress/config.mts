@@ -1,12 +1,23 @@
 import { defineConfig } from "vitepress";
 
+const analyticsScriptURL = process.env.DOCS_ANALYTICS_SCRIPT_URL?.trim();
+const analyticsWebsiteID = process.env.DOCS_ANALYTICS_WEBSITE_ID?.trim();
+if (!!analyticsScriptURL !== !!analyticsWebsiteID) {
+  throw new Error(
+    "DOCS_ANALYTICS_SCRIPT_URL and DOCS_ANALYTICS_WEBSITE_ID must be configured together",
+  );
+}
+if (analyticsScriptURL && new URL(analyticsScriptURL).protocol !== "https:") {
+  throw new Error("DOCS_ANALYTICS_SCRIPT_URL must use HTTPS");
+}
+
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
-  title: "Kite",
+  title: "Lightkite",
   description: "A modern Kubernetes dashboard",
 
   sitemap: {
-    hostname: "https://kite.zzde.me",
+    hostname: "https://realmroot.github.io/lightkite",
     lastmodDateOnly: false,
   },
 
@@ -26,7 +37,7 @@ export default defineConfig({
       label: "中文",
       lang: "zh-CN",
       link: "/zh/",
-      title: "Kite",
+      title: "Lightkite",
       description: "一个现代 Kubernetes 仪表盘",
       themeConfig: {
         nav: [
@@ -37,7 +48,7 @@ export default defineConfig({
           { text: "常见问题", link: "/zh/faq" },
         ],
         editLink: {
-          pattern: "https://github.com/zxh326/kite/tree/main/docs/:path",
+          pattern: "https://github.com/realmroot/lightkite/tree/main/docs/:path",
           text: "在 GitHub 上编辑此页面",
         },
       },
@@ -46,14 +57,18 @@ export default defineConfig({
 
   head: [
     ["link", { rel: "icon", href: "/logo.svg" }],
-    [
-      "script",
-      {
-        src: "https://cloud.umami.is/script.js",
-        "data-website-id": "764af8e4-8fa4-4fc5-83e2-304718cc15fe",
-        defer: "true",
-      },
-    ],
+    ...(analyticsScriptURL && analyticsWebsiteID
+      ? [
+          [
+            "script",
+            {
+              src: analyticsScriptURL,
+              "data-website-id": analyticsWebsiteID,
+              defer: "true",
+            },
+          ] as const,
+        ]
+      : []),
   ],
 
   themeConfig: {
@@ -64,7 +79,7 @@ export default defineConfig({
     },
     langMenuLabel: "Language",
     editLink: {
-      pattern: "https://github.com/zxh326/kite/tree/main/docs/:path",
+      pattern: "https://github.com/realmroot/lightkite/tree/main/docs/:path",
       text: "Edit this page on GitHub",
     },
 
@@ -81,7 +96,7 @@ export default defineConfig({
         {
           text: "Introduction",
           items: [
-            { text: "What is Kite?", link: "/guide/" },
+            { text: "What is Lightkite?", link: "/guide/" },
             { text: "Getting Started", link: "/guide/installation" },
           ],
         },
@@ -96,6 +111,14 @@ export default defineConfig({
             { text: "Environment Variables", link: "/config/env" },
             { text: "Configuration File", link: "/config/config-file" },
             { text: "Chart Values", link: "/config/chart-values" },
+            {
+              text: "Kubernetes Compatibility",
+              link: "/architecture/kubernetes-compatibility",
+            },
+            {
+              text: "Differences from Kite",
+              link: "/architecture/upstream-kite",
+            },
           ],
         },
         {
@@ -106,9 +129,7 @@ export default defineConfig({
             { text: "Logs", link: "/guide/logs" },
             { text: "Monitor", link: "/guide/monitoring" },
             { text: "Helm Management", link: "/guide/helm-management" },
-            { text: "AI Assistant", link: "/guide/ai-assistant" },
             { text: "Web Terminal", link: "/guide/web-terminal" },
-            { text: "Kite Cluster Agent", link: "/guide/kite-cluster-agent" },
             { text: "Resource History", link: "/guide/resource-history" },
             { text: "Custom Sidebar", link: "/guide/custom-sidebar" },
             { text: "Kube Proxy", link: "/guide/kube-proxy" },
@@ -133,11 +154,11 @@ export default defineConfig({
           link: "/api/cluster-management",
         },
         {
-          text: "RBAC Management",
+          text: "Authorization",
           link: "/api/rbac-management",
         },
         {
-          text: "User Management",
+          text: "User Preferences",
           link: "/api/user-management",
         },
       ],
@@ -145,7 +166,7 @@ export default defineConfig({
         {
           text: "介绍",
           items: [
-            { text: "什么是 Kite?", link: "/zh/guide/" },
+            { text: "什么是 Lightkite?", link: "/zh/guide/" },
             { text: "开始", link: "/zh/guide/installation" },
           ],
         },
@@ -160,6 +181,14 @@ export default defineConfig({
             { text: "环境变量", link: "/zh/config/env" },
             { text: "配置文件", link: "/zh/config/config-file" },
             { text: "Chart Values", link: "/zh/config/chart-values" },
+            {
+              text: "Kubernetes 兼容性",
+              link: "/zh/architecture/kubernetes-compatibility",
+            },
+            {
+              text: "与上游 Kite 的区别",
+              link: "/zh/architecture/upstream-kite",
+            },
           ],
         },
         {
@@ -170,9 +199,7 @@ export default defineConfig({
             { text: "日志", link: "/zh/guide/logs" },
             { text: "监控", link: "/zh/guide/monitoring" },
             { text: "Helm 管理", link: "/zh/guide/helm-management" },
-            { text: "AI 助手", link: "/zh/guide/ai-assistant" },
             { text: "Web 终端", link: "/zh/guide/web-terminal" },
-            { text: "Kite Cluster Agent", link: "/zh/guide/kite-cluster-agent" },
             { text: "资源历史", link: "/zh/guide/resource-history" },
             { text: "自定义侧边栏", link: "/zh/guide/custom-sidebar" },
             { text: "Kube Proxy", link: "/zh/guide/kube-proxy" },
@@ -197,21 +224,21 @@ export default defineConfig({
           link: "/zh/api/cluster-management",
         },
         {
-          text: "RBAC 管理",
+          text: "授权边界",
           link: "/zh/api/rbac-management",
         },
         {
-          text: "用户管理",
+          text: "用户偏好",
           link: "/zh/api/user-management",
         },
       ],
     },
 
-    socialLinks: [{ icon: "github", link: "https://github.com/zxh326/kite" }],
+    socialLinks: [{ icon: "github", link: "https://github.com/realmroot/lightkite" }],
 
     footer: {
       message: "Released under the Apache License.",
-      copyright: "Copyright © 2025-present Kite Contributors",
+      copyright: "Copyright © 2025-present Lightkite contributors",
     },
   },
 });

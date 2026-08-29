@@ -18,7 +18,10 @@ export function SettingsPage() {
           <h1 className="text-3xl">{t('settings.title', 'Settings')}</h1>
         </div>
         <p className="text-muted-foreground">
-          {t('settings.description', 'Manage clusters, roles and permissions')}
+          {t(
+            'settings.description',
+            'Manage credential-free cluster connections and shared dashboard content'
+          )}
         </p>
       </div>
 

@@ -3,50 +3,38 @@ package model
 import (
 	"testing"
 
-	"github.com/zxh326/kite/pkg/utils"
+	"github.com/glebarez/sqlite"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
-func TestUserKey(t *testing.T) {
-	tests := []struct {
-		name     string
-		user     User
-		expected string
-	}{
-		{"username", User{Model: Model{ID: 1}, Username: "alice", Name: "Alice", Sub: "sub"}, "alice"},
-		{"name", User{Model: Model{ID: 2}, Name: "Alice", Sub: "sub"}, "Alice"},
-		{"sub", User{Model: Model{ID: 3}, Sub: "sub"}, "sub"},
-		{"id", User{Model: Model{ID: 4}}, "4"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.user.Key(); got != tt.expected {
-				t.Fatalf("Key() = %q, want %q", got, tt.expected)
-			}
-		})
-	}
-}
-
-func TestUserGetAPIKey(t *testing.T) {
-	user := User{
-		Model:  Model{ID: 42},
-		APIKey: SecretString("secret"),
-	}
-
-	if got, want := user.GetAPIKey(), "kite42-secret"; got != want {
-		t.Fatalf("GetAPIKey() = %q, want %q", got, want)
-	}
-}
-
-func TestCheckPassword(t *testing.T) {
-	hash, err := utils.HashPassword("secret")
+func TestFindWithSubOrUpsertUserDBUsesProvidedTransaction(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	if err != nil {
-		t.Fatalf("HashPassword() error = %v", err)
+		t.Fatal(err)
 	}
-	if !CheckPassword(hash, "secret") {
-		t.Fatal("CheckPassword() returned false for matching password")
+	if err := db.AutoMigrate(&User{}); err != nil {
+		t.Fatal(err)
 	}
-	if CheckPassword(hash, "wrong") {
-		t.Fatal("CheckPassword() returned true for non-matching password")
+
+	user := &User{Issuer: "https://issuer.example", Sub: "subject", Username: "before"}
+	if err := db.Transaction(func(tx *gorm.DB) error {
+		return FindWithSubOrUpsertUserDB(tx, user)
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	updated := &User{Issuer: user.Issuer, Sub: user.Sub, Username: "after"}
+	if err := db.Transaction(func(tx *gorm.DB) error {
+		return FindWithSubOrUpsertUserDB(tx, updated)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var stored User
+	if err := db.Where("issuer = ? AND sub = ?", user.Issuer, user.Sub).First(&stored).Error; err != nil {
+		t.Fatal(err)
+	}
+	if stored.Username != "after" || stored.ID != user.ID {
+		t.Fatalf("stored user = %#v, want updated user ID %d", stored, user.ID)
 	}
 }

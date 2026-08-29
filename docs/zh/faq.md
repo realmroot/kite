@@ -2,37 +2,36 @@
 
 ## 数据共享
 
-默认情况下，Kite 不会收集任何分析数据。
+默认情况下，Lightkite 不会收集任何分析数据。
 
-如果您希望帮助改进产品，可以将环境变量 `ENABLE_ANALYTICS` 设置为 `true`。
-
-Kite 将使用 umami 收集极少的匿名使用数据。
-
-源代码可在 [这里](https://github.com/kite-org/kite/blob/main/pkg/utils/utils.go#L10-L16) 找到。
+Lightkite 不内置统计账户或数据接收端。运维人员可以配置自己的 Umami 兼容
+`ANALYTICS_SCRIPT_URL` 和 `ANALYTICS_WEBSITE_ID`，再通过
+`ENABLE_ANALYTICS=true` 或管理设置页面启用；关闭时浏览器不会加载统计脚本。
 
 ## 权限问题
 
 如果在访问资源时，遇到如下错误提示，
 
 ```txt
-用户 admin 没有权限在集群 in-cluster 的命名空间 kite 中执行 获取 configmaps
+用户 admin 没有权限在集群 in-cluster 的命名空间 lightkite 中执行 获取 configmaps
 ```
 
-表示用户 `admin` 没有权限访问 `kite` 命名空间中的 `configmaps` 资源。
+这表示 Kubernetes 已认证显示的 OIDC 身份，但原生 RBAC 不允许它读取 `lightkite`
+命名空间中的 `configmaps`。
 
 你需要参考 [RBAC 配置指南](./config/rbac-config) 来配置用户的权限。
 
 ## 托管 Kubernetes 集群连接问题
 
-如果您使用托管 Kubernetes 集群（AKS、EKS、GKE 等）并在将集群添加到 Kite 时遇到身份验证错误，这通常是因为默认的 kubeconfig 使用了需要 CLI 工具（如 `kubelogin`、`aws` 或 `gcloud`）的 `exec` 插件。
+Lightkite 不使用云 CLI kubeconfig 或 `exec` 插件。托管 API Server 必须接受 Lightkite
+登录使用的同一外部 OIDC issuer 与 audience，否则目前无法直接传递用户 token。
+不要通过创建共享 ServiceAccount token 绕过这一限制。
 
-Kite 作为服务端应用运行，无法执行这些客户端身份验证工具。相反，您应该使用基于 Service Account token 的身份验证。
-
-请参考[托管 Kubernetes 集群配置指南](./config/managed-k8s-auth)，了解如何创建和使用 Service Account token 进行身份验证的详细说明。
+参见[托管 Kubernetes 认证指南](./config/managed-k8s-auth)。
 
 ## 持久化相关
 
-Kite 支持使用 SQLite、MySQL 或 PostgreSQL 作为数据库。
+Lightkite 支持使用 SQLite、MySQL 或 PostgreSQL 作为数据库。
 
 你可以通过环境变量 `DB_DSN` 来配置数据库连接字符串，`DB_TYPE` 来指定数据库类型（默认为 `sqlite`）。
 
@@ -49,7 +48,7 @@ Kite 支持使用 SQLite、MySQL 或 PostgreSQL 作为数据库。
 panic: failed to connect database: unable to open database file: out of memory (14)
 ```
 
-此问题与 Kite 使用的纯 Go SQLite 驱动有关（为避免 CGO 依赖）。该驱动在访问某些存储后端上的数据
+此问题与 Lightkite 使用的纯 Go SQLite 驱动有关（为避免 CGO 依赖）。该驱动在访问某些存储后端上的数据
 库文件时存在限制。
 
 **解决方案**：添加 SQLite 连接选项以提高与 hostPath 存储的兼容性。在 Helm values 中设置：
@@ -57,22 +56,20 @@ panic: failed to connect database: unable to open database file: out of memory (
 ```yaml
 db:
   sqlite:
-    options: "_journal_mode=WAL&_busy_timeout=5000"
+    options: "_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)"
 ```
 
 这些选项启用预写日志（WAL）模式并增加忙碌超时时间，可以解决大多数 hostPath 兼容性问题。
 
 **生产环境推荐**：对于需要持久化存储的生产环境部署，建议使用 MySQL 或 PostgreSQL 代替 SQLite。这些数据库更适合容器化环境和持久化存储场景。
 
-更多详情请参见 [Issue #204](https://github.com/kite-org/kite/issues/204)。
-
 ## 如何更改字体
 
-Kite 默认提供三种字体：系统默认、`Maple Mono` 和 `JetBrains Mono`。
+Lightkite 默认提供三种字体：系统默认、`Maple Mono` 和 `JetBrains Mono`。
 
 如果您想使用其他字体，则需要自己构建项目。
 
-用 make 构建 kite，并在 `./ui/src/index.css` 中更改字体
+用 make 构建 lightkite，并在 `./ui/src/index.css` 中更改字体
 
 ```css
 @font-face {
@@ -92,11 +89,11 @@ body {
 }
 ```
 
-## 我如何为 Kite 做出贡献？
+## 我如何为 Lightkite 做出贡献？
 
 我们欢迎贡献！您可以：
 
-- 在 [GitHub Issues](https://github.com/kite-org/kite/issues) 上报告错误和功能请求
+- 在发布当前 Lightkite 构建的仓库 Issue Tracker 中报告错误和功能请求
 - 提交拉取请求
 - 改进文档
 - 分享反馈和使用案例
@@ -105,9 +102,10 @@ body {
 
 您可以通过以下方式获得支持：
 
-- [GitHub Issues](https://github.com/kite-org/kite/issues) 用于提交错误报告和功能请求
-- [Slack Community](https://join.slack.com/t/kite-dashboard/shared_invite/zt-3amy6f23n-~QZYoricIOAYtgLs_JagEw) 用于提问和社区支持
+- 当前构建仓库的 Issue Tracker，用于提交错误报告和功能请求
+- 部署与架构指南，用于排查运维问题
 
 ---
 
-**没有找到您要找的内容？** 欢迎在 GitHub 上[提交问题](https://github.com/kite-org/kite/issues/new)或开始一个[讨论](https://github.com/kite-org/kite/discussions)。
+**没有找到您要找的内容？** 请在发布当前 Lightkite 构建的仓库中提交 Issue，
+并附上版本接口的输出。

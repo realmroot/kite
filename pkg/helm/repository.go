@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/zxh326/kite/pkg/model"
+	"github.com/realmroot/lightkite/pkg/model"
 )
 
 func (h *HelmChartHandler) ListRepositories(c *gin.Context) {
@@ -56,6 +56,10 @@ func (h *HelmChartHandler) CreateRepository(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "repository URL must be absolute"})
 		return
 	}
+	if repositoryURL.User != nil || repositoryURL.RawQuery != "" || repositoryURL.Fragment != "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "repository URL must not contain credentials, query, or fragment"})
+		return
+	}
 	scheme := strings.ToLower(repositoryURL.Scheme)
 	if scheme != "http" && scheme != "https" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "repository URL must use http or https"})
@@ -72,7 +76,7 @@ func (h *HelmChartHandler) CreateRepository(c *gin.Context) {
 		return
 	}
 
-	if _, err := h.loadRepositoryIndex(repository); err != nil {
+	if _, err := h.loadRepositoryIndex(c.Request.Context(), repository); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}

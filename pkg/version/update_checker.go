@@ -11,13 +11,13 @@ import (
 	"time"
 
 	semver "github.com/blang/semver/v4"
+	"github.com/realmroot/lightkite/pkg/common"
 	"k8s.io/klog/v2"
 )
 
 const (
-	githubLatestReleaseAPI = "https://api.github.com/repos/kite-org/kite/releases/latest"
-	versionCheckTimeout    = 3 * time.Second
-	versionCacheTTL        = time.Hour
+	versionCheckTimeout = 3 * time.Second
+	versionCacheTTL     = time.Hour
 )
 
 var (
@@ -40,7 +40,7 @@ func checkForUpdate(ctx context.Context, currentVersion string) updateCheckResul
 	result := updateCheckResult{}
 
 	sanitized := strings.TrimSpace(currentVersion)
-	if sanitized == "" || strings.EqualFold(sanitized, "dev") {
+	if sanitized == "" || strings.EqualFold(sanitized, "dev") || common.ReleaseAPIURL == "" {
 		return result
 	}
 
@@ -55,13 +55,13 @@ func checkForUpdate(ctx context.Context, currentVersion string) updateCheckResul
 	requestCtx, cancel := context.WithTimeout(ctx, versionCheckTimeout)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(requestCtx, http.MethodGet, githubLatestReleaseAPI, nil)
+	req, err := http.NewRequestWithContext(requestCtx, http.MethodGet, common.ReleaseAPIURL, nil)
 	if err != nil {
 		klog.Warningf("version check request creation failed: %v", err)
 		return result
 	}
 
-	req.Header.Set("User-Agent", "kite-version-checker/"+currentVersion)
+	req.Header.Set("User-Agent", "lightkite-version-checker/"+currentVersion)
 	req.Header.Set("Accept", "application/vnd.github+json")
 
 	resp, err := http.DefaultClient.Do(req)

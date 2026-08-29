@@ -4,7 +4,7 @@ outline: deep
 
 # Custom Sidebar
 
-Kite supports customizing the sidebar. You can control the visibility and order of existing menu items, and also add CRDs (Custom Resource Definitions) to the sidebar for quick access.
+Lightkite supports customizing the sidebar. You can control the visibility and order of existing menu items, and also add CRDs (Custom Resource Definitions) to the sidebar for quick access.
 
 ## How to Customize
 

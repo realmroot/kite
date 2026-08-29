@@ -4,7 +4,7 @@ outline: deep
 
 # Kube Proxy
 
-Kite has a built-in kubectl Proxy feature that allows you to access Pods or Services directly through Kite without running `kubectl port-forward` locally.
+Lightkite has a built-in kubectl Proxy feature that allows you to access Pods or Services directly through Lightkite without running `kubectl port-forward` locally.
 
 ## How to Use
 

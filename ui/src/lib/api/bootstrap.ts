@@ -1,32 +1,22 @@
 import { useQuery } from '@tanstack/react-query'
 
-import type { AuthUser, CredentialProvider } from './auth'
+import type { AuthUser } from './auth'
 import { fetchAPI } from './shared'
 
-export interface BootstrapSetup {
-  initialized: boolean
-  step: number
-}
-
 export interface BootstrapCapabilities {
-  aiEnabled: boolean
   kubectlEnabled: boolean
 }
 
 export interface AuthProviderCatalog {
-  providers: string[]
-  credentialProviders: CredentialProvider[]
-  oauthProviders: string[]
+  providerName: string
   loginPrompt: string
-  mfaEnabled: boolean
-  passkeyLoginEnabled: boolean
 }
 
 export interface BootstrapResponse {
-  setup: BootstrapSetup
   auth: AuthProviderCatalog
   capabilities: BootstrapCapabilities
   user: AuthUser | null
+  platformAdmin: boolean
   hasGlobalSidebarPreference: boolean
   globalSidebarPreference: string
 }

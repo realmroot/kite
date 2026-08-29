@@ -8,15 +8,13 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
-	"github.com/zxh326/kite/pkg/cluster"
-	"github.com/zxh326/kite/pkg/common"
-	"github.com/zxh326/kite/pkg/rbac"
+	"github.com/realmroot/lightkite/pkg/common"
 	"k8s.io/klog/v2"
 )
 
 const configReloadDebounce = 300 * time.Millisecond
 
-func StartConfigWatcher(ctx context.Context, path string) error {
+func StartConfigWatcher(ctx context.Context, path string, onReload func(AppliedSections)) error {
 	if path == "" {
 		return nil
 	}
@@ -42,12 +40,19 @@ func StartConfigWatcher(ctx context.Context, path string) error {
 		klog.Warningf("Failed to read initial config file hash: %v", err)
 	}
 
-	go watchConfigFile(ctx, watcher, configPath, lastHash, hasHash)
+	go watchConfigFile(ctx, watcher, configPath, lastHash, hasHash, onReload)
 	klog.Infof("Watching configuration file: %s", configPath)
 	return nil
 }
 
-func watchConfigFile(ctx context.Context, watcher *fsnotify.Watcher, configPath string, lastHash [sha256.Size]byte, hasHash bool) {
+func watchConfigFile(
+	ctx context.Context,
+	watcher *fsnotify.Watcher,
+	configPath string,
+	lastHash [sha256.Size]byte,
+	hasHash bool,
+	onReload func(AppliedSections),
+) {
 	defer func() {
 		_ = watcher.Close()
 	}()
@@ -113,7 +118,9 @@ func watchConfigFile(ctx context.Context, watcher *fsnotify.Watcher, configPath 
 			}
 			lastHash = hash
 			hasHash = true
-			notifyConfigReload(sections)
+			if onReload != nil {
+				onReload(sections)
+			}
 		}
 	}
 }
@@ -127,19 +134,13 @@ func reloadConfigFileIfChanged(path string, lastHash [sha256.Size]byte, hasHash 
 		return nil, hash, nil
 	}
 
-	sections := applyConfig(path, cfg)
+	sections, err := applyConfig(path, cfg)
+	if err != nil {
+		return nil, hash, err
+	}
 	common.SetManagedSections(sections)
 	klog.Infof("Reloaded configuration from file: %s", path)
 	return sections, hash, nil
-}
-
-func notifyConfigReload(sections AppliedSections) {
-	if sections["clusters"] {
-		cluster.TriggerClusterSync()
-	}
-	if sections["rbac"] || sections["superUser"] {
-		rbac.TriggerSync()
-	}
 }
 
 func isConfigFileEvent(configPath string, event fsnotify.Event) bool {

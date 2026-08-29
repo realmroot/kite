@@ -10,34 +10,21 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
-	"github.com/zxh326/kite/pkg/common"
-	"github.com/zxh326/kite/pkg/model"
+	"github.com/realmroot/lightkite/pkg/common"
+	"github.com/realmroot/lightkite/pkg/model"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
 
-func TestClusterConfigurationLifecyclePreservesSecretsAndDefault(t *testing.T) {
+func TestCredentialFreeClusterConfigurationLifecycle(t *testing.T) {
 	setupClusterHandlerTestDB(t)
-	manager := &ClusterManager{clusters: map[string]*ClientSet{}, errors: map[string]string{}}
-	router := gin.New()
-	router.POST("/clusters", manager.CreateCluster)
-	router.GET("/clusters", manager.GetClusterList)
-	router.PUT("/clusters/:id", manager.UpdateCluster)
-	router.DELETE("/clusters/:id", manager.DeleteCluster)
-
-	create := performClusterRequest(router, http.MethodPost, "/clusters", `{"name":"primary","description":"main","config":"secret-kubeconfig","isDefault":true}`)
-	if create.Code != http.StatusCreated {
-		t.Fatalf("create status = %d, want %d: %s", create.Code, http.StatusCreated, create.Body.String())
-	}
-	primary, err := model.GetClusterByName("primary")
-	if err != nil {
-		t.Fatalf("loading created cluster: %v", err)
-	}
-	if !primary.IsDefault || !primary.Enable || string(primary.Config) != "secret-kubeconfig" {
+	router := newClusterHandlerTestRouter()
+	primary := createPrimaryCluster(t, router)
+	if !primary.IsDefault || !primary.Enable || primary.APIServerURL != "https://k8s.example.com" {
 		t.Fatalf("created cluster = %#v", primary)
 	}
 
-	updateBody := `{"name":"renamed","description":"updated","config":"","prometheusURL":"https://prom.example.com","isDefault":true,"enabled":true}`
+	updateBody := `{"name":"renamed","description":"updated","apiServerUrl":"https://new-k8s.example.com","prometheusURL":"http://prometheus.monitoring.svc:9090","isDefault":true,"enabled":true}`
 	update := performClusterRequest(router, http.MethodPut, fmt.Sprintf("/clusters/%d", primary.ID), updateBody)
 	if update.Code != http.StatusOK {
 		t.Fatalf("update status = %d, want %d: %s", update.Code, http.StatusOK, update.Body.String())
@@ -46,16 +33,23 @@ func TestClusterConfigurationLifecyclePreservesSecretsAndDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loading updated cluster: %v", err)
 	}
-	if updated.Name != "renamed" || updated.Description != "updated" || updated.PrometheusURL != "https://prom.example.com" {
+	if updated.Name != "renamed" || updated.Description != "updated" || updated.PrometheusURL != "http://prometheus.monitoring.svc:9090" {
 		t.Fatalf("updated cluster = %#v", updated)
 	}
-	if string(updated.Config) != "secret-kubeconfig" {
-		t.Fatalf("blank update erased kubeconfig: %q", updated.Config)
+	if updated.APIServerURL != "https://new-k8s.example.com" || updated.CABundle != "" {
+		t.Fatalf("updated cluster lost transport metadata: %#v", updated)
+	}
+	invalidURL := performClusterRequest(router, http.MethodPut, fmt.Sprintf("/clusters/%d", primary.ID),
+		`{"name":"renamed","apiServerUrl":"http://user:password@new-k8s.example.com?token=secret","enabled":true}`)
+	if invalidURL.Code != http.StatusBadRequest {
+		t.Fatalf("invalid URL update status = %d, want %d: %s", invalidURL.Code, http.StatusBadRequest, invalidURL.Body.String())
+	}
+	invalidCA := performClusterRequest(router, http.MethodPut, fmt.Sprintf("/clusters/%d", primary.ID),
+		`{"name":"renamed","apiServerUrl":"https://new-k8s.example.com","caBundle":"not-a-certificate","enabled":true}`)
+	if invalidCA.Code != http.StatusBadRequest {
+		t.Fatalf("invalid CA update status = %d, want %d: %s", invalidCA.Code, http.StatusBadRequest, invalidCA.Body.String())
 	}
 
-	manager.mu.Lock()
-	manager.clusters["renamed"] = &ClientSet{Name: "renamed", Version: "v1.36.2"}
-	manager.mu.Unlock()
 	list := performClusterRequest(router, http.MethodGet, "/clusters", "")
 	if list.Code != http.StatusOK {
 		t.Fatalf("list status = %d, want %d", list.Code, http.StatusOK)
@@ -64,21 +58,47 @@ func TestClusterConfigurationLifecyclePreservesSecretsAndDefault(t *testing.T) {
 	if err := json.Unmarshal(list.Body.Bytes(), &listed); err != nil {
 		t.Fatalf("decoding list response: %v", err)
 	}
-	if len(listed) != 1 || listed[0]["config"] != "" || listed[0]["version"] != "v1.36.2" {
+	if len(listed) != 1 || listed[0]["config"] != nil || listed[0]["apiServerUrl"] != "https://new-k8s.example.com" {
 		t.Fatalf("listed clusters = %#v", listed)
 	}
-	if strings.Contains(list.Body.String(), "secret-kubeconfig") {
+	if strings.Contains(list.Body.String(), "kubeconfig") {
 		t.Fatal("cluster list exposed kubeconfig")
 	}
+}
+
+func TestCredentialFreeClusterDefaultAndDeletionConstraints(t *testing.T) {
+	setupClusterHandlerTestDB(t)
+	router := newClusterHandlerTestRouter()
+	primary := createPrimaryCluster(t, router)
 
 	deleteDefault := performClusterRequest(router, http.MethodDelete, fmt.Sprintf("/clusters/%d", primary.ID), "")
 	if deleteDefault.Code != http.StatusBadRequest {
 		t.Fatalf("default delete status = %d, want %d", deleteDefault.Code, http.StatusBadRequest)
 	}
 
-	secondary := &model.Cluster{Name: "secondary", Config: "secondary-config", Enable: true}
+	secondary := &model.Cluster{Name: "secondary", APIServerURL: "https://secondary.example.com", Enable: true}
 	if err := model.AddCluster(secondary); err != nil {
 		t.Fatalf("creating secondary cluster: %v", err)
+	}
+	duplicateName := performClusterRequest(router, http.MethodPut, fmt.Sprintf("/clusters/%d", secondary.ID),
+		`{"name":"primary","apiServerUrl":"https://secondary.example.com","enabled":true}`)
+	if duplicateName.Code != http.StatusConflict {
+		t.Fatalf("duplicate update status = %d, want %d: %s", duplicateName.Code, http.StatusConflict, duplicateName.Body.String())
+	}
+
+	if err := model.UpdateCluster(secondary, map[string]interface{}{"name": "primary", "is_default": true}); err == nil {
+		t.Fatal("duplicate default update unexpectedly succeeded")
+	}
+	reloadedPrimary, err := model.GetClusterByID(primary.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reloadedSecondary, err := model.GetClusterByID(secondary.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reloadedPrimary.IsDefault || reloadedSecondary.IsDefault {
+		t.Fatalf("failed default switch was not rolled back: primary=%t secondary=%t", reloadedPrimary.IsDefault, reloadedSecondary.IsDefault)
 	}
 	deleteSecondary := performClusterRequest(router, http.MethodDelete, fmt.Sprintf("/clusters/%d", secondary.ID), "")
 	if deleteSecondary.Code != http.StatusOK {
@@ -87,51 +107,92 @@ func TestClusterConfigurationLifecyclePreservesSecretsAndDefault(t *testing.T) {
 	if _, err := model.GetClusterByID(secondary.ID); err == nil {
 		t.Fatal("deleted secondary cluster still exists")
 	}
+	recreated := &model.Cluster{Name: "secondary", APIServerURL: "https://replacement.example.com", Enable: true}
+	if err := model.AddCluster(recreated); err != nil {
+		t.Fatalf("recreating deleted cluster name: %v", err)
+	}
 }
 
-func TestGetClustersFiltersByAccessAndSortsFailures(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	manager := &ClusterManager{
-		clusters: map[string]*ClientSet{
-			"secret": {Name: "secret", Version: "v1.35.0"},
-			"public": {Name: "public", Version: "v1.36.0"},
-		},
-		errors:         map[string]string{"broken": "invalid kubeconfig", "hidden-error": "timeout"},
-		defaultContext: "public",
+func newClusterHandlerTestRouter() *gin.Engine {
+	manager := &ClusterManager{}
+	router := gin.New()
+	router.POST("/clusters", manager.CreateCluster)
+	router.GET("/clusters", manager.GetClusterList)
+	router.PUT("/clusters/:id", manager.UpdateCluster)
+	router.DELETE("/clusters/:id", manager.DeleteCluster)
+	return router
+}
+
+func createPrimaryCluster(t *testing.T, router *gin.Engine) *model.Cluster {
+	t.Helper()
+	create := performClusterRequest(router, http.MethodPost, "/clusters", `{"name":"primary","description":"main","apiServerUrl":"https://k8s.example.com","isDefault":true}`)
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create status = %d, want %d: %s", create.Code, http.StatusCreated, create.Body.String())
 	}
+	primary, err := model.GetClusterByName("primary")
+	if err != nil {
+		t.Fatalf("loading created cluster: %v", err)
+	}
+	return primary
+}
+
+func TestCreateClusterAcceptsFrontendEnabledField(t *testing.T) {
+	setupClusterHandlerTestDB(t)
+	router := newClusterHandlerTestRouter()
+	response := performClusterRequest(router, http.MethodPost, "/clusters", `{"name":"disabled","apiServerUrl":"https://k8s.example.com","enabled":false}`)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("create status = %d, want %d: %s", response.Code, http.StatusCreated, response.Body.String())
+	}
+	created, err := model.GetClusterByName("disabled")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.Enable {
+		t.Fatal("explicit enabled=false was ignored")
+	}
+}
+
+func TestGetClusterListUsesCredentialFreeCatalog(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	setupClusterHandlerTestDB(t)
+	for _, cluster := range []*model.Cluster{
+		{Name: "first", APIServerURL: "https://first.example.com", Enable: true},
+		{Name: "second", APIServerURL: "https://second.example.com", Enable: true, IsDefault: true},
+	} {
+		if err := model.AddCluster(cluster); err != nil {
+			t.Fatal(err)
+		}
+	}
+	manager := &ClusterManager{}
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
 	ctx.Request = httptest.NewRequest(http.MethodGet, "/clusters", nil)
-	ctx.Set("user", model.User{Username: "alice", Roles: []common.Role{{
-		Name:     "limited",
-		Clusters: []string{"public", "broken"},
-	}}})
 
-	manager.GetClusters(ctx)
+	manager.GetClusterList(ctx)
 
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
 	}
-	var result []common.ClusterInfo
+	var result []map[string]any
 	if err := json.Unmarshal(recorder.Body.Bytes(), &result); err != nil {
 		t.Fatalf("decoding response: %v", err)
 	}
-	if len(result) != 2 || result[0].Name != "broken" || result[1].Name != "public" {
+	if len(result) != 2 || result[0]["apiServerUrl"] != "https://first.example.com" || result[1]["isDefault"] != true {
 		t.Fatalf("clusters = %#v", result)
 	}
-	if result[0].Error != "invalid kubeconfig" || !result[1].IsDefault {
-		t.Fatalf("cluster metadata = %#v", result)
+	if result[0]["config"] != nil || result[1]["config"] != nil {
+		t.Fatalf("cluster catalog exposed credentials: %#v", result)
 	}
 }
 
 func TestClusterMutationsHonorManagedConfiguration(t *testing.T) {
 	setupClusterHandlerTestDB(t)
 	common.SetManagedSections(map[string]bool{"clusters": true})
-	manager := &ClusterManager{clusters: map[string]*ClientSet{}, errors: map[string]string{}}
+	manager := &ClusterManager{}
 	router := gin.New()
 	router.POST("/clusters", manager.CreateCluster)
 
-	response := performClusterRequest(router, http.MethodPost, "/clusters", `{"name":"blocked","config":"secret"}`)
+	response := performClusterRequest(router, http.MethodPost, "/clusters", `{"name":"blocked","apiServerUrl":"https://blocked.example.test"}`)
 	if response.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want %d", response.Code, http.StatusForbidden)
 	}
@@ -144,12 +205,16 @@ func TestClusterMutationsHonorManagedConfiguration(t *testing.T) {
 func setupClusterHandlerTestDB(t *testing.T) {
 	t.Helper()
 	originalDB := model.DB
-	originalEncryptKey := common.KiteEncryptKey
+	originalEncryptKey := common.LightkiteEncryptKey
+	originalHost := common.Host
+	originalBase := common.Base
 	originalManagedSections := make(map[string]bool, len(common.ManagedSections))
 	for section, managed := range common.ManagedSections {
 		originalManagedSections[section] = managed
 	}
-	common.KiteEncryptKey = "cluster-handler-test-key"
+	common.LightkiteEncryptKey = "cluster-handler-test-key"
+	common.Host = "https://lightkite.example.test"
+	common.Base = ""
 	common.SetManagedSections(nil)
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	if err != nil {
@@ -161,16 +226,14 @@ func setupClusterHandlerTestDB(t *testing.T) {
 	model.DB = db
 	gin.SetMode(gin.TestMode)
 	t.Cleanup(func() {
-		select {
-		case <-syncNow:
-		default:
-		}
 		sqlDB, err := db.DB()
 		if err == nil {
 			_ = sqlDB.Close()
 		}
 		model.DB = originalDB
-		common.KiteEncryptKey = originalEncryptKey
+		common.LightkiteEncryptKey = originalEncryptKey
+		common.Host = originalHost
+		common.Base = originalBase
 		common.SetManagedSections(originalManagedSections)
 	})
 }

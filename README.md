@@ -1,27 +1,35 @@
-# Kite - Modern Kubernetes Dashboard
+# Lightkite — A standards-based Kubernetes dashboard
 
 <div align="center">
 
-<img src="./docs/assets/logo.svg" alt="Kite Logo" width="128" height="128">
+<img src="./docs/assets/logo.svg" alt="Lightkite logo" width="128" height="128">
 
-_A modern Kubernetes dashboard_
+_A lightweight Kubernetes dashboard where the user's identity reaches the API server_
 
-<a href="https://trendshift.io/repositories/21820" target="_blank"><img src="https://trendshift.io/api/badge/repositories/21820" alt="kite-org%2Fkite | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
-
-<a href="https://github.com/kite-org/kite/stargazers"><img src="https://img.shields.io/github/stars/kite-org/kite?color=ffcb47&labelColor=black&style=flat-square&logo=github&label=Stars" /></a>
-<a href="https://github.com/kite-org/kite/releases"><img src="https://img.shields.io/github/downloads/kite-org/kite/total?color=369eff&labelColor=black&logo=github&style=flat-square&label=Downloads" /></a>
-<a href="https://github.com/kite-org/kite/graphs/contributors"><img src="https://img.shields.io/github/contributors/kite-org/kite?style=flat-square&logo=github&label=Contributors&labelColor=black" /></a>
 [![License](https://img.shields.io/badge/License-Apache-green.svg)](LICENSE)
-<a href="https://join.slack.com/t/kite-dashboard/shared_invite/zt-3cl9mccs7-eQZ1_t6IoTPHZkxXED1ceg"><img alt="Join Kite" src="https://badgen.net/badge/Slack/Join%20Kite/0abd59?icon=slack" /></a>
 
-
-[**Live Demo**](https://kite-demo.zzde.me) | [**Documentation**](https://kite.zzde.me)
+[**Documentation**](docs/index.md) | [**Architecture**](docs/oidc-kubernetes.md) | [**Differences from Kite**](docs/architecture/upstream-kite.md)
 <br>
 **English** | [中文](./README_zh.md)
 
 </div>
 
-Kite is a lightweight, modern Kubernetes dashboard that unifies real-time observability, multi-cluster and resource management, enterprise-grade user governance (OAuth, MFA, passkeys, RBAC, and audit logs), and AI agents in one workspace. Not just a tool, but more like a platform.
+Lightkite is an independent fork of [Kite](https://github.com/kite-org/kite).
+It keeps Kite's Kubernetes UI and replaces its local identity, local
+authorization, and shared privileged kubeconfigs with standard OpenID Connect
+and Kubernetes-native RBAC. The browser signs in through the configured OIDC
+provider; Lightkite sends that user's validated ID token to the selected Kubernetes
+API server. Configured group claims therefore map directly to Kubernetes
+RoleBindings and ClusterRoleBindings.
+
+Lightkite is installed as a new deployment. An existing Kite installation is
+not a supported in-place upgrade source.
+
+See the [OIDC Kubernetes architecture](docs/oidc-kubernetes.md) and the detailed
+[comparison with upstream Kite](docs/architecture/upstream-kite.md). Provider-specific
+configuration belongs under `examples/` and never enters the core runtime.
+The backend also provides a transparent [Kubernetes API gateway](docs/kubernetes-api-gateway.md)
+for moving UI data access onto canonical Kubernetes resource APIs.
 
 <img width="1586" height="1167" alt="image" src="https://github.com/user-attachments/assets/5710204d-5d34-44af-85dc-3b436e205c12" />
 
@@ -37,9 +45,9 @@ Kite is a lightweight, modern Kubernetes dashboard that unifies real-time observ
 ### Multi-Cluster Management
 
 - Switch between multiple Kubernetes clusters
-- Independent Prometheus configuration per cluster
-- Automatic discovery from kubeconfig
-- Fine-grained cluster access permissions
+- Kubernetes-authorized in-cluster Prometheus service proxy per cluster
+- Credential-free HTTPS Kubernetes endpoint connectivity
+- Add, edit, switch, and remove credential-free cluster catalog entries
 
 ### Resource Management
 
@@ -58,46 +66,46 @@ Kite is a lightweight, modern Kubernetes dashboard that unifies real-time observ
 
 - Real-time CPU, memory, and network charts (Prometheus)
 - Live pod logs with filtering and search
-- Web terminal for pods and nodes
-- Built-in kubectl console.
-- AI assistant.
+- Pod logs and workload metrics, subject to Kubernetes RBAC
 
 ### Security
 
-- OAuth integration
-- MFA for password users
-- Passkey login
-- Role-based access control
-- User management and role allocation
+- Provider-neutral OIDC Authorization Code + PKCE login
+- Server-side encrypted OIDC sessions; no tokens exposed to browser JavaScript
+- Configurable group claims mapped directly by the Kubernetes API server
+- Kubernetes-native RBAC as the sole resource authorization policy
+- No stored kubeconfig, bearer token, client certificate, or privileged ServiceAccount
 
 ---
 
 ## 🚀 Quick Start
 
-For detailed instructions, please refer to the [documentation](https://kite.zzde.me/guide/installation.html).
+For detailed instructions, see the [installation guide](docs/guide/installation.md).
 
 ### Docker
 
-```bash
-docker run -d -p 8080:8080 -v ./data:/data -e DB_DSN=/data/db.sqlite ghcr.io/kite-org/kite:latest
-```
+Configure the required OIDC and secret values described in
+[docs/oidc-kubernetes.md](docs/oidc-kubernetes.md). Startup fails
+closed if they are absent or use the upstream development defaults.
 
 ### Deploy in Kubernetes
 
 #### Using Helm (Recommended)
 
-1. **Install from OCI registry**
+1. **Install the versioned OCI chart published by Lightkite**
 
    ```bash
-   helm install kite oci://ghcr.io/kite-org/charts/kite -n kube-system
+   helm install lightkite oci://ghcr.io/realmroot/charts/lightkite \
+     --version <version> -n lightkite-system --create-namespace -f values.yaml
    ```
 
 2. **Or install from Helm repository**
 
    ```bash
-   helm repo add kite https://kite-org.github.io/kite/
+   helm repo add lightkite https://realmroot.github.io/lightkite/
    helm repo update
-   helm install kite kite/kite -n kube-system
+   helm install lightkite lightkite/lightkite --version <version> \
+     -n lightkite-system --create-namespace -f values.yaml
    ```
 
 #### Using kubectl
@@ -106,16 +114,16 @@ docker run -d -p 8080:8080 -v ./data:/data -e DB_DSN=/data/db.sqlite ghcr.io/kit
 
    ```bash
    kubectl apply -f deploy/install.yaml
-   # or install it online
-   # Note: This method may not be suitable for a production environment, as it does not include any configuration related to persistence. You will need to manually mount the persistence volume and set the environment variable DB_DSN=/data/db.sqlite to ensure that data is not lost. Alternatively, an external database can be used.
-   # ref: https://kite.zzde.me/faq.html#persistence-issues
-   kubectl apply -f https://raw.githubusercontent.com/kite-org/kite/refs/heads/main/deploy/install.yaml
+   # Release assets contain the same manifest with an immutable image tag.
+   curl -fLO https://github.com/realmroot/lightkite/releases/download/vX.Y.Z/install.yaml
+   $EDITOR install.yaml
+   kubectl apply -f install.yaml
    ```
 
 2. **Access via port-forward**
 
    ```bash
-   kubectl port-forward -n kube-system svc/kite 8080:8080
+   kubectl port-forward -n lightkite-system svc/lightkite 8080:8080
    ```
 
 ### Build from Source
@@ -123,8 +131,8 @@ docker run -d -p 8080:8080 -v ./data:/data -e DB_DSN=/data/db.sqlite ghcr.io/kit
 1. **Clone the repository**
 
    ```bash
-   git clone https://github.com/kite-org/kite.git
-   cd kite
+   git clone https://github.com/realmroot/lightkite.git
+   cd lightkite
    ```
 
 2. **Build the project**
@@ -144,38 +152,20 @@ docker run -d -p 8080:8080 -v ./data:/data -e DB_DSN=/data/db.sqlite ghcr.io/kit
 
 ## 🔍 Troubleshooting
 
-For troubleshooting, please refer to the [documentation](https://kite.zzde.me).
-
-## 💖 Support This Project
-
-If you find Kite helpful, please consider supporting its development! Your donations help maintain and improve this project.
-
-### Donation Methods
-
-<table>
-  <tr>
-    <td align="center">
-      <b>Alipay</b><br>
-      <img src="./docs/donate/alipay.jpeg" alt="Alipay QR Code" width="200">
-    </td>
-    <td align="center">
-      <b>WeChat Pay</b><br>
-      <img src="./docs/donate/wechat.jpeg" alt="WeChat Pay QR Code" width="200">
-    </td>
-    <td align="center">
-      <b>PayPal</b><br>
-      <a href="https://www.paypal.me/zxh326">
-        <img src="https://www.paypalobjects.com/webstatic/mktg/logo/pp_cc_mark_111x69.jpg" alt="PayPal" width="150">
-      </a>
-    </td>
-  </tr>
-</table>
-
-Thank you for your support! ❤️
+For troubleshooting, see the local [FAQ](docs/faq.md) and configuration guides.
 
 ## 🤝 Contributing
 
 We welcome contributions! Please see our [contributing guidelines](./CONTRIBUTING.md) for details on how to get involved.
+
+## 🙏 Upstream Project
+
+Lightkite is based on Kite and remains grateful to its maintainers and
+contributors for the dashboard, resource views, and interaction model that made
+this fork possible. Lightkite is independently maintained, is not affiliated
+with or endorsed by the upstream project, and does not plan to merge this
+architecture fork back into Kite as a whole. Focused fixes may still be shared
+with upstream when they are generally useful.
 
 ## 📄 License
 

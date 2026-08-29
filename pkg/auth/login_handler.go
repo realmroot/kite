@@ -1,434 +1,122 @@
 package auth
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/zxh326/kite/pkg/common"
-	"github.com/zxh326/kite/pkg/mfa"
-	"github.com/zxh326/kite/pkg/model"
-	"github.com/zxh326/kite/pkg/passkey"
-	"github.com/zxh326/kite/pkg/rbac"
-	"gorm.io/gorm"
+	"github.com/realmroot/lightkite/pkg/common"
+	"github.com/realmroot/lightkite/pkg/model"
 	"k8s.io/klog/v2"
 )
 
 func (h *AuthHandler) Login(c *gin.Context) {
-	provider := c.Query("provider")
-	if provider == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"message": "Provider parameter is required",
-		})
+	if !oidcConfigured() {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"message": "OIDC is not configured"})
 		return
 	}
-
-	oauthProvider, err := h.manager.GetProvider(c, provider)
+	authURL, err := h.oidc.authorizationURL(c)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"message": err.Error(),
-		})
+		c.JSON(http.StatusBadGateway, gin.H{"message": err.Error()})
 		return
 	}
-
-	state := h.manager.GenerateState()
-
-	klog.V(1).Infof("OAuth Login - Provider: %s, State: %s", provider, state)
-
-	setCookieSecure(c, "oauth_state", state, 600)
-	setCookieSecure(c, "oauth_provider", provider, 600)
-
-	authURL := oauthProvider.GetAuthURL(state)
-	c.JSON(http.StatusOK, gin.H{
-		"auth_url": authURL,
-		"provider": provider,
-	})
-}
-
-func (h *AuthHandler) PasswordLogin(c *gin.Context) {
-	setting, err := model.GetGeneralSetting()
-	if err == nil && setting.PasswordLoginDisabled {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Password login is disabled"})
-		return
-	}
-	h.handleCredentialLogin(c, model.AuthProviderPassword, h.authenticatePasswordUser)
-}
-
-func (h *AuthHandler) CreateSuperUser(c *gin.Context) {
-	var userreq struct {
-		Username string `json:"username" binding:"required"`
-		Password string `json:"password" binding:"required"`
-		Name     string `json:"name"`
-	}
-	if err := c.ShouldBindJSON(&userreq); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	uc, err := model.CountUsers()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to count users"})
-		return
-	}
-
-	if uc > 0 {
-		c.JSON(http.StatusForbidden, gin.H{"error": "super user already exists"})
-		return
-	}
-	user := &model.User{
-		Username: userreq.Username,
-		Password: userreq.Password,
-		Name:     userreq.Name,
-		Provider: "password",
-	}
-
-	if err := model.AddSuperUser(user); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create super user"})
-		return
-	}
-	jwtToken, err := h.manager.GenerateJWT(user, "")
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate JWT"})
-		return
-	}
-	setCookieSecure(c, "auth_token", jwtToken, common.CookieExpirationSeconds)
-	rbac.TriggerSync()
-	c.JSON(http.StatusCreated, user)
-}
-
-func (h *AuthHandler) LDAPLogin(c *gin.Context) {
-	h.handleCredentialLogin(c, model.AuthProviderLDAP, h.authenticateAndSyncLDAPUser)
-}
-
-func (h *AuthHandler) PasskeyLoginBegin(c *gin.Context) {
-	enabled, err := passkey.Enabled()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load general setting"})
-		return
-	}
-	if !enabled {
-		c.JSON(http.StatusForbidden, gin.H{"error": "passkey login is disabled"})
-		return
-	}
-	assertion, err := passkey.BeginLogin(c)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to start passkey login"})
-		return
-	}
-	c.JSON(http.StatusOK, assertion)
-}
-
-func (h *AuthHandler) PasskeyLoginFinish(c *gin.Context) {
-	enabled, err := passkey.Enabled()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load general setting"})
-		return
-	}
-	if !enabled {
-		c.JSON(http.StatusForbidden, gin.H{"error": "passkey login is disabled"})
-		return
-	}
-	user, err := passkey.FinishLogin(c)
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid passkey"})
-		return
-	}
-	h.completePasswordLikeLogin(c, user)
-}
-
-func (h *AuthHandler) handleCredentialLogin(c *gin.Context, provider string, authenticate credentialAuthenticator) {
-	var req common.PasswordLoginRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request payload"})
-		return
-	}
-
-	username := strings.TrimSpace(req.Username)
-	if username == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request payload"})
-		return
-	}
-	clientIP := c.ClientIP()
-	if credentialLoginAttempts.isBlocked(clientIP) {
-		c.JSON(http.StatusTooManyRequests, gin.H{"error": tooManyCredentialLoginAttemptsError})
-		return
-	}
-
-	user, err := authenticate(username, req.Password)
-	if err != nil {
-		errMsg := fmt.Sprintf("%s login failed for %s: %v", strings.ToUpper(provider), username, err)
-		if isCredentialFailure(err) {
-			if shouldRecordCredentialLoginFailure(provider, err) && credentialLoginAttempts.recordFailure(clientIP) {
-				c.JSON(http.StatusTooManyRequests, gin.H{"error": tooManyCredentialLoginAttemptsError})
-				return
-			}
-			c.JSON(http.StatusUnauthorized, gin.H{"error": errMsg})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": errMsg})
-		return
-	}
-
-	if provider == model.AuthProviderPassword && user.MFAEnabled {
-		if strings.TrimSpace(req.MFACode) == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "mfa_required"})
-			return
-		}
-		if !mfa.Verify(string(user.MFASecret), req.MFACode) {
-			if credentialLoginAttempts.recordFailure(clientIP) {
-				c.JSON(http.StatusTooManyRequests, gin.H{"error": tooManyCredentialLoginAttemptsError})
-				return
-			}
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_mfa_code"})
-			return
-		}
-	}
-
-	h.completePasswordLikeLogin(c, user)
-}
-
-func shouldRecordCredentialLoginFailure(provider string, err error) bool {
-	switch provider {
-	case model.AuthProviderPassword:
-		return errors.Is(err, errInvalidCredentials)
-	case model.AuthProviderLDAP:
-		return errors.Is(err, ErrLDAPInvalidCredentials)
-	default:
-		return false
-	}
-}
-
-func (h *AuthHandler) completePasswordLikeLogin(c *gin.Context, user *model.User) {
-	if !user.Enabled {
-		c.JSON(http.StatusForbidden, gin.H{"error": "insufficient permissions"})
-		return
-	}
-
-	roles := rbac.GetUserRoles(*user)
-	if len(roles) == 0 {
-		c.JSON(http.StatusForbidden, gin.H{"error": "insufficient permissions"})
-		return
-	}
-
-	if err := model.LoginUser(user); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed login"})
-		return
-	}
-
-	jwtToken, err := h.manager.GenerateJWT(user, "")
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate JWT"})
-		return
-	}
-
-	setCookieSecure(c, "auth_token", jwtToken, common.CookieExpirationSeconds)
-
-	c.Status(http.StatusNoContent)
-}
-
-func (h *AuthHandler) authenticateAndSyncLDAPUser(username, password string) (*model.User, error) {
-	setting, err := model.GetLDAPSetting()
-	if err != nil {
-		return nil, err
-	}
-
-	ldapUser, err := h.ldap.Authenticate(setting, username, password)
-	if err != nil {
-		return nil, err
-	}
-
-	syncedUser, err := model.UpsertLDAPUser(ldapUser)
-	if err != nil {
-		if errors.Is(err, model.ErrUserProviderConflict) {
-			return nil, ErrLDAPInvalidCredentials
-		}
-		return nil, err
-	}
-
-	return syncedUser, nil
-}
-
-func (h *AuthHandler) authenticatePasswordUser(username, password string) (*model.User, error) {
-	user, err := model.GetUserByUsername(username)
-	switch {
-	case err == nil:
-		if user.Provider != "" && user.Provider != model.AuthProviderPassword {
-			return nil, errInvalidCredentials
-		}
-		if !model.CheckPassword(user.Password, password) {
-			return nil, errInvalidCredentials
-		}
-		return user, nil
-	case errors.Is(err, gorm.ErrRecordNotFound):
-		return nil, errInvalidCredentials
-	default:
-		return nil, err
-	}
+	c.JSON(http.StatusOK, gin.H{"auth_url": authURL, "provider": common.OIDCProviderName})
 }
 
 func (h *AuthHandler) Callback(c *gin.Context) {
 	base := common.Base
 	code := c.Query("code")
-	provider, err := c.Cookie("oauth_provider")
-	if err != nil {
-		klog.Error("OAuth Callback - No provider found in cookie: ", err)
-		c.Redirect(http.StatusFound, base+"/login?error=missing_provider&reason=no_provider_in_cookie")
-		return
-	}
-
-	stateParam := c.Query("state")
-	cookieState, stateErr := c.Cookie("oauth_state")
-
-	klog.V(1).Infof("OAuth Callback - Using provider: %s\n", provider)
-
-	if stateErr != nil || stateParam == "" || cookieState == "" || stateParam != cookieState {
-		klog.Warningf("OAuth Callback - state mismatch or missing (cookieState=%v, stateParam=%v, err=%v)", cookieState, stateParam, stateErr)
-		setCookieSecure(c, "oauth_state", "", -1)
-		setCookieSecure(c, "oauth_provider", "", -1)
-		c.Redirect(http.StatusFound, base+"/login?error=invalid_state&reason=state_mismatch")
-		return
-	}
-
-	setCookieSecure(c, "oauth_state", "", -1)
-	setCookieSecure(c, "oauth_provider", "", -1)
-
 	if code == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Authorization code not provided",
-		})
+		c.Redirect(http.StatusFound, base+"/login?error=callback_error&reason=missing_code")
 		return
 	}
-
-	oauthProvider, err := h.manager.GetProvider(c, provider)
+	token, claims, err := h.oidc.exchange(c, code, c.Query("state"))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Provider not found: " + provider,
-		})
+		klog.Warningf("OIDC callback failed: %v", err)
+		c.Redirect(http.StatusFound, base+"/login?error=callback_error&reason=callback_failed")
 		return
 	}
-
-	klog.V(1).Infof("OAuth Callback - Exchanging code for token with provider: %s", provider)
-	tokenResp, err := oauthProvider.ExchangeCodeForToken(code)
-	if err != nil {
-		c.Redirect(http.StatusFound, base+"/login?error=token_exchange_failed&reason=token_exchange_failed&provider="+provider)
-		return
-	}
-
-	klog.V(1).Infof("OAuth Callback - Getting user info with provider: %s", provider)
-	user, err := oauthProvider.GetUserInfo(tokenResp.AccessToken)
-	if err != nil {
-		if errors.Is(err, ErrNotInAllowedGroups) {
-			c.Redirect(http.StatusFound, base+"/login?error=insufficient_permissions&reason=not_in_allowed_groups&provider="+provider)
-			return
-		}
-		c.Redirect(http.StatusFound, base+"/login?error=user_info_failed&reason=user_info_failed&provider="+provider)
-		return
-	}
-
-	if user.Sub == "" {
-		c.Redirect(http.StatusFound, base+"/login?error=user_info_failed&reason=user_info_failed&provider="+provider)
-		return
-	}
-
+	user := userFromOIDCClaims(claims)
 	if err := model.FindWithSubOrUpsertUser(user); err != nil {
-		c.Redirect(http.StatusFound, base+"/login?error=user_upsert_failed&reason=user_upsert_failed&provider="+provider)
+		c.Redirect(http.StatusFound, base+"/login?error=callback_error&reason=user_upsert_failed")
 		return
 	}
-	klog.V(1).Infof("OAuth Callback - User details: Username=%s, Name=%s, Sub=%s, Email=%s, OIDCGroups=%v",
-		user.Username, user.Name, user.Sub, user.Username, user.OIDCGroups)
-	role := rbac.GetUserRoles(*user)
-	if len(role) == 0 {
-		klog.Warningf("OAuth Callback - Access denied for user: %s (provider: %s), Username: %s, Name: %s, Sub: %s, OIDCGroups: %v",
-			user.Key(), provider, user.Username, user.Name, user.Sub, user.OIDCGroups)
-		c.Redirect(http.StatusFound, base+"/login?error=insufficient_permissions&reason=insufficient_permissions&user="+user.Key()+"&provider="+provider)
-		return
-	}
-	if !user.Enabled {
-		c.Redirect(http.StatusFound, base+"/login?error=user_disabled&reason=user_disabled")
-		return
-	}
-
-	jwtToken, err := h.manager.GenerateJWT(user, tokenResp.RefreshToken)
+	provider, err := h.oidc.discoveredProvider(c.Request.Context())
 	if err != nil {
-		c.Redirect(http.StatusFound, base+"/login?error=jwt_generation_failed&reason=jwt_generation_failed&user="+user.Key()+"&provider="+provider)
+		c.Redirect(http.StatusFound, base+"/login?error=callback_error&reason=provider_discovery_failed")
 		return
 	}
-
-	setCookieSecure(c, "auth_token", jwtToken, common.CookieExpirationSeconds)
-
+	rawIDToken, _ := token.Extra("id_token").(string)
+	_, idToken, err := h.oidc.verifyIDToken(c.Request.Context(), provider, rawIDToken, "")
+	if err != nil {
+		klog.Warningf("Verify OIDC token for session creation: %v", err)
+		c.Redirect(http.StatusFound, base+"/login?error=callback_error&reason=session_creation_failed")
+		return
+	}
+	if err := createOIDCSession(c, user, token, idToken); err != nil {
+		klog.Errorf("Create OIDC session: %v", err)
+		c.Redirect(http.StatusFound, base+"/login?error=callback_error&reason=session_creation_failed")
+		return
+	}
 	c.Redirect(http.StatusFound, base+"/")
 }
 
 func (h *AuthHandler) Logout(c *gin.Context) {
-	setCookieSecure(c, "auth_token", "", -1)
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "Logged out successfully",
-	})
+	if opaqueToken, err := c.Cookie(sessionCookieName); err == nil {
+		if session, err := model.GetOIDCSessionByHash(hashOpaqueValue(opaqueToken)); err == nil {
+			_ = model.DeleteOIDCSession(session)
+		}
+	}
+	setCookieSecure(c, sessionCookieName, "", -1)
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Logged out successfully"})
 }
 
 func (h *AuthHandler) GetUser(c *gin.Context) {
-	user, exists := c.Get("user")
+	value, exists := c.Get("user")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "Not authenticated",
-		})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Not authenticated"})
 		return
 	}
-
-	currentUser := user.(model.User)
-	isAdmin := rbac.UserHasRole(currentUser, model.DefaultAdminRole.Name)
+	currentUser := value.(model.User)
 	setting, err := model.GetGeneralSetting()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": fmt.Sprintf("Failed to load general setting: %v", err),
-		})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to load general setting: %v", err)})
 		return
 	}
-
-	globalSidebarPreference := strings.TrimSpace(setting.GlobalSidebarPreference)
-	hasGlobalSidebarPreference := globalSidebarPreference != ""
-	if hasGlobalSidebarPreference && (!isAdmin || strings.TrimSpace(currentUser.SidebarPreference) == "") {
-		currentUser.SidebarPreference = globalSidebarPreference
+	globalPreference := strings.TrimSpace(setting.GlobalSidebarPreference)
+	isAdmin := platformAdmin(currentUser)
+	if globalPreference != "" && (!isAdmin || strings.TrimSpace(currentUser.SidebarPreference) == "") {
+		currentUser.SidebarPreference = globalPreference
 	}
-
 	c.JSON(http.StatusOK, gin.H{
-		"user":                       currentUser,
-		"hasGlobalSidebarPreference": hasGlobalSidebarPreference,
-		"globalSidebarPreference":    globalSidebarPreference,
+		"user": currentUser, "platformAdmin": isAdmin,
+		"hasGlobalSidebarPreference": globalPreference != "",
+		"globalSidebarPreference":    globalPreference,
 	})
 }
 
 func (h *AuthHandler) RefreshToken(c *gin.Context) {
-	tokenString, err := c.Cookie("auth_token")
+	_, _, sessionID, err := h.oidc.authenticatedSession(c)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "No token found",
-		})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Failed to refresh OIDC session"})
 		return
 	}
-
-	newToken, err := h.manager.RefreshJWT(c, tokenString)
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "Failed to refresh token",
-		})
+	if err := model.TouchOIDCSession(sessionID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to renew OIDC session"})
 		return
 	}
-
-	setCookieSecure(c, "auth_token", newToken, common.CookieExpirationSeconds)
-
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "Token refreshed successfully",
-	})
+	opaqueToken, err := c.Cookie(sessionCookieName)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Failed to renew OIDC session"})
+		return
+	}
+	setCookieSecure(c, sessionCookieName, opaqueToken, common.CookieExpirationSeconds)
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Session renewed successfully"})
 }
 
 func setCookieSecure(c *gin.Context, name, value string, maxAge int) {
-	secure := strings.HasPrefix(common.Host, "https://") || (c.Request != nil && (c.Request.TLS != nil || strings.EqualFold(c.Request.Header.Get("X-Forwarded-Proto"), "https")))
-
+	secure := strings.HasPrefix(common.Host, "https://")
 	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie(name, value, maxAge+60*60, "/", "", secure, true)
+	c.SetCookie(name, value, maxAge, "/", "", secure, true)
 }

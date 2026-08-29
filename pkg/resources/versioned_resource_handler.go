@@ -2,8 +2,8 @@ package resources
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/zxh326/kite/pkg/cluster"
-	"github.com/zxh326/kite/pkg/common"
+	"github.com/realmroot/lightkite/pkg/cluster"
+	"github.com/realmroot/lightkite/pkg/common"
 )
 
 type resourceVersionCandidate struct {
@@ -50,30 +50,6 @@ func (h *versionedResourceHandler) resolve(c *gin.Context) resourceHandler {
 	}
 
 	return h.candidates[0].handler
-}
-
-func (h *versionedResourceHandler) List(c *gin.Context) {
-	h.resolve(c).List(c)
-}
-
-func (h *versionedResourceHandler) Get(c *gin.Context) {
-	h.resolve(c).Get(c)
-}
-
-func (h *versionedResourceHandler) Create(c *gin.Context) {
-	h.resolve(c).Create(c)
-}
-
-func (h *versionedResourceHandler) Update(c *gin.Context) {
-	h.resolve(c).Update(c)
-}
-
-func (h *versionedResourceHandler) Delete(c *gin.Context) {
-	h.resolve(c).Delete(c)
-}
-
-func (h *versionedResourceHandler) Patch(c *gin.Context) {
-	h.resolve(c).Patch(c)
 }
 
 func (h *versionedResourceHandler) IsClusterScoped() bool {

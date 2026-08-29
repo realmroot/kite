@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/zxh326/kite/pkg/cluster"
-	"github.com/zxh326/kite/pkg/common"
-	"github.com/zxh326/kite/pkg/utils"
-	"github.com/zxh326/kite/pkg/wsutil"
+	"github.com/realmroot/lightkite/pkg/cluster"
+	"github.com/realmroot/lightkite/pkg/common"
+	"github.com/realmroot/lightkite/pkg/utils"
+	"github.com/realmroot/lightkite/pkg/wsutil"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -18,10 +18,9 @@ const (
 	agentPodCheckInterval = 2 * time.Second
 )
 
-// waitForAgentPodReady polls until the named pod in AgentPodNamespace reaches Ready status,
-// sending progress dots over the WebSocket.
-func waitForAgentPodReady(ctx context.Context, cs *cluster.ClientSet, ws *wsutil.Session, podName, readyMsg string) error {
-	timeout := time.After(agentPodWaitTimeout)
+func waitForAgentPodReady(ctx context.Context, cs *cluster.ClientSet, ws *wsutil.Session, podName, readyMessage string) error {
+	timer := time.NewTimer(agentPodWaitTimeout)
+	defer timer.Stop()
 	ticker := time.NewTicker(agentPodCheckInterval)
 	defer ticker.Stop()
 	_ = ws.SendMessage("info", fmt.Sprintf("waiting for pod %s to be ready", podName))
@@ -30,9 +29,8 @@ func waitForAgentPodReady(ctx context.Context, cs *cluster.ClientSet, ws *wsutil
 	for {
 		select {
 		case <-ctx.Done():
-			return nil
-		case <-timeout:
-			_ = ws.SendMessage("info", "")
+			return ctx.Err()
+		case <-timer.C:
 			ws.SendErrorMessage(utils.GetPodErrorMessage(pod))
 			return fmt.Errorf("timeout waiting for pod %s to be ready", podName)
 		case <-ticker.C:
@@ -43,7 +41,7 @@ func waitForAgentPodReady(ctx context.Context, cs *cluster.ClientSet, ws *wsutil
 			}
 			_ = ws.SendMessage("stdout", ".")
 			if utils.IsPodReady(pod) {
-				_ = ws.SendMessage("info", readyMsg)
+				_ = ws.SendMessage("info", readyMessage)
 				return nil
 			}
 		}

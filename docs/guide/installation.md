@@ -1,6 +1,6 @@
 # Installation Guide
 
-This guide provides detailed instructions for installing Kite in a Kubernetes environment.
+This guide provides detailed instructions for installing Lightkite in a Kubernetes environment.
 
 ## Prerequisites
 
@@ -12,25 +12,24 @@ This guide provides detailed instructions for installing Kite in a Kubernetes en
 
 ### Method 1: Helm Chart (Recommended)
 
-Using Helm provides flexibility for configuration and upgrades:
+Install Lightkite into a new release and namespace. Do not apply this chart over
+an existing Kite release.
 
-Install from OCI registry:
+Install the versioned OCI chart published by Lightkite (replace `<version>`):
 
 ```bash
-helm install kite oci://ghcr.io/kite-org/charts/kite -n kite-system --create-namespace
+helm install lightkite oci://ghcr.io/realmroot/charts/lightkite \
+  --version <version> -n lightkite-system --create-namespace -f values.yaml
 ```
 
-Or install from Helm repository:
+If the repository enables its optional GitHub Pages Helm index, you may instead
+install that same version from the index:
 
 ```bash
-# Add Kite repository
-helm repo add kite https://kite-org.github.io/kite/
-
-# Update repository information
+helm repo add lightkite https://realmroot.github.io/lightkite/
 helm repo update
-
-# Install with default configuration
-helm install kite kite/kite -n kite-system --create-namespace
+helm install lightkite lightkite/lightkite --version <version> \
+  -n lightkite-system --create-namespace -f values.yaml
 ```
 
 #### Custom Installation
@@ -42,58 +41,59 @@ For complete configuration, refer to [Chart Values](../config/chart-values).
 Install with custom values:
 
 ```bash
-helm install kite oci://ghcr.io/kite-org/charts/kite -n kite-system -f values.yaml
+helm install lightkite oci://ghcr.io/realmroot/charts/lightkite \
+  --version <version> -n lightkite-system --create-namespace -f values.yaml
 
 # Or use the Helm repository
-helm install kite kite/kite -n kite-system -f values.yaml
+helm install lightkite lightkite/lightkite --version <version> \
+  -n lightkite-system --create-namespace -f values.yaml
 ```
 
 ### Method 2: YAML Manifest
 
-For quick deployment, you can directly apply the official installation YAML:
-
-::: warning
-This method is not suitable for production environments, as it does not include any configuration related to persistence. You need to manually mount the persistence volume and set the environment variable `DB_DSN=/data/db.sqlite` to ensure that data is not lost. Alternatively, you can use an external database.
-
-see [Persistence Issues](../faq#persistence-issues) for more details.
-:::
+Each release includes a versioned `install.yaml` with persistent SQLite storage
+and a non-root security context. Download it, replace the OIDC/secret/host
+placeholders, review it, and then apply it:
 
 ```bash
-kubectl apply -f https://raw.githubusercontent.com/kite-org/kite/main/deploy/install.yaml
+curl -fLO https://github.com/realmroot/lightkite/releases/download/vX.Y.Z/install.yaml
+$EDITOR install.yaml
+kubectl apply -f install.yaml
 ```
 
-This method will install Kite with default configuration. For advanced customization, it's recommended to use the Helm Chart.
+For external databases, private issuer CAs, ingress, or other advanced
+configuration, use the Helm Chart.
 
-## Accessing Kite
+## Accessing Lightkite
 
 ### Port Forwarding (Testing Environment)
 
-During testing, you can quickly access Kite through port forwarding:
+During testing, you can quickly access Lightkite through port forwarding:
 
 ```bash
-kubectl port-forward -n kite-system svc/kite 8080:8080
+kubectl port-forward -n lightkite-system svc/lightkite 8080:8080
 ```
 
 ### LoadBalancer Service
 
-If the cluster supports LoadBalancer, you can directly expose the Kite service:
+If the cluster supports LoadBalancer, you can directly expose the Lightkite service:
 
 ```bash
-kubectl patch svc kite -n kite-system -p '{"spec": {"type": "LoadBalancer"}}'
+kubectl patch svc lightkite -n lightkite-system -p '{"spec": {"type": "LoadBalancer"}}'
 ```
 
 Get the assigned IP:
 
 ```bash
-kubectl get svc kite -n kite-system
+kubectl get svc lightkite -n lightkite-system
 ```
 
 ### Ingress (Recommended for Production)
 
-For production environments, it's recommended to expose Kite through an Ingress controller with TLS enabled:
+For production environments, it's recommended to expose Lightkite through an Ingress controller with TLS enabled:
 
 ::: warning
-Kite's log and web terminal features require websocket support.
+Lightkite's log and web terminal features require websocket support.
 Some Ingress controllers may require additional configuration to handle websockets correctly.
 :::
 
@@ -101,43 +101,45 @@ Some Ingress controllers may require additional configuration to handle websocke
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: kite
-  namespace: kite-system
+  name: lightkite
+  namespace: lightkite-system
 spec:
   ingressClassName: nginx
   rules:
-    - host: kite.example.com
+    - host: lightkite.example.com
       http:
         paths:
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: kite
+                name: lightkite
                 port:
                   number: 8080
   tls:
     - hosts:
-        - kite.example.com
-      secretName: kite-tls
+        - lightkite.example.com
+      secretName: lightkite-tls
 ```
 
 ## Serving under a subpath (basePath)
 
-If you want to serve Kite under a subpath (for example `https://example.com/kite`), use the Helm chart `basePath` value.
+If you want to serve Lightkite under a subpath (for example `https://example.com/lightkite`), use the Helm chart `basePath` value.
 
 How to set it:
 
 - In `values.yaml`:
 
 ```yaml
-basePath: "/kite"
+basePath: "/lightkite"
 ```
 
 - Or with Helm CLI:
 
 ```fish
-helm install kite oci://ghcr.io/kite-org/charts/kite -n kite-system --create-namespace --set basePath="/kite"
+helm install lightkite oci://ghcr.io/realmroot/charts/lightkite \
+  --version <version> -n lightkite-system --create-namespace \
+  -f values.yaml --set basePath="/lightkite"
 ```
 
 Important notes:
@@ -148,56 +150,51 @@ Important notes:
 ingress:
   enabled: true
   hosts:
-    - host: kite.example.com
+    - host: lightkite.example.com
       paths:
-        - path: /kite
+        - path: /lightkite
           pathType: Prefix
 ```
 
-- OAuth / redirects: if you enable OAuth (or any external redirect flows), update the redirect URLs in your OAuth provider to include the base path, e.g. `https://kite.example.com/kite/oauth/callback`.
+- OIDC callback: register the base path when used, for example
+  `https://lightkite.example.com/lightkite/api/auth/callback`.
 - Environment overrides: if you provide environment variables via `extraEnvs` or an existing secret, ensure `KITE_BASE` is set consistently with the `basePath` value (otherwise behavior may differ).
 
 ## Verifying Installation
 
-After installation, you can access the dashboard to verify that Kite is deployed successfully. The expected interface is as follows:
+After installation, open Lightkite and sign in through the configured OIDC provider.
+The Overview page should load after the provider redirects back to Lightkite.
 
 ::: tip
-If you need to configure Kite through environment variables, please refer to [Environment Variables](../config/env).
+If you need to configure Lightkite through environment variables, please refer to [Environment Variables](../config/env).
 :::
 
-![setup](../screenshots/setup.png)
+### Add the first cluster
 
-![setup](../screenshots/setup2.png)
+An operator in `PLATFORM_ADMIN_GROUPS` can open **Settings > Clusters** and add
+a direct cluster using only its API server URL, CA bundle, and optional TLS
+server name. Private APIs require operator-managed network connectivity.
+Lightkite does not use its Pod ServiceAccount as a cluster credential. The
+cluster API server must trust the same OIDC issuer, and Kubernetes RBAC must
+bind the signed-in users or groups.
 
-You can complete cluster setup according to the page prompts.
-
-### Quick Setup with In-Cluster Mode
-
-For the simplest setup, select **`in-cluster`** as the cluster type. This option automatically uses the service account credentials that Kite is running with inside the cluster, requiring no additional configuration:
-
-- **No kubeconfig needed**: Kite will use its own service account to access the Kubernetes API
-- **Automatic authentication**: Works out of the box with the default RBAC permissions
-- **Ideal for single-cluster deployments**: Perfect when Kite is managing the same cluster it's running in
-
-This is the recommended option for getting started quickly, especially in development or when Kite only needs to manage its own cluster.
-
-## Uninstalling Kite
+## Uninstalling Lightkite
 
 ### Helm Uninstall
 
 ```bash
-helm uninstall kite -n kite-system
+helm uninstall lightkite -n lightkite-system
 ```
 
 ### YAML Uninstall
 
 ```bash
-kubectl delete -f https://raw.githubusercontent.com/kite-org/kite/main/deploy/install.yaml
+kubectl delete -f install.yaml
 ```
 
 ## Next Steps
 
-After Kite installation is complete, you can continue with:
+After Lightkite installation is complete, you can continue with:
 
 - [Adding Users](../config/user-management)
 - [Configuring RBAC](../config/rbac-config)

@@ -9,31 +9,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	dto "github.com/prometheus/client_model/go"
-	"github.com/zxh326/kite/pkg/cluster"
-	"github.com/zxh326/kite/pkg/model"
+	"github.com/realmroot/lightkite/pkg/cluster"
+	"github.com/realmroot/lightkite/pkg/model"
 )
-
-func TestMethod2Verb(t *testing.T) {
-	tests := []struct {
-		name   string
-		method string
-		want   string
-	}{
-		{name: "post", method: http.MethodPost, want: "create"},
-		{name: "put", method: http.MethodPut, want: "update"},
-		{name: "patch", method: http.MethodPatch, want: "update"},
-		{name: "delete", method: http.MethodDelete, want: "delete"},
-		{name: "get", method: http.MethodGet, want: "get"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := method2verb(tt.method); got != tt.want {
-				t.Fatalf("method2verb(%q) = %q, want %q", tt.method, got, tt.want)
-			}
-		})
-	}
-}
 
 func TestStaticCache(t *testing.T) {
 	gin.SetMode(gin.TestMode)
@@ -233,10 +211,39 @@ func TestClusterMiddlewareNoClusters(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/pods", nil)
 	r.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", rec.Code, http.StatusNotFound)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
 	}
-	if !strings.Contains(rec.Body.String(), "no clusters available") {
+	if !strings.Contains(rec.Body.String(), "OIDC ID token is missing") {
 		t.Fatalf("response body = %q, want error message", rec.Body.String())
+	}
+}
+
+type tokenBoundaryProvider struct {
+	idToken string
+}
+
+func (p *tokenBoundaryProvider) GetClientSet(_ string, idToken string) (*cluster.ClientSet, error) {
+	p.idToken = idToken
+	return &cluster.ClientSet{Name: "cluster-a"}, nil
+}
+
+func TestClusterMiddlewareUsesKubernetesIDToken(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	provider := &tokenBoundaryProvider{}
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		c.Set("oidc-id-token", "id-token")
+		c.Next()
+	}, ClusterMiddleware(provider))
+	router.GET("/api/v1/pods", func(c *gin.Context) { c.Status(http.StatusNoContent) })
+
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/pods", nil))
+	if recorder.Code != http.StatusNoContent {
+		t.Fatalf("status = %d", recorder.Code)
+	}
+	if provider.idToken != "id-token" {
+		t.Fatalf("ID token = %q", provider.idToken)
 	}
 }

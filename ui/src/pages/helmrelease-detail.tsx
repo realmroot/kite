@@ -1,8 +1,4 @@
 import { useMemo, useState, type FormEvent } from 'react'
-import {
-  IconCircleCheckFilled,
-  IconExclamationCircle,
-} from '@tabler/icons-react'
 import * as yaml from 'js-yaml'
 import type { Container, Pod } from 'kubernetes-types/core/v1'
 import { Loader2 } from 'lucide-react'
@@ -27,7 +23,6 @@ import {
   useHelmChart,
   useHelmChartContent,
   useHelmCharts,
-  useHelmReleaseAutoUpgrade,
   useHelmReleaseHistory,
   useResource,
   useResourcesWatch,
@@ -85,7 +80,6 @@ import {
   type YamlFileTreeItem,
 } from '@/components/yaml-file-tree-viewer-native'
 
-import { HelmReleaseAutoUpgradeDialog } from './helmrelease-auto-upgrade-dialog'
 import {
   isSameHelmVersion,
   useHelmReleaseChartSelection,
@@ -1050,9 +1044,6 @@ function UpgradeHelmReleaseDialog({
     }
     return [{ version: activeVersion }, ...versionOptions]
   }, [activeVersion, versionOptions])
-  const chartUrl = canUseCurrentChart
-    ? undefined
-    : selectedChartQuery.data?.chartUrl
   const isVersionLoading = !!activeChart && latestChartQuery.isLoading
   const isChartPackageLoading =
     !!activeChart && !canUseCurrentChart && selectedChartQuery.isLoading
@@ -1076,7 +1067,7 @@ function UpgradeHelmReleaseDialog({
   const buildUpgradeRequest = (): HelmReleaseUpgradeRequest | null => {
     setError('')
 
-    if (!chartUrl && !canUseCurrentChart) {
+    if (!activeChart && !canUseCurrentChart) {
       setError(t('helmCharts.messages.noChartUrl'))
       return null
     }
@@ -1097,11 +1088,12 @@ function UpgradeHelmReleaseDialog({
     }
 
     return {
-      ...(chartUrl
+      ...(activeChart && !canUseCurrentChart
         ? {
-            chartUrl,
             repositoryName: activeChart?.repositoryName,
             source: activeChart?.source,
+            chartName: activeChart.name,
+            chartVersion: activeVersion,
           }
         : {}),
       values,
@@ -1442,7 +1434,7 @@ function UpgradeHelmReleaseDialog({
                   isDryRunning ||
                   !activeVersion ||
                   isChartPackageLoading ||
-                  (!chartUrl && !canUseCurrentChart)
+                  (!activeChart && !canUseCurrentChart)
                 }
               >
                 {isDryRunning ? (
@@ -1459,7 +1451,7 @@ function UpgradeHelmReleaseDialog({
                 isDryRunning ||
                 !activeVersion ||
                 isChartPackageLoading ||
-                (!chartUrl && !canUseCurrentChart)
+                (!activeChart && !canUseCurrentChart)
               }
             >
               {isUpgrading ? <Loader2 className="size-4 animate-spin" /> : null}
@@ -1476,25 +1468,11 @@ export function HelmReleaseDetail(props: { namespace: string; name: string }) {
   const { namespace, name } = props
   const { t } = useTranslation()
   const [upgradeDialogOpen, setUpgradeDialogOpen] = useState(false)
-  const [autoUpgradeDialogOpen, setAutoUpgradeDialogOpen] = useState(false)
   const { data, isLoading, error, refetch } = useResource(
     'helmrelease',
     name,
     namespace
   )
-  const autoUpgradeQuery = useHelmReleaseAutoUpgrade(namespace, name, {
-    enabled: !!data,
-    staleTime: 30_000,
-  })
-  const isAutoUpgradeEnabled = autoUpgradeQuery.data?.enabled === true
-  const autoUpgradeLastError = isAutoUpgradeEnabled
-    ? autoUpgradeQuery.data?.lastError?.trim() || ''
-    : ''
-  const autoUpgradeButtonTitle = autoUpgradeLastError
-    ? `${t('helm.actions.autoUpgrade')} (${t('common.fields.error')}: ${autoUpgradeLastError})`
-    : isAutoUpgradeEnabled
-      ? `${t('helm.actions.autoUpgrade')} (${t('status.enabled')})`
-      : t('helm.actions.autoUpgrade')
   const releaseName = data?.spec?.releaseName || data?.metadata?.name
   const labelSelector = releaseName
     ? `app.kubernetes.io/instance=${releaseName}`
@@ -1658,21 +1636,6 @@ export function HelmReleaseDetail(props: { namespace: string; name: string }) {
             variant="outline"
             size="sm"
             disabled={!data}
-            title={autoUpgradeButtonTitle}
-            aria-label={autoUpgradeButtonTitle}
-            onClick={() => setAutoUpgradeDialogOpen(true)}
-          >
-            {autoUpgradeLastError ? (
-              <IconExclamationCircle className="size-4 fill-red-500 dark:fill-red-400" />
-            ) : isAutoUpgradeEnabled ? (
-              <IconCircleCheckFilled className="size-4 fill-green-500 dark:fill-green-400" />
-            ) : null}
-            {t('helm.actions.autoUpgrade')}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!data}
             onClick={() => setUpgradeDialogOpen(true)}
           >
             {t('helm.actions.upgrade')}
@@ -1683,14 +1646,6 @@ export function HelmReleaseDetail(props: { namespace: string; name: string }) {
               open={upgradeDialogOpen}
               onOpenChange={setUpgradeDialogOpen}
               onComplete={refetch}
-            />
-          ) : null}
-          {data && autoUpgradeDialogOpen ? (
-            <HelmReleaseAutoUpgradeDialog
-              release={data}
-              open={autoUpgradeDialogOpen}
-              onOpenChange={setAutoUpgradeDialogOpen}
-              onSaved={autoUpgradeQuery.refetch}
             />
           ) : null}
         </>

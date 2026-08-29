@@ -1,6 +1,6 @@
 # 安装指南
 
-本指南详细介绍如何在 Kubernetes 环境下安装 Kite。
+本指南详细介绍如何在 Kubernetes 环境下安装 Lightkite。
 
 ## 前提条件
 
@@ -12,23 +12,23 @@
 
 ### 方式一：Helm Chart（推荐）
 
-使用 Helm 可灵活配置和升级 Kite：
+请把 Lightkite 安装到新的 Release 和 Namespace，不要把该 Chart 应用到现有
+Kite Release 上。
+
+使用 Lightkite 发布的版本化 OCI Chart 安装（替换 `<version>`）：
 
 ```bash
-helm install kite oci://ghcr.io/kite-org/charts/kite -n kite-system --create-namespace
+helm install lightkite oci://ghcr.io/realmroot/charts/lightkite \
+  --version <version> -n lightkite-system --create-namespace -f values.yaml
 ```
 
-或从 Helm 仓库安装：
+如果仓库启用了可选的 GitHub Pages Helm Index，也可以安装相同版本：
 
 ```bash
-# 添加 Kite 仓库
-helm repo add kite https://kite-org.github.io/kite/
-
-# 更新仓库信息
+helm repo add lightkite https://realmroot.github.io/lightkite/
 helm repo update
-
-# 使用默认配置安装
-helm install kite kite/kite -n kite-system --create-namespace
+helm install lightkite lightkite/lightkite --version <version> \
+  -n lightkite-system --create-namespace -f values.yaml
 ```
 
 #### 自定义安装
@@ -40,58 +40,57 @@ helm install kite kite/kite -n kite-system --create-namespace
 使用自定义值安装：
 
 ```bash
-helm install kite oci://ghcr.io/kite-org/charts/kite -n kite-system -f values.yaml
+helm install lightkite oci://ghcr.io/realmroot/charts/lightkite \
+  --version <version> -n lightkite-system --create-namespace -f values.yaml
 
 # 或使用 Helm 仓库
-helm install kite kite/kite -n kite-system -f values.yaml
+helm install lightkite lightkite/lightkite --version <version> \
+  -n lightkite-system --create-namespace -f values.yaml
 ```
 
 ### 方式二：YAML 清单
 
-如需快速部署，可直接应用官方安装 YAML：
-
-::: warning
-此方法不适合生产环境，因为他没有配置任何持久化相关内容，你需要手动挂载持久化卷并设置环境变量 `DB_DSN=/data/db.sqlite` 来确保数据不会丢失。或者也可以使用外部数据库。
-
-参考 [持久化相关](../faq#持久化相关) 获取更多详情。
-:::
+每个 Release 都包含版本化的 `install.yaml`，默认带 SQLite 持久化与非 root
+安全上下文。下载后替换 OIDC、Secret 与公网 Host 占位符，审查后再应用：
 
 ```bash
-kubectl apply -f https://raw.githubusercontent.com/kite-org/kite/main/deploy/install.yaml
+curl -fLO https://github.com/realmroot/lightkite/releases/download/vX.Y.Z/install.yaml
+$EDITOR install.yaml
+kubectl apply -f install.yaml
 ```
 
-此方法将使用默认配置安装 Kite。如需高级定制，建议使用 Helm Chart。
+外部数据库、私有 Issuer CA、Ingress 等高级配置应使用 Helm Chart。
 
-## 访问 Kite
+## 访问 Lightkite
 
 ### 端口转发（测试环境）
 
-测试期间可通过端口转发快速访问 Kite：
+测试期间可通过端口转发快速访问 Lightkite：
 
 ```bash
-kubectl port-forward -n kite-system svc/kite 8080:8080
+kubectl port-forward -n lightkite-system svc/lightkite 8080:8080
 ```
 
 ### LoadBalancer 服务
 
-如集群支持 LoadBalancer，可直接暴露 Kite 服务：
+如集群支持 LoadBalancer，可直接暴露 Lightkite 服务：
 
 ```bash
-kubectl patch svc kite -n kite-system -p '{"spec": {"type": "LoadBalancer"}}'
+kubectl patch svc lightkite -n lightkite-system -p '{"spec": {"type": "LoadBalancer"}}'
 ```
 
 获取分配的 IP：
 
 ```bash
-kubectl get svc kite -n kite-system
+kubectl get svc lightkite -n lightkite-system
 ```
 
 ### Ingress（生产环境推荐）
 
-生产环境建议通过 Ingress 控制器并启用 TLS 暴露 Kite：
+生产环境建议通过 Ingress 控制器并启用 TLS 暴露 Lightkite：
 
 ::: warning
-Kite 的日志和 Web 终端功能需支持 websocket。
+Lightkite 的日志和 Web 终端功能需支持 websocket。
 部分 Ingress 控制器可能需额外配置以正确处理 websocket。
 :::
 
@@ -99,43 +98,45 @@ Kite 的日志和 Web 终端功能需支持 websocket。
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: kite
-  namespace: kite-system
+  name: lightkite
+  namespace: lightkite-system
 spec:
   ingressClassName: nginx
   rules:
-    - host: kite.example.com
+    - host: lightkite.example.com
       http:
         paths:
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: kite
+                name: lightkite
                 port:
                   number: 8080
   tls:
     - hosts:
-        - kite.example.com
-      secretName: kite-tls
+        - lightkite.example.com
+      secretName: lightkite-tls
 ```
 
 ## 在子路径下部署（basePath）
 
-如果您希望将 Kite 部署在一个子路径下，例如 `https://example.com/kite`，可以使用 Helm Chart 的 `basePath` 值来配置。
+如果您希望将 Lightkite 部署在一个子路径下，例如 `https://example.com/lightkite`，可以使用 Helm Chart 的 `basePath` 值来配置。
 
 如何设置：
 
 - 在 `values.yaml` 中：
 
 ```yaml
-basePath: "/kite"
+basePath: "/lightkite"
 ```
 
 - 或使用 Helm CLI：
 
 ```fish
-helm install kite oci://ghcr.io/kite-org/charts/kite -n kite-system --create-namespace --set basePath="/kite"
+helm install lightkite oci://ghcr.io/realmroot/charts/lightkite \
+  --version <version> -n lightkite-system --create-namespace \
+  -f values.yaml --set basePath="/lightkite"
 ```
 
 说明：
@@ -146,45 +147,47 @@ helm install kite oci://ghcr.io/kite-org/charts/kite -n kite-system --create-nam
 ingress:
   enabled: true
   hosts:
-    - host: kite.example.com
+    - host: lightkite.example.com
       paths:
-        - path: /kite
+        - path: /lightkite
           pathType: Prefix
 ```
 
-- OAuth / 重定向：如果启用了 OAuth 或其他外部重定向，请在 OAuth 提供方中将重定向 URL 更新为包含子路径，例如 `https://kite.example.com/kite/oauth/callback`。
+- OIDC Callback：使用子路径时应注册包含该路径的地址，例如
+  `https://lightkite.example.com/lightkite/api/auth/callback`。
 
 ## 验证安装
 
-安装完成后，可访问仪表盘验证 Kite 是否部署成功。预期界面如下：
+安装完成后，打开 Lightkite 并通过配置的 OIDC Provider 登录。Provider 回调 Lightkite
+后应直接进入 Overview 页面。
 
 ::: tip
-如需通过环境变量配置 Kite，请参考 [环境变量](../config/env)。
+如需通过环境变量配置 Lightkite，请参考 [环境变量](../config/env)。
 :::
 
-![setup](../../screenshots/setup.png)
+`PLATFORM_ADMIN_GROUPS` 中的管理员可以进入 **设置 > 集群** 添加第一个集群。
+只需填写 API Server URL、CA Bundle 和可选 TLS Server Name；私有 API Server
+的网络连通性由部署方通过网络、VPN 或独立隧道基础设施提供。Lightkite 不会把
+自身 Pod ServiceAccount 当作集群凭据。目标集群必须信任同一个 OIDC Issuer，
+并通过 Kubernetes RBAC 绑定登录用户或 group。
 
-![setup](../../screenshots/setup2.png)
-
-可根据页面提示完成集群设置。
-
-## 卸载 Kite
+## 卸载 Lightkite
 
 ### Helm 卸载
 
 ```bash
-helm uninstall kite -n kite-system
+helm uninstall lightkite -n lightkite-system
 ```
 
 ### YAML 卸载
 
 ```bash
-kubectl delete -f https://raw.githubusercontent.com/kite-org/kite/main/deploy/install.yaml
+kubectl delete -f install.yaml
 ```
 
 ## 后续步骤
 
-Kite 安装完成后，您可以继续：
+Lightkite 安装完成后，您可以继续：
 
 - [添加用户](../config/user-management)
 - [配置 RBAC](../config/rbac-config)

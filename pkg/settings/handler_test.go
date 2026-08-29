@@ -9,14 +9,16 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
-	"github.com/zxh326/kite/pkg/common"
-	"github.com/zxh326/kite/pkg/model"
+	"github.com/realmroot/lightkite/pkg/common"
+	"github.com/realmroot/lightkite/pkg/model"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
 
-func TestGeneralSettingHandlersDoNotExposeOrEraseAPIKey(t *testing.T) {
-	setupGeneralSettingTestDB(t, "existing-secret")
+func TestGeneralSettingHandlersReadAndUpdateRuntimeSettings(t *testing.T) {
+	setupGeneralSettingTestDB(t)
+	common.AnalyticsScriptURL = "https://analytics.example.test/script.js"
+	common.AnalyticsWebsiteID = "lightkite-test"
 	router := generalSettingTestRouter()
 
 	getResponse := performGeneralSettingRequest(t, router, http.MethodGet, "")
@@ -24,88 +26,48 @@ func TestGeneralSettingHandlersDoNotExposeOrEraseAPIKey(t *testing.T) {
 		t.Fatalf("GET status = %d, want %d: %s", getResponse.Code, http.StatusOK, getResponse.Body.String())
 	}
 	getBody := decodeGeneralSettingResponse(t, getResponse)
-	if getBody["aiApiKey"] != "" || getBody["aiApiKeyConfigured"] != true {
-		t.Fatalf("GET API key fields = %#v", getBody)
+	if getBody["enableAnalytics"] != false {
+		t.Fatalf("enableAnalytics = %#v, want false", getBody["enableAnalytics"])
 	}
-	if strings.Contains(getResponse.Body.String(), "existing-secret") {
-		t.Fatal("GET response exposed the stored API key")
+	if getBody["analyticsConfigured"] != true {
+		t.Fatalf("analyticsConfigured = %#v, want true", getBody["analyticsConfigured"])
 	}
 
-	updateBody := `{"aiAgentEnabled":true,"aiProvider":" Anthropic ","aiModel":"","aiApiKey":"  "}`
+	updateBody := `{"enableAnalytics":true,"enableVersionCheck":false}`
 	updateResponse := performGeneralSettingRequest(t, router, http.MethodPut, updateBody)
 	if updateResponse.Code != http.StatusOK {
 		t.Fatalf("PUT status = %d, want %d: %s", updateResponse.Code, http.StatusOK, updateResponse.Body.String())
 	}
 	responseBody := decodeGeneralSettingResponse(t, updateResponse)
-	if responseBody["aiApiKey"] != "" || responseBody["aiApiKeyConfigured"] != true {
-		t.Fatalf("PUT API key fields = %#v", responseBody)
-	}
-	if responseBody["aiProvider"] != model.GeneralAIProviderAnthropic {
-		t.Fatalf("aiProvider = %q, want %q", responseBody["aiProvider"], model.GeneralAIProviderAnthropic)
-	}
-	if responseBody["aiModel"] != model.DefaultGeneralAnthropicModel {
-		t.Fatalf("aiModel = %q, want %q", responseBody["aiModel"], model.DefaultGeneralAnthropicModel)
-	}
-	if strings.Contains(updateResponse.Body.String(), "existing-secret") {
-		t.Fatal("PUT response exposed the stored API key")
-	}
-
-	var stored model.GeneralSetting
-	if err := model.DB.First(&stored, 1).Error; err != nil {
-		t.Fatalf("loading stored setting: %v", err)
-	}
-	if stored.AIAPIKey != model.SecretString("existing-secret") {
-		t.Fatalf("stored API key = %q, want preserved value", stored.AIAPIKey)
+	if responseBody["enableAnalytics"] != true || responseBody["enableVersionCheck"] != false {
+		t.Fatalf("PUT runtime fields = %#v", responseBody)
 	}
 }
 
-func TestHandleUpdateGeneralSettingRejectsUnsafeAIConfiguration(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	tests := []struct {
-		name      string
-		apiKey    string
-		body      string
-		wantError string
-	}{
-		{
-			name:      "unsupported provider",
-			apiKey:    "existing-secret",
-			body:      `{"aiProvider":"gemini"}`,
-			wantError: "Unsupported aiProvider",
-		},
-		{
-			name:      "agent without API key",
-			body:      `{"aiAgentEnabled":true}`,
-			wantError: "aiApiKey is required when aiAgentEnabled is true",
-		},
-	}
+func TestGeneralSettingHandlerRejectsAnalyticsWithoutOperatorConfiguration(t *testing.T) {
+	setupGeneralSettingTestDB(t)
+	common.AnalyticsScriptURL = ""
+	common.AnalyticsWebsiteID = ""
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			setupGeneralSettingTestDB(t, tt.apiKey)
-			response := performGeneralSettingRequest(t, generalSettingTestRouter(), http.MethodPut, tt.body)
-			if response.Code != http.StatusBadRequest {
-				t.Fatalf("status = %d, want %d: %s", response.Code, http.StatusBadRequest, response.Body.String())
-			}
-			body := decodeGeneralSettingResponse(t, response)
-			if body["error"] != tt.wantError {
-				t.Fatalf("error = %q, want %q", body["error"], tt.wantError)
-			}
-		})
+	response := performGeneralSettingRequest(t, generalSettingTestRouter(), http.MethodPut, `{"enableAnalytics":true}`)
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("PUT status = %d, want %d: %s", response.Code, http.StatusBadRequest, response.Body.String())
 	}
 }
 
-func setupGeneralSettingTestDB(t *testing.T, apiKey string) {
+func setupGeneralSettingTestDB(t *testing.T) {
 	t.Helper()
 	originalDB := model.DB
-	originalEncryptKey := common.KiteEncryptKey
-	originalJWTSecret := common.JwtSecret
+	originalEncryptKey := common.LightkiteEncryptKey
 	originalAnalytics := common.EnableAnalytics
+	originalAnalyticsScriptURL := common.AnalyticsScriptURL
+	originalAnalyticsWebsiteID := common.AnalyticsWebsiteID
 	originalVersionCheck := common.EnableVersionCheck
 
-	common.KiteEncryptKey = "settings-handler-test-key"
-	common.JwtSecret = "settings-handler-test-jwt-secret"
+	common.LightkiteEncryptKey = "settings-handler-test-key"
 	common.EnableAnalytics = false
+	common.AnalyticsScriptURL = ""
+	common.AnalyticsWebsiteID = ""
 	common.EnableVersionCheck = true
 
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
@@ -118,17 +80,10 @@ func setupGeneralSettingTestDB(t *testing.T, apiKey string) {
 	model.DB = db
 	setting := model.GeneralSetting{
 		Model:              model.Model{ID: 1},
-		AIProvider:         model.DefaultGeneralAIProvider,
-		AIModel:            model.DefaultGeneralAIModel,
-		AIAPIKey:           model.SecretString(apiKey),
-		AIMaxTokens:        4096,
 		KubectlEnabled:     true,
 		KubectlImage:       model.DefaultGeneralKubectlImage,
 		NodeTerminalImage:  model.DefaultGeneralNodeTerminalImage,
 		EnableVersionCheck: true,
-		EnableMFA:          true,
-		EnablePasskeyLogin: true,
-		JWTSecret:          model.SecretString(common.JwtSecret),
 	}
 	if err := db.Create(&setting).Error; err != nil {
 		t.Fatalf("creating general setting: %v", err)
@@ -140,9 +95,10 @@ func setupGeneralSettingTestDB(t *testing.T, apiKey string) {
 			_ = sqlDB.Close()
 		}
 		model.DB = originalDB
-		common.KiteEncryptKey = originalEncryptKey
-		common.JwtSecret = originalJWTSecret
+		common.LightkiteEncryptKey = originalEncryptKey
 		common.EnableAnalytics = originalAnalytics
+		common.AnalyticsScriptURL = originalAnalyticsScriptURL
+		common.AnalyticsWebsiteID = originalAnalyticsWebsiteID
 		common.EnableVersionCheck = originalVersionCheck
 	})
 }

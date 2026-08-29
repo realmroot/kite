@@ -1,178 +1,109 @@
 package terminal
 
 import (
-	"context"
+	"bytes"
+	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/gorilla/websocket"
-	"github.com/zxh326/kite/pkg/cluster"
-	"github.com/zxh326/kite/pkg/common"
-	"github.com/zxh326/kite/pkg/kube"
-	"github.com/zxh326/kite/pkg/model"
-	"github.com/zxh326/kite/pkg/wsutil"
-	corev1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"github.com/realmroot/lightkite/pkg/cluster"
+	"github.com/realmroot/lightkite/pkg/common"
+	"github.com/realmroot/lightkite/pkg/kube"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
-func TestTerminalWebSocketsRejectUnauthorizedUsersBeforeClusterAccess(t *testing.T) {
+func TestPodTerminalValidatesTargetBeforeOpeningWebSocket(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	clientSet := &cluster.ClientSet{Name: "prod", K8sClient: &kube.K8sClient{}}
-	user := model.User{Username: "alice"}
-	router := gin.New()
-	router.GET("/terminal/:namespace/:podName", func(c *gin.Context) {
-		c.Set("cluster", clientSet)
-		c.Set("user", user)
-		(&TerminalHandler{}).HandleTerminalWebSocket(c)
-	})
-	router.GET("/node/:nodeName", func(c *gin.Context) {
-		c.Set("cluster", clientSet)
-		c.Set("user", user)
-		(&NodeTerminalHandler{}).HandleNodeTerminalWebSocket(c)
-	})
-	router.GET("/kubectl", func(c *gin.Context) {
-		c.Set("cluster", clientSet)
-		c.Set("user", user)
-		(&KubectlTerminalHandler{}).HandleKubectlTerminalWebSocket(c)
-	})
-	server := httptest.NewServer(router)
-	t.Cleanup(server.Close)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodGet, "/terminal", nil)
+	c.Set("cluster", &cluster.ClientSet{Name: "prod", K8sClient: &kube.K8sClient{}})
 
-	tests := []struct {
-		path        string
-		wantMessage string
-	}{
-		{"/terminal/default/web", "does not have permission to exec pods"},
-		{"/node/worker-1", "does not have permission to exec nodes"},
-		{"/kubectl", "only available to admin users"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.path, func(t *testing.T) {
-			url := "ws" + strings.TrimPrefix(server.URL, "http") + tt.path
-			conn, response, err := websocket.DefaultDialer.Dial(url, nil)
-			if response != nil {
-				defer func() {
-					_ = response.Body.Close()
-				}()
-			}
-			if err != nil {
-				if response != nil {
-					t.Fatalf("dialing WebSocket: %v, status=%d", err, response.StatusCode)
-				}
-				t.Fatalf("dialing WebSocket: %v", err)
-			}
-			defer func() {
-				_ = conn.Close()
-			}()
-			var message wsutil.Message
-			if err := conn.ReadJSON(&message); err != nil {
-				t.Fatalf("reading rejection: %v", err)
-			}
-			if message.Type != "error" || !strings.Contains(message.Data, tt.wantMessage) {
-				t.Fatalf("rejection message = %#v", message)
-			}
-		})
+	(&TerminalHandler{}).HandleTerminalWebSocket(c)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", recorder.Code)
 	}
 }
 
-func TestTerminalAgentsUseExpectedSecurityConfigurationAndCleanupScope(t *testing.T) { //nolint:gocyclo // security configuration test covers both terminal agent types
-	originalNamespace := common.AgentPodNamespace
-	common.AgentPodNamespace = "kite-system"
-	t.Cleanup(func() {
-		common.AgentPodNamespace = originalNamespace
-	})
-
-	scheme := runtime.NewScheme()
-	if err := corev1.AddToScheme(scheme); err != nil {
-		t.Fatalf("adding core scheme: %v", err)
-	}
-	if err := rbacv1.AddToScheme(scheme); err != nil {
-		t.Fatalf("adding RBAC scheme: %v", err)
-	}
-	client := fake.NewClientBuilder().WithScheme(scheme).Build()
+func TestBuildKubectlSessionResourcesUsesOnlyCurrentUserIdentity(t *testing.T) {
 	clientSet := &cluster.ClientSet{
-		Name:      "prod",
-		K8sClient: &kube.K8sClient{Client: client},
+		Name: "prod",
+		K8sClient: &kube.K8sClient{Configuration: &rest.Config{
+			BearerToken: "current-user-id-token",
+			TLSClientConfig: rest.TLSClientConfig{
+				CAData: []byte("test-ca"),
+			},
+		}},
 	}
-	ctx := context.Background()
 
-	nodeHandler := &NodeTerminalHandler{}
-	nodePodName, err := nodeHandler.createNodeAgent(ctx, clientSet, "worker-1", "debug-shell:v1")
+	secret, pod, err := buildKubectlSessionResources(clientSet, "lightkite-kubectl-test", "kubectl:test")
 	if err != nil {
-		t.Fatalf("createNodeAgent() error = %v", err)
+		t.Fatalf("build resources: %v", err)
 	}
-	var nodePod corev1.Pod
-	if err := client.Get(ctx, types.NamespacedName{Namespace: common.AgentPodNamespace, Name: nodePodName}, &nodePod); err != nil {
-		t.Fatalf("loading node agent: %v", err)
+	config, err := clientcmd.Load(secret.Data["config"])
+	if err != nil {
+		t.Fatalf("load generated kubeconfig: %v", err)
 	}
-	if nodePod.Spec.NodeName != "worker-1" || !nodePod.Spec.HostPID || !nodePod.Spec.HostNetwork || !nodePod.Spec.HostIPC {
-		t.Fatalf("node agent host configuration = %#v", nodePod.Spec)
+	if got := config.AuthInfos["oidc-user"].Token; got != "current-user-id-token" {
+		t.Fatalf("kubeconfig token = %q", got)
 	}
-	if len(nodePod.Spec.Containers) != 1 || nodePod.Spec.Containers[0].Image != "debug-shell:v1" {
-		t.Fatalf("node agent containers = %#v", nodePod.Spec.Containers)
+	if got := config.Clusters["target"].Server; got != "https://kubernetes.default.svc" {
+		t.Fatalf("kubeconfig server = %q", got)
 	}
-	container := nodePod.Spec.Containers[0]
+	if !bytes.Equal(config.Clusters["target"].CertificateAuthorityData, []byte("test-ca")) {
+		t.Fatalf("kubeconfig CA = %q", config.Clusters["target"].CertificateAuthorityData)
+	}
+	if pod.Spec.AutomountServiceAccountToken == nil || *pod.Spec.AutomountServiceAccountToken {
+		t.Fatal("kubectl session pod must not mount a ServiceAccount token")
+	}
+	if pod.Spec.ServiceAccountName != "" {
+		t.Fatalf("service account = %q, want empty", pod.Spec.ServiceAccountName)
+	}
+	container := pod.Spec.Containers[0]
+	if container.SecurityContext == nil || container.SecurityContext.AllowPrivilegeEscalation == nil || *container.SecurityContext.AllowPrivilegeEscalation {
+		t.Fatal("kubectl session container permits privilege escalation")
+	}
+	if container.SecurityContext.Privileged != nil && *container.SecurityContext.Privileged {
+		t.Fatal("kubectl session container is privileged")
+	}
+	if secret.Namespace != common.AgentPodNamespace || pod.Namespace != common.AgentPodNamespace {
+		t.Fatalf("session namespaces = %q/%q", secret.Namespace, pod.Namespace)
+	}
+}
+
+func TestBuildKubectlSessionResourcesRejectsMissingUserToken(t *testing.T) {
+	clientSet := &cluster.ClientSet{K8sClient: &kube.K8sClient{Configuration: &rest.Config{}}}
+	if _, _, err := buildKubectlSessionResources(clientSet, "test", "kubectl:test"); err == nil {
+		t.Fatal("expected missing token error")
+	}
+}
+
+func TestBuildNodeTerminalPodUsesKubernetesAuthorizedEphemeralSession(t *testing.T) {
+	pod := buildNodeTerminalPod("worker-a", "node-shell:test")
+
+	if pod.Spec.NodeName != "worker-a" || pod.Spec.Containers[0].Image != "node-shell:test" {
+		t.Fatalf("unexpected node terminal target: node=%q image=%q", pod.Spec.NodeName, pod.Spec.Containers[0].Image)
+	}
+	if pod.Spec.AutomountServiceAccountToken == nil || *pod.Spec.AutomountServiceAccountToken {
+		t.Fatal("node terminal pod must not mount a ServiceAccount token")
+	}
+	if pod.Spec.ServiceAccountName != "" {
+		t.Fatalf("service account = %q, want empty", pod.Spec.ServiceAccountName)
+	}
+	if pod.Spec.ActiveDeadlineSeconds == nil || *pod.Spec.ActiveDeadlineSeconds != 3600 {
+		t.Fatalf("active deadline = %v, want 3600", pod.Spec.ActiveDeadlineSeconds)
+	}
+	container := pod.Spec.Containers[0]
 	if container.SecurityContext == nil || container.SecurityContext.Privileged == nil || !*container.SecurityContext.Privileged {
-		t.Fatalf("node agent is not privileged: %#v", container.SecurityContext)
+		t.Fatal("node terminal must explicitly declare its privileged host-access boundary")
 	}
-	if len(container.VolumeMounts) != 1 || container.VolumeMounts[0].MountPath != "/host" {
-		t.Fatalf("node agent host mount = %#v", container.VolumeMounts)
+	if len(pod.Spec.Volumes) != 1 || pod.Spec.Volumes[0].HostPath == nil || pod.Spec.Volumes[0].HostPath.Path != "/" {
+		t.Fatal("node terminal must mount the selected node root")
 	}
-
-	kubectlHandler := &KubectlTerminalHandler{}
-	if err := kubectlHandler.ensureAdminServiceAccount(ctx, clientSet); err != nil {
-		t.Fatalf("ensureAdminServiceAccount() error = %v", err)
-	}
-	if err := kubectlHandler.ensureAdminServiceAccount(ctx, clientSet); err != nil {
-		t.Fatalf("ensureAdminServiceAccount() was not idempotent: %v", err)
-	}
-	var serviceAccount corev1.ServiceAccount
-	if err := client.Get(ctx, types.NamespacedName{Namespace: common.AgentPodNamespace, Name: kubectlAdminSA}, &serviceAccount); err != nil {
-		t.Fatalf("loading ServiceAccount: %v", err)
-	}
-	var binding rbacv1.ClusterRoleBinding
-	if err := client.Get(ctx, types.NamespacedName{Name: kubectlAdminSA}, &binding); err != nil {
-		t.Fatalf("loading ClusterRoleBinding: %v", err)
-	}
-	if binding.RoleRef.Name != "cluster-admin" || len(binding.Subjects) != 1 || binding.Subjects[0].Name != kubectlAdminSA {
-		t.Fatalf("kubectl ClusterRoleBinding = %#v", binding)
-	}
-
-	kubectlPodName, err := kubectlHandler.createKubectlAgent(ctx, clientSet, "session-a", "kubectl:v1")
-	if err != nil {
-		t.Fatalf("createKubectlAgent() error = %v", err)
-	}
-	var kubectlPod corev1.Pod
-	if err := client.Get(ctx, types.NamespacedName{Namespace: common.AgentPodNamespace, Name: kubectlPodName}, &kubectlPod); err != nil {
-		t.Fatalf("loading kubectl agent: %v", err)
-	}
-	if kubectlPod.Spec.ServiceAccountName != kubectlAdminSA || kubectlPod.Spec.AutomountServiceAccountToken == nil || !*kubectlPod.Spec.AutomountServiceAccountToken {
-		t.Fatalf("kubectl agent service account configuration = %#v", kubectlPod.Spec)
-	}
-	if len(kubectlPod.Spec.Containers) != 1 || kubectlPod.Spec.Containers[0].Image != "kubectl:v1" {
-		t.Fatalf("kubectl agent containers = %#v", kubectlPod.Spec.Containers)
-	}
-
-	unrelated := &corev1.Pod{}
-	unrelated.Name = "unrelated"
-	unrelated.Namespace = common.AgentPodNamespace
-	unrelated.Labels = map[string]string{"kite.io/kubectl-session": "session-b"}
-	if err := client.Create(ctx, unrelated); err != nil {
-		t.Fatalf("creating unrelated pod: %v", err)
-	}
-	if err := kubectlHandler.cleanupPod(clientSet, "session-a"); err != nil {
-		t.Fatalf("cleanupPod() error = %v", err)
-	}
-	if err := client.Get(ctx, types.NamespacedName{Namespace: common.AgentPodNamespace, Name: kubectlPodName}, &corev1.Pod{}); !apierrors.IsNotFound(err) {
-		t.Fatalf("session pod still exists or unexpected error: %v", err)
-	}
-	if err := client.Get(ctx, types.NamespacedName{Namespace: common.AgentPodNamespace, Name: unrelated.Name}, &corev1.Pod{}); err != nil {
-		t.Fatalf("cleanup removed unrelated pod: %v", err)
+	if pod.Spec.HostNetwork || pod.Spec.HostPID || pod.Spec.HostIPC {
+		t.Fatal("node terminal does not need host network, PID, or IPC namespaces")
 	}
 }

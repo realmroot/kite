@@ -3,10 +3,12 @@ package kube
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 
-	"github.com/zxh326/kite/pkg/common"
-	"github.com/zxh326/kite/pkg/wsutil"
+	"github.com/gorilla/websocket"
+	"github.com/realmroot/lightkite/pkg/common"
+	"github.com/realmroot/lightkite/pkg/wsutil"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/remotecommand"
@@ -45,6 +47,10 @@ func NewTerminalSession(client *K8sClient, conn *wsutil.Conn, namespace, podName
 }
 
 func (session *TerminalSession) Start(ctx context.Context, subResource string) error {
+	return session.StartCommand(ctx, subResource, []string{"sh", "-c", "bash || sh"})
+}
+
+func (session *TerminalSession) StartCommand(ctx context.Context, subResource string, command []string) error {
 	req := session.k8sClient.ClientSet.CoreV1().RESTClient().Post().
 		Resource(string(common.Pods)).
 		Name(session.podName).
@@ -54,7 +60,7 @@ func (session *TerminalSession) Start(ctx context.Context, subResource string) e
 	// Set up exec parameters
 	req.VersionedParams(&corev1.PodExecOptions{
 		Container: session.container,
-		Command:   []string{"sh", "-c", "bash || sh"},
+		Command:   command,
 		Stdin:     true,
 		Stdout:    true,
 		Stderr:    true,
@@ -96,6 +102,10 @@ func (session *TerminalSession) Read(p []byte) (int, error) {
 	var msg TerminalMessage
 	err := session.conn.ReadJSON(&msg)
 	if err != nil {
+		if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
+			return 0, io.EOF
+		}
+		_ = session.conn.Close()
 		return copy(p, EndOfTransmission), err
 	}
 

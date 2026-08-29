@@ -4,9 +4,8 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
-	"strings"
 
-	"github.com/zxh326/kite/pkg/utils"
+	"github.com/realmroot/lightkite/pkg/utils"
 )
 
 type SecretString string
@@ -53,30 +52,6 @@ func (s SecretString) Value() (driver.Value, error) {
 	return encrypted, nil
 }
 
-type LowerCaseString string
-
-func (s *LowerCaseString) Scan(value interface{}) error {
-	if value == nil {
-		*s = ""
-		return nil
-	}
-	var str string
-	switch v := value.(type) {
-	case string:
-		str = v
-	case []byte:
-		str = string(v)
-	default:
-		return fmt.Errorf("cannot scan %T into LowerCaseString", value)
-	}
-	*s = LowerCaseString(strings.ToLower(str))
-	return nil
-}
-
-func (s LowerCaseString) Value() (driver.Value, error) {
-	return strings.ToLower(string(s)), nil
-}
-
 type SliceString []string
 
 func (s *SliceString) Scan(value interface{}) error {
@@ -84,66 +59,34 @@ func (s *SliceString) Scan(value interface{}) error {
 		*s = nil
 		return nil
 	}
-	var strArray []string
+	var encoded []byte
 	switch v := value.(type) {
 	case string:
-		strArray = strings.Split(v, ",")
+		encoded = []byte(v)
 	case []byte:
-		strArray = strings.Split(string(v), ",")
+		encoded = v
 	default:
 		return fmt.Errorf("cannot scan %T into SliceString", value)
 	}
-	*s = SliceString(strArray)
+	if len(encoded) == 0 {
+		*s = SliceString{}
+		return nil
+	}
+	var values []string
+	if err := json.Unmarshal(encoded, &values); err != nil {
+		return fmt.Errorf("decode string list: %w", err)
+	}
+	*s = SliceString(values)
 	return nil
 }
 
 func (s SliceString) Value() (driver.Value, error) {
 	if s == nil {
-		return "", nil
+		return "[]", nil
 	}
-	return strings.Join(s, ","), nil
-}
-
-// JSONField stores arbitrary JSON data
-type JSONField []byte
-
-func (j *JSONField) Scan(value interface{}) error {
-	if value == nil {
-		*j = nil
-		return nil
-	}
-	switch v := value.(type) {
-	case string:
-		*j = []byte(v)
-	case []byte:
-		*j = v
-	default:
-		return fmt.Errorf("cannot scan %T into JSONField", value)
-	}
-	return nil
-}
-
-func (j JSONField) Value() (driver.Value, error) {
-	if j == nil {
-		return nil, nil
-	}
-	return string(j), nil
-}
-
-// Unmarshal deserializes the JSON data into the provided interface
-func (j JSONField) Unmarshal(v interface{}) error {
-	if j == nil {
-		return nil
-	}
-	return json.Unmarshal(j, v)
-}
-
-// Marshal serializes the provided interface into JSON
-func (j *JSONField) Marshal(v interface{}) error {
-	data, err := json.Marshal(v)
+	encoded, err := json.Marshal([]string(s))
 	if err != nil {
-		return err
+		return nil, fmt.Errorf("encode string list: %w", err)
 	}
-	*j = data
-	return nil
+	return string(encoded), nil
 }

@@ -31,22 +31,12 @@ type ResourceMetric struct {
 	Mem Resource `json:"memory,omitempty"`
 }
 
-type PasswordLoginRequest struct {
-	Username string `json:"username" binding:"required"`
-	Password string `json:"password" binding:"required"`
-	MFACode  string `json:"mfa_code"`
-}
-
-type ImportClustersRequest struct {
-	Config    string `json:"config"`
-	InCluster bool   `json:"inCluster"`
-}
-
 type ClusterInfo struct {
-	Name      string `json:"name"`
-	Version   string `json:"version"`
-	IsDefault bool   `json:"isDefault"`
-	Error     string `json:"error,omitempty"`
+	Name        string `json:"name"`
+	DisplayName string `json:"displayName,omitempty"`
+	Version     string `json:"version"`
+	IsDefault   bool   `json:"isDefault"`
+	Error       string `json:"error,omitempty"`
 }
 
 type MetricsCell struct {

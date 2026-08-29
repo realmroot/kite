@@ -1,41 +1,59 @@
-# OAuth 设置指南
+# OpenID Connect 配置
 
-本指南介绍如何为 Kite 配置 OAuth 认证，支持多种认证提供商。
+Lightkite 使用 OIDC Authorization Code + PKCE，同时支持公开客户端和机密客户端。
+每个部署配置一个 issuer，Dashboard 内不提供 Provider CRUD。
 
-## 在供应商处创建 OAuth 应用
+## 注册 Client
 
-1. 登录到您的 OAuth 供应商账户（如 GitHub、Google 等）。
-2. 创建一个新的 OAuth 应用，填写必要的信息。
-3. 在重定向 URI 中填写 `https://${HOST}/api/auth/callback`，将 `${HOST}` 替换为您的 Kite 部署地址。
-   1. 例如，如果您的 Kite 部署在 `kite.example.com`，则重定向 URI 应为 `https://kite.example.com/api/auth/callback`。
-   2. kite 默认使用请求的后端 Host 和协议来生成重定向 Host。
-   3. 如果 kite 部署在代理后面，默认会读取 `X-Forwarded-Host` 和 `X-Forwarded-Proto` 头部。
-   4. 如果上述信息不可用，你可以配置 `HOST` 环境变量显示指定。
-4. 记录下生成的 Client ID 和 Client Secret。
+优先在任意符合标准的 OIDC 提供方创建强制 PKCE 的公开 Client，并注册精确回调地址：
 
-## 配置
+```text
+https://lightkite.example.com/api/auth/callback
+```
 
-在具有 **admin** 角色用户界面中，页面右上角上角将显示设置入口。
+设置 `HOST=https://lightkite.example.com`，避免回调与安全 Cookie 行为依赖转发头。
 
-遵循页面中的指示填写基本信息即使用 OAuth 登录。
-![OAuth](../../screenshots/oauth.png)
+## 配置 Lightkite
 
-## 常见问题
+```text
+OIDC_ISSUER=https://identity.example.com
+OIDC_CLIENT_ID=lightkite
+# 公开 PKCE Client 不设置 OIDC_CLIENT_SECRET。
+OIDC_PROVIDER_NAME=Corporate Identity
+OIDC_SCOPES=openid profile email groups offline_access
+OIDC_USERNAME_CLAIM=email
+OIDC_GROUPS_CLAIM=groups
+OIDC_NAME_CLAIM=name
+OIDC_PICTURE_CLAIM=picture
+PLATFORM_ADMIN_GROUPS=lightkite-platform-admins
+HOST=https://lightkite.example.com
+KITE_ENCRYPT_KEY=<独立随机密钥>
+```
 
-### 用户登录后显示没有权限使用
+Issuer 必须提供标准 Discovery Metadata，`OIDC_SCOPES` 必须包含 `openid` 和
+`offline_access`；Helm 定时任务需要用户的 Refresh Grant。`HOST` 是必填的
+HTTPS Origin，不会从转发请求头推断。Claim 名称都是普通的 ID Token 顶层
+Claim；Lightkite 不包含身份提供方定制逻辑。
 
-默认情况下，即使登录成功，Kite 也不会授予用户任何权限。您需要手动配置 RBAC 规则来授予访问权限。
+仅在注册为机密客户端时设置 `OIDC_CLIENT_SECRET`。两种模式都会校验 PKCE、
+state 与 nonce。
 
-查看 [RBAC 配置指南](./rbac-config) 获取详情。
+`PLATFORM_ADMIN_GROUPS` 只控制 Lightkite 自有共享数据。登录不要求属于这些 group，
+这些 group 也不会授予 Kubernetes 权限。
 
-### 如何将 OAuth 用户映射到 RBAC 角色？
+## 对齐 Kubernetes
 
-您可以在设置中配置 OAuth 用户与 RBAC 角色之间的映射关系。具体步骤请参考 [RBAC 配置指南](./rbac-config)。
+让每个 API Server 信任相同 issuer 与 audience，并使 username/groups claim
+配置和身份提供方一致。再通过 Kubernetes RoleBinding 或 ClusterRoleBinding
+绑定精确用户或 group。
 
-### 登录失败
+Lightkite 转发原始 ID token。如果托管 Kubernetes 不接受此外部 issuer 或 audience，
+Lightkite 无法在应用层绕过该限制。
 
-一般来说这类都属于配置问题，您可以检查以下几点：
+## 排障
 
-1. 确保 OAuth 应用的 Client ID 和 Client Secret 配置正确。
-2. 检查重定向 URI 是否与 OAuth 应用中配置的匹配。
-3. 查看 Kite 日志以获取更多错误信息。
+- Discovery 失败：检查 issuer 的 `/.well-known/openid-configuration`。
+- Callback 被拒绝：检查精确 HTTPS callback 与 `HOST`。
+- 登录成功但 Kubernetes 返回 401：对齐 issuer、audience、签名密钥和 API
+  Server OIDC 参数。
+- Kubernetes 返回 403：身份已认证成功，但缺少所需原生 RBAC binding。

@@ -1,6 +1,6 @@
 # 监控
 
-Kite 通过与 Prometheus 集成和内置的可视化工具，为您的 Kubernetes 集群提供全面的监控功能。
+Lightkite 通过与 Prometheus 集成和内置的可视化工具，为您的 Kubernetes 集群提供全面的监控功能。
 
 ![Monitoring](/screenshots/monitor.png)
 

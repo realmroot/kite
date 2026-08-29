@@ -7,7 +7,6 @@ import {
   Minus,
   Palette,
   Plus,
-  UserCog,
   ZoomIn,
 } from 'lucide-react'
 
@@ -27,7 +26,6 @@ import { Input } from '@/components/ui/input'
 import { useAppearance } from '@/components/appearance-provider'
 import { ColorTheme, colorThemes } from '@/components/color-theme-provider'
 
-import { AccountSettingsDialog } from './account-settings-dialog'
 import { SidebarCustomizer } from './sidebar-customizer'
 
 const DISPLAY_SCALE_MIN = 80
@@ -45,9 +43,7 @@ export function UserMenu() {
     setFont,
   } = useAppearance()
   const [open, setOpen] = useState(false)
-  const [accountSettingsOpen, setAccountSettingsOpen] = useState(false)
   const [scaleInput, setScaleInput] = useState(String(displayScale))
-  const isPasswordUser = !user?.provider || user.provider === 'password'
 
   if (!user) return null
 
@@ -120,35 +116,13 @@ export function UserMenu() {
             <div className="flex flex-col space-y-1 leading-none">
               {user.name && <p className="font-medium">{user.name}</p>}
               <p className="text-xs text-muted-foreground">{user.username}</p>
-              {user.provider && (
-                <p className="text-xs text-muted-foreground capitalize">
-                  via {user.provider}
-                </p>
-              )}
-              {user.roles && user.roles.length > 0 && (
-                <p className="text-xs text-muted-foreground">
-                  Role: {user.roles.map((role) => role.name).join(', ')}
-                </p>
-              )}
+              <p className="max-w-48 truncate text-xs text-muted-foreground">
+                {user.issuer}
+              </p>
             </div>
           </div>
 
           <DropdownMenuSeparator />
-
-          {isPasswordUser && (
-            <>
-              <DropdownMenuItem
-                onSelect={() => {
-                  setAccountSettingsOpen(true)
-                }}
-                className="cursor-pointer"
-              >
-                <UserCog className="h-4 w-4" />
-                <span>Account Settings</span>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-            </>
-          )}
 
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>
@@ -287,27 +261,16 @@ export function UserMenu() {
             <SidebarCustomizer onOpenChange={(d) => setOpen(d)} />
           )}
 
-          {user.provider !== 'Anonymous' && (
-            <>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={handleLogout}
-                className="cursor-pointer text-red-600 focus:text-red-600"
-              >
-                <LogOut className="h-4 w-4" />
-                <span>Log out</span>
-              </DropdownMenuItem>
-            </>
-          )}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onClick={handleLogout}
+            className="cursor-pointer text-red-600 focus:text-red-600"
+          >
+            <LogOut className="h-4 w-4" />
+            <span>Log out</span>
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-
-      {isPasswordUser && (
-        <AccountSettingsDialog
-          open={accountSettingsOpen}
-          onOpenChange={setAccountSettingsOpen}
-        />
-      )}
     </>
   )
 }

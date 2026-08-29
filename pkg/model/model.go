@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/glebarez/sqlite"
-	"github.com/zxh326/kite/pkg/common"
+	"github.com/realmroot/lightkite/pkg/common"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -81,6 +81,21 @@ func InitDB() {
 	if DB == nil {
 		panic("database connection is nil, check your DB_TYPE and DB_DSN settings")
 	}
+	sqldb, err := DB.DB()
+	if err != nil {
+		panic("failed to configure database pool: " + err.Error())
+	}
+	if common.DBType == "sqlite" {
+		// Lightkite's SQLite database stores low-volume product metadata. A single
+		// connection keeps transaction locking and connection-local PRAGMAs
+		// deterministic; multi-replica deployments use PostgreSQL or MySQL.
+		sqldb.SetMaxOpenConns(1)
+		sqldb.SetMaxIdleConns(1)
+	} else {
+		sqldb.SetMaxOpenConns(common.DBMaxOpenConns)
+		sqldb.SetMaxIdleConns(common.DBMaxIdleConns)
+	}
+	sqldb.SetConnMaxLifetime(common.DBMaxIdleTime)
 
 	// For SQLite we must enable foreign key enforcement explicitly.
 	// SQLite has foreign key constraints defined in the schema but they are
@@ -90,31 +105,22 @@ func InitDB() {
 			panic("failed to enable sqlite foreign keys: " + err.Error())
 		}
 	}
+	if err := runSchemaMigrations(DB); err != nil {
+		panic("failed to run database migrations: " + err.Error())
+	}
 	models := []interface{}{
 		User{},
-		PasskeyCredential{},
 		Cluster{},
 		GeneralSetting{},
-		LDAPSetting{},
-		OAuthProvider{},
-		Role{},
-		RoleAssignment{},
 		ResourceHistory{},
 		ResourceTemplate{},
-		PendingSession{},
+		OIDCSession{},
 		HelmRepository{},
-		ScheduledTask{},
 	}
 	for _, model := range models {
 		err = DB.AutoMigrate(model)
 		if err != nil {
 			panic("failed to migrate database: " + err.Error())
 		}
-	}
-	sqldb, err := DB.DB()
-	if err == nil {
-		sqldb.SetMaxOpenConns(common.DBMaxOpenConns)
-		sqldb.SetMaxIdleConns(common.DBMaxIdleConns)
-		sqldb.SetConnMaxLifetime(common.DBMaxIdleTime)
 	}
 }

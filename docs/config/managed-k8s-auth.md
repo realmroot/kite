@@ -1,113 +1,33 @@
----
-title: Managed Kubernetes Cluster Configuration
----
+# Managed Kubernetes authentication
 
-# Managed Kubernetes Cluster Configuration
+Lightkite does not import the provider CLI kubeconfig used by `kubectl`. A managed
+cluster is compatible only when its API server can authenticate the same
+external OIDC issuer and audience used by Lightkite.
 
-## Problem Description
+## Compatibility checklist
 
-Managed Kubernetes clusters like AKS (Azure Kubernetes Service), EKS (Amazon Elastic Kubernetes Service), etc., typically use `exec` plugins in their default kubeconfig to dynamically obtain authentication credentials. For example:
+Confirm that the managed service lets you:
 
-- **AKS** uses the `kubelogin` command
-- **EKS** uses the `aws` CLI
-- **GKE** uses the `gcloud` command
+1. trust an external OIDC issuer and its signing keys;
+2. accept Lightkite's OIDC client ID as the token audience;
+3. configure or predict the username and groups claims;
+4. create native RoleBindings/ClusterRoleBindings for those identities; and
+5. expose an HTTPS API endpoint reachable directly from Lightkite or through the
+   operator-managed private network path.
 
-This authentication method works well in local client environments, but fails in server-side environments like Kite because:
+Add the cluster using only its API URL, CA bundle, and optional TLS server name.
+Private connectivity is deployment infrastructure outside Lightkite.
 
-1. These CLI tools may not be installed on the server
-2. Even if installed, the server environment may not have the corresponding authentication configuration
-3. Managing different user credentials in multi-tenant scenarios is difficult
+Provider IAM authenticators based on short-lived `exec` plugins are not the
+same protocol as direct OIDC authentication. Lightkite will not execute cloud CLIs,
+store their tokens, create a privileged ServiceAccount, or impersonate users to
+bridge that difference.
 
-### Using Service Account Token
+If the service cannot trust the external issuer, the cluster is not compatible
+with direct user-token propagation as-is. A future provider-specific bridge
+would need an independently reviewed workload-identity and token-exchange
+design; do not solve this by giving Lightkite `cluster-admin`.
 
-Create a dedicated Service Account for Kite and use its token for authentication.
-
-Kite provides a helper script for creation:
-
-```sh
-wget https://raw.githubusercontent.com/kite-org/kite/refs/heads/main/scripts/generate-kite-kubeconfig.sh -O generate-kite-kubeconfig.sh
-chmod +x generate-kite-kubeconfig.sh
-./generate-kite-kubeconfig.sh
-```
-
-#### Steps:
-
-1. Create Service Account and necessary RBAC permissions:
-
-```yaml
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: kite-admin
-  namespace: kube-system
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: kite-admin
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: cluster-admin
-subjects:
-  - kind: ServiceAccount
-    name: kite-admin
-    namespace: kube-system
-```
-
-2. Create Long-lived Token Secret (Kubernetes 1.24+):
-
-```yaml
-apiVersion: v1
-kind: Secret
-metadata:
-  name: kite-admin-token
-  namespace: kube-system
-  annotations:
-    kubernetes.io/service-account.name: kite-admin
-type: kubernetes.io/service-account-token
-```
-
-3. Get token and cluster information:
-
-```bash
-# Get token
-TOKEN=$(kubectl get secret kite-admin-token -n kube-system -o jsonpath='{.data.token}' | base64 -d)
-
-# Get CA certificate
-CA_CERT=$(kubectl get secret kite-admin-token -n kube-system -o jsonpath='{.data.ca\.crt}')
-
-# Get API Server address
-API_SERVER=$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')
-```
-
-4. Generate kubeconfig:
-
-```bash
-cat > kite-kubeconfig.yaml <<EOF
-apiVersion: v1
-kind: Config
-clusters:
-- cluster:
-    certificate-authority-data: ${CA_CERT}
-    server: ${API_SERVER}
-  name: kite-cluster
-contexts:
-- context:
-    cluster: kite-cluster
-    user: kite-admin
-  name: kite-context
-current-context: kite-context
-users:
-- name: kite-admin
-  user:
-    token: ${TOKEN}
-EOF
-```
-
-## Related Documentation
-
-- [Kubernetes Service Account Tokens](https://kubernetes.io/docs/reference/access-authn-authz/service-accounts-admin/)
-- [AKS Authentication](https://learn.microsoft.com/en-us/azure/aks/control-kubeconfig-access)
-- [EKS Authentication](https://docs.aws.amazon.com/eks/latest/userguide/cluster-auth.html)
-- [GKE Authentication](https://cloud.google.com/kubernetes-engine/docs/how-to/api-server-authentication)
+An HTTP 401 from Kubernetes normally means issuer/audience/signature/claim
+authentication is misaligned. An HTTP 403 means authentication succeeded and
+the exact user or group needs an appropriate Kubernetes RBAC binding.

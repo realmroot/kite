@@ -7,10 +7,9 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/zxh326/kite/pkg/cluster"
-	"github.com/zxh326/kite/pkg/common"
-	"github.com/zxh326/kite/pkg/kube"
-	"github.com/zxh326/kite/pkg/model"
+	"github.com/realmroot/lightkite/pkg/cluster"
+	"github.com/realmroot/lightkite/pkg/kube"
+	"github.com/realmroot/lightkite/pkg/model"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -113,10 +112,7 @@ func TestGetOverviewAggregatesClusterResources(t *testing.T) {
 		Name:      "prod",
 		K8sClient: &kube.K8sClient{Client: client},
 	}
-	user := model.User{Username: "alice", Roles: []common.Role{{
-		Name:     "prod-viewer",
-		Clusters: []string{"prod"},
-	}}}
+	user := model.User{Username: "alice"}
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
 	ctx.Request = httptest.NewRequest(http.MethodGet, "/overview", nil)
@@ -158,20 +154,5 @@ func TestGetOverviewAggregatesClusterResources(t *testing.T) {
 	}
 	if result.Resource.Mem.Limited != limitMemory.MilliValue() {
 		t.Fatalf("memory limited = %d", result.Resource.Mem.Limited)
-	}
-}
-
-func TestGetOverviewRejectsUnauthorizedCluster(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	recorder := httptest.NewRecorder()
-	ctx, _ := gin.CreateTestContext(recorder)
-	ctx.Request = httptest.NewRequest(http.MethodGet, "/overview", nil)
-	ctx.Set("cluster", &cluster.ClientSet{Name: "prod"})
-	ctx.Set("user", model.User{Username: "alice"})
-
-	GetOverview(ctx)
-
-	if recorder.Code != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusForbidden)
 	}
 }

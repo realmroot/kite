@@ -5,18 +5,19 @@ import (
 	"net/url"
 
 	"github.com/gin-gonic/gin"
-	"github.com/zxh326/kite/pkg/cluster"
+	"github.com/realmroot/lightkite/pkg/cluster"
 )
 
 const (
-	ClusterNameHeader = "x-cluster-name"
-	ClusterNameKey    = "cluster-name"
-	K8sClientKey      = "k8s-client"
-	PromClientKey     = "prom-client"
+	ClusterNameHeader        = "x-cluster-name"
+	ClusterNameKey           = "cluster-name"
+	K8sClientKey             = "k8s-client"
+	PromClientKey            = "prom-client"
+	KubernetesBearerTokenKey = "kubernetes-bearer-token"
 )
 
 type clusterClientSetProvider interface {
-	GetClientSet(string) (*cluster.ClientSet, error)
+	GetClientSet(string, string) (*cluster.ClientSet, error)
 }
 
 // ClusterMiddleware selects a cluster from the path, header, or query and injects its clients into context.
@@ -35,7 +36,16 @@ func ClusterMiddleware(cm clusterClientSetProvider) gin.HandlerFunc {
 				}
 			}
 		}
-		cluster, err := cm.GetClientSet(clusterName)
+		credential := c.GetString(KubernetesBearerTokenKey)
+		if credential == "" {
+			credential = c.GetString("oidc-id-token")
+		}
+		if credential == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "OIDC ID token is missing"})
+			c.Abort()
+			return
+		}
+		cluster, err := cm.GetClientSet(clusterName, credential)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 			c.Abort()

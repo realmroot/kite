@@ -1,6 +1,6 @@
 # Web 终端
 
-Kite 提供了集成的 Web 终端，让您可以直接通过浏览器在 Pod 和节点中执行命令，无需使用本地命令行工具。
+Lightkite 提供了集成的 Web 终端，让您可以直接通过浏览器在 Pod 和节点中执行命令，无需使用本地命令行工具。
 
 ![Web Terminal](/screenshots/terminal.png)
 

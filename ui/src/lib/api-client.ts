@@ -77,7 +77,9 @@ class ApiClient {
 
       return response
     } catch (error) {
-      console.error('API request failed:', error)
+      if (!(error instanceof DOMException && error.name === 'AbortError')) {
+        console.error('API request failed:', error)
+      }
       throw error
     }
   }
@@ -91,7 +93,9 @@ class ApiClient {
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}))
       throw new Error(
-        errorData.error || `HTTP error! status: ${response.status}`
+        errorData.error ||
+          errorData.message ||
+          `HTTP error! status: ${response.status}`
       )
     }
 
@@ -143,6 +147,18 @@ class ApiClient {
 
   async delete<T>(url: string, options?: ApiRequestOptions): Promise<T> {
     return this.makeRequest<T>(url, { ...options, method: 'DELETE' })
+  }
+
+  async deleteWithBody<T>(
+    url: string,
+    data: unknown,
+    options?: ApiRequestOptions
+  ): Promise<T> {
+    return this.makeRequest<T>(url, {
+      ...options,
+      method: 'DELETE',
+      body: JSON.stringify(data),
+    })
   }
 
   async patch<T>(

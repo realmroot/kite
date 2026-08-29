@@ -222,7 +222,7 @@ function PodPortsCard({
             >
               <a
                 href={withSubPath(
-                  `${API_BASE_URL}${withCurrentClusterPath(`/namespaces/${namespace}/pods/${name}:${port.containerPort}/proxy/`)}`
+                  `${API_BASE_URL}${withCurrentClusterPath(`/kubernetes/api/v1/namespaces/${namespace}/pods/${name}:${port.containerPort}/proxy/`)}`
                 )}
                 target="_blank"
                 rel="noopener noreferrer"

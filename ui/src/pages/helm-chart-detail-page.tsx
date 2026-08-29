@@ -54,7 +54,7 @@ function MarkdownCard({
       </CardHeader>
       <CardContent className="px-3 pb-3 pt-0">
         {content ? (
-          <div className="ai-markdown max-w-none overflow-x-auto text-pretty text-sm text-foreground/80 [font-family:var(--font-sans)]">
+          <div className="markdown-content max-w-none overflow-x-auto text-pretty text-sm text-foreground/80 [font-family:var(--font-sans)]">
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               components={{

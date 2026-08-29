@@ -1,10 +1,12 @@
-FROM gcr.io/distroless/static
+FROM gcr.io/distroless/static-debian12:nonroot
 ARG TARGETARCH
 
 WORKDIR /app
 
-COPY bin/kite-$TARGETARCH ./kite
+COPY bin/lightkite-$TARGETARCH ./lightkite
+
+USER nonroot:nonroot
 
 EXPOSE 8080
 
-CMD ["./kite"]
+CMD ["./lightkite"]

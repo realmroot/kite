@@ -1,7 +1,6 @@
 import { useMemo, type ReactNode } from 'react'
 import { IconExternalLink } from '@tabler/icons-react'
 import {
-  Endpoints,
   Event as KubernetesEvent,
   Pod,
   Service,
@@ -38,8 +37,6 @@ export function ServiceOverview({
   name,
   pods,
   isPodsLoading,
-  endpoints,
-  isEndpointsLoading,
   endpointSlices,
   isEndpointSlicesLoading,
   events,
@@ -50,8 +47,6 @@ export function ServiceOverview({
   name: string
   pods?: Pod[]
   isPodsLoading: boolean
-  endpoints?: Endpoints[]
-  isEndpointsLoading: boolean
   endpointSlices?: EndpointSlice[]
   isEndpointSlicesLoading: boolean
   events?: KubernetesEvent[]
@@ -87,24 +82,13 @@ export function ServiceOverview({
             emptyText={t('common.messages.noPods')}
             ageLabel={t('common.fields.age')}
           />
-          <div className="grid gap-3 xl:grid-cols-2">
-            <ServiceEndpointResourceCard
-              title="Endpoints"
-              resourceType="endpoints"
-              resources={endpoints}
-              isLoading={isEndpointsLoading}
-              loadingText="Loading endpoints..."
-              emptyText="No endpoints found"
-            />
-            <ServiceEndpointResourceCard
-              title="EndpointSlices"
-              resourceType="endpointslices"
-              resources={endpointSlices}
-              isLoading={isEndpointSlicesLoading}
-              loadingText="Loading endpoint slices..."
-              emptyText="No endpoint slices found"
-            />
-          </div>
+          <ServiceEndpointResourceCard
+            title="EndpointSlices"
+            resources={endpointSlices}
+            isLoading={isEndpointSlicesLoading}
+            loadingText="Loading endpoint slices..."
+            emptyText="No endpoint slices found"
+          />
           <ServiceInformationCard service={service} namespace={namespace} />
         </div>
 
@@ -132,18 +116,16 @@ export function ServiceOverview({
   )
 }
 
-type ServiceEndpointResource = Endpoints | EndpointSlice
+type ServiceEndpointResource = EndpointSlice
 
 function ServiceEndpointResourceCard({
   title,
-  resourceType,
   resources,
   isLoading,
   loadingText,
   emptyText,
 }: {
   title: ReactNode
-  resourceType: 'endpoints' | 'endpointslices'
   resources?: ServiceEndpointResource[]
   isLoading: boolean
   loadingText: ReactNode
@@ -158,7 +140,7 @@ function ServiceEndpointResourceCard({
           const metadata = value as ServiceEndpointResource['metadata']
           return (
             <Link
-              to={`/${resourceType}/${metadata!.namespace}/${metadata!.name}`}
+              to={`/endpointslices/${metadata!.namespace}/${metadata!.name}`}
               className="font-medium app-link"
             >
               {metadata!.name}
@@ -177,7 +159,7 @@ function ServiceEndpointResourceCard({
         ),
       },
     ],
-    [resourceType]
+    []
   )
   const data = resources || []
 
@@ -331,7 +313,7 @@ function ServicePorts({
         >
           <a
             href={withSubPath(
-              `${API_BASE_URL}${withCurrentClusterPath(`/namespaces/${namespace}/services/${name}:${port.port}/proxy/`)}`
+              `${API_BASE_URL}${withCurrentClusterPath(`/kubernetes/api/v1/namespaces/${namespace}/services/${name}:${port.port}/proxy/`)}`
             )}
             target="_blank"
             rel="noopener noreferrer"

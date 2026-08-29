@@ -1,0 +1,232 @@
+{{- if and (empty .Values.platformAdminGroups) (empty .Values.platformAdminSubjects) }}
+{{- fail "platformAdminGroups or platformAdminSubjects is required" }}
+{{- end }}
+{{- if not (has .Values.db.type (list "sqlite" "postgres" "mysql")) }}
+{{- fail "db.type must be one of sqlite, postgres, or mysql" }}
+{{- end }}
+{{- if and (eq .Values.db.type "sqlite") (ne (int .Values.replicaCount) 1) }}
+{{- fail "SQLite requires replicaCount=1; use PostgreSQL or MySQL for multiple replicas" }}
+{{- end }}
+{{- if and (eq .Values.db.type "sqlite") .Values.db.sqlite.persistence.pvc.enabled (ne .Values.deploymentStrategy.type "Recreate") }}
+{{- fail "SQLite with a PVC requires deploymentStrategy.type=Recreate" }}
+{{- end }}
+{{- if and .Values.db.sqlite.persistence.pvc.enabled .Values.db.sqlite.persistence.hostPath.enabled }}
+{{- fail "SQLite PVC and hostPath persistence cannot both be enabled" }}
+{{- end }}
+{{- if ne (empty .Values.analytics.scriptURL) (empty .Values.analytics.websiteID) }}
+{{- fail "analytics.scriptURL and analytics.websiteID must be configured together" }}
+{{- end }}
+{{- if and .Values.analytics.enabled (empty .Values.analytics.scriptURL) }}
+{{- fail "analytics.scriptURL and analytics.websiteID are required when analytics is enabled" }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "lightkite.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "lightkite.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "lightkite.selectorLabels" . | nindent 6 }}
+  {{- with .Values.deploymentStrategy }}
+  strategy:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "lightkite.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "lightkite.serviceAccountName" . }}
+      automountServiceAccountToken: {{ or .Values.serviceAccount.automount .Values.clusterInventory.enabled }}
+      terminationGracePeriodSeconds: 30
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          image: "{{ required "image.repository is required" .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/app/lightkite"]
+          {{- if .Values.debug }}
+          args: ["-v", "1"]
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          envFrom:
+            - secretRef:
+                name: {{ include "lightkite.secret" . }}
+          env:
+            - name: HOST
+              value: {{ required "host is required" .Values.host | quote }}
+            - name: OIDC_ISSUER
+              value: {{ required "oidc.issuer is required" .Values.oidc.issuer | quote }}
+            - name: OIDC_PROVIDER_NAME
+              value: {{ .Values.oidc.providerName | quote }}
+            - name: OIDC_SCOPES
+              value: {{ .Values.oidc.scopes | quote }}
+            - name: OIDC_USERNAME_CLAIM
+              value: {{ .Values.oidc.usernameClaim | quote }}
+            - name: OIDC_GROUPS_CLAIM
+              value: {{ .Values.oidc.groupsClaim | quote }}
+            - name: OIDC_NAME_CLAIM
+              value: {{ .Values.oidc.nameClaim | quote }}
+            - name: OIDC_PICTURE_CLAIM
+              value: {{ .Values.oidc.pictureClaim | quote }}
+            - name: PLATFORM_ADMIN_GROUPS
+              value: {{ .Values.platformAdminGroups | quote }}
+            - name: PLATFORM_ADMIN_SUBJECTS
+              value: {{ .Values.platformAdminSubjects | quote }}
+            {{- if .Values.clusterInventory.enabled }}
+            - name: CLUSTER_INVENTORY_ENABLED
+              value: "true"
+            - name: CLUSTER_INVENTORY_NAMESPACE
+              value: {{ .Values.clusterInventory.namespace | quote }}
+            - name: CLUSTER_INVENTORY_LABEL_SELECTOR
+              value: {{ .Values.clusterInventory.labelSelector | quote }}
+            {{- end }}
+            - name: DB_TYPE
+              value: {{ .Values.db.type | quote }}
+            - name: KUBECTL_TERMINAL_IMAGE
+              value: {{ required "terminalImages.kubectl is required" .Values.terminalImages.kubectl | quote }}
+            - name: NODE_TERMINAL_IMAGE
+              value: {{ required "terminalImages.node is required" .Values.terminalImages.node | quote }}
+            - name: KITE_IMAGE_REGISTRY_HOSTS
+              value: {{ .Values.imageRegistryHosts | quote }}
+            {{- if .Values.releaseAPIURL }}
+            - name: RELEASE_API_URL
+              value: {{ .Values.releaseAPIURL | quote }}
+            {{- end }}
+            {{- if .Values.analytics.enabled }}
+            - name: ENABLE_ANALYTICS
+              value: "true"
+            {{- end }}
+            {{- if .Values.analytics.scriptURL }}
+            - name: ANALYTICS_SCRIPT_URL
+              value: {{ .Values.analytics.scriptURL | quote }}
+            - name: ANALYTICS_WEBSITE_ID
+              value: {{ .Values.analytics.websiteID | quote }}
+            {{- end }}
+            {{- if eq .Values.db.type "sqlite" }}
+            - name: DB_DSN
+              value: {{ (printf "%s/%s?%s" .Values.db.sqlite.persistence.mountPath .Values.db.sqlite.persistence.filename .Values.db.sqlite.options) | quote }}
+            {{- end }}
+            {{- if .Values.oidc.ca.existingSecret }}
+            - name: OIDC_CA_FILE
+              value: {{ printf "%s/%s" .Values.oidc.ca.mountPath .Values.oidc.ca.key | quote }}
+            {{- end }}
+            {{- if .Values.basePath }}
+            - name: KITE_BASE
+              value: {{ .Values.basePath }}
+            {{- end }}
+            {{- if .Values.config.enabled }}
+            - name: KITE_CONFIG_FILE
+              value: /etc/lightkite/config.yaml
+            {{- end }}
+          {{- with .Values.extraEnvs }}
+          {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.startupProbe }}
+          startupProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+          {{- with .Values.volumeMounts }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if .Values.config.enabled }}
+            - name: lightkite-config
+              mountPath: /etc/lightkite
+              readOnly: true
+          {{- end }}
+          {{- if .Values.oidc.ca.existingSecret }}
+            - name: oidc-ca
+              mountPath: {{ .Values.oidc.ca.mountPath }}
+              readOnly: true
+          {{- end }}
+            - name: tmp
+              mountPath: /tmp
+          {{- if and (eq .Values.db.type "sqlite")}}
+            - name: {{ include "lightkite.fullname" . }}-storage
+              mountPath: {{ .Values.db.sqlite.persistence.mountPath }}
+          {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      {{- if .Values.oidc.ca.existingSecret }}
+        - name: oidc-ca
+          secret:
+            secretName: {{ .Values.oidc.ca.existingSecret }}
+            items:
+              - key: {{ .Values.oidc.ca.key }}
+                path: {{ .Values.oidc.ca.key }}
+      {{- end }}
+      {{- if .Values.config.enabled }}
+        - name: lightkite-config
+          secret:
+            secretName: {{ .Values.config.existingSecret | default (printf "%s-config" (include "lightkite.fullname" .)) }}
+            items:
+              - key: config.yaml
+                path: config.yaml
+      {{- end }}
+      {{- if eq .Values.db.type "sqlite"}}
+        - name: {{ include "lightkite.fullname" . }}-storage
+      {{- if .Values.db.sqlite.persistence.pvc.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.db.sqlite.persistence.pvc.existingClaim | default (printf "%s-storage" (include "lightkite.fullname" .)) }}
+      {{- else if .Values.db.sqlite.persistence.hostPath.enabled }}
+          hostPath:
+            path: {{ .Values.db.sqlite.persistence.hostPath.path }}
+            type: {{ .Values.db.sqlite.persistence.hostPath.type }}
+      {{- else }}
+          emptyDir: {}
+      {{- end }}
+      {{- end }}
+      {{- with .Values.volumes }}
+      {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

@@ -1,176 +1,95 @@
-# Chart Values
+# Helm Chart Values
 
-本文档描述了 Kite Helm Chart 的所有可用配置选项。
+Chart 部署的 Lightkite 不挂载 ServiceAccount token，也不会为 Dashboard 的资源访问
+创建 Kubernetes RBAC 授权。请配置 OIDC，并在每个目标集群分别绑定用户/group。
 
-## 基础配置
+## 必填身份配置
 
-| 参数               | 描述                                               | 默认值                  |
-| ------------------ | -------------------------------------------------- | ----------------------- |
-| `replicaCount`     | 副本数量                                           | `1`                     |
-| `image.repository` | 容器镜像仓库                                       | `ghcr.io/kite-org/kite` |
-| `image.pullPolicy` | 镜像拉取策略                                       | `IfNotPresent`          |
-| `image.tag`        | 镜像标签。如果设置，将覆盖 chart 的 `appVersion`。 | `""`                    |
-| `imagePullSecrets` | 私有镜像仓库的拉取密钥                             | `[]`                    |
-| `nameOverride`     | 覆盖 chart 名称                                    | `""`                    |
-| `fullnameOverride` | 覆盖完整名称                                       | `""`                    |
-| `debug`            | 启用调试模式                                       | `false`                 |
-| `basePath`         | 应用的基础路径，详见安装文档中的说明。             | `""`                    |
+| Value | 说明 |
+| --- | --- |
+| `image.repository` | 从源码渲染 Chart 时必须显式设置的镜像仓库 |
+| `oidc.issuer` | 标准 OpenID Connect issuer URL |
+| `oidc.clientId` | 公开 PKCE 或机密 Client ID |
+| `oidc.clientSecret` | 可选的机密 Client Secret；公开 PKCE Client 留空 |
+| `platformAdminGroups` | 可管理 Lightkite 自有共享数据的 group；group 含空格、逗号或其他标点时使用 JSON 字符串数组 |
+| `platformAdminSubjects` | 具有相同平台权限的精确 OIDC `sub`；同样支持 JSON 字符串数组 |
+| `encryptKey` | 加密服务端提供方 token 的随机密钥 |
 
-## 认证与安全
+可选映射包括 `oidc.providerName`、`oidc.scopes`、
+`oidc.usernameClaim`、`oidc.groupsClaim`、`oidc.nameClaim` 和
+`oidc.pictureClaim`，均为标准协议配置。
 
-| 参数                   | 描述                                                       | 默认值                                               |
-| ---------------------- | ---------------------------------------------------------- | ---------------------------------------------------- |
-| `anonymousUserEnabled` | 启用匿名用户访问，拥有完全管理员权限。生产环境请谨慎使用。 | `false`                                              |
-| `jwtSecret`            | 用于签名 JWT 令牌的密钥。为空时首次启动自动生成。         | `""`                                                 |
-| `encryptKey`           | 用于加密敏感数据的密钥。生产环境请修改此值。               | `"kite-default-encryption-key-change-in-production"` |
-| `host`                 | 应用程序的主机名                                           | `""`                                                 |
+私有 Issuer CA 可以放入 Kubernetes Secret，并通过
+`oidc.ca.existingSecret` 引用。`oidc.ca.key` 默认为 `ca.crt`；Chart 会以
+只读方式挂载，并自动设置 `OIDC_CA_FILE`。
 
-## 数据库配置
+生产环境建议使用 `secret.create=false` 和 `secret.existingSecret`。已有
+Secret 必须包含 `OIDC_CLIENT_ID`、`KITE_ENCRYPT_KEY`，以及需要的
+数据库配置。只有机密客户端才需要 `OIDC_CLIENT_SECRET`。
 
-| 参数      | 描述                                                             | 默认值   |
-| --------- | ---------------------------------------------------------------- | -------- |
-| `db.type` | 数据库类型：`sqlite`、`postgres`、`mysql`                        | `sqlite` |
-| `db.dsn`  | MySQL/Postgres 的完整 DSN 字符串。当类型为 mysql/postgres 时必需 | `""`     |
+## 运行与暴露
 
-### SQLite 配置
+| Value | 默认值 | 说明 |
+| --- | --- | --- |
+| `replicaCount` | `1` | 副本数 |
+| `image.repository` | 源码 Chart 中为空 | 镜像仓库；发布打包时写入发布者仓库 |
+| `image.tag` | Chart appVersion | 镜像 Tag |
+| `deploymentStrategy.type` | `Recreate` | SQLite 单副本的安全默认值；外部数据库可用 `RollingUpdate` |
+| `host` | 必填 | OIDC Callback 使用的公网 HTTPS Origin；不允许包含路径 |
+| `basePath` | 空 | 可选 URL 前缀 |
+| `service.type` | `ClusterIP` | Service 类型 |
+| `service.port` | `8080` | HTTP 端口 |
+| `ingress.enabled` | `false` | 创建 Ingress |
+| `gateway.enabled` | `false` | 创建 Gateway API 资源 |
+| `debug` | `false` | 详细日志 |
+| `terminalImages.kubectl` | `alpine/kubectl:1.36.3` | 版本化 Shell + kubectl 终端镜像 |
+| `terminalImages.node` | `busybox:1.37.0` | 版本化 Node 终端镜像 |
+| `imageRegistryHosts` | 空 | 镜像 Tag 查询可访问的额外 Registry `host[:port]`，以逗号分隔 |
+| `releaseAPIURL` | 空 | 可选 GitHub 兼容更新 API；为空时不发起外部检查 |
+| `analytics.enabled` | `false` | 加载部署方配置的统计脚本 |
+| `analytics.scriptURL` | 空 | Umami 兼容的 HTTPS 脚本地址；必须与 `analytics.websiteID` 同时配置 |
+| `analytics.websiteID` | 空 | 部署方自己的统计站点 ID |
 
-| 参数                                      | 描述                                  | 默认值              |
-| ----------------------------------------- | ------------------------------------- | ------------------- |
-| `db.sqlite.persistence.pvc.enabled`       | 是否创建 PVC 来存储 sqlite 数据库文件 | `false`             |
-| `db.sqlite.persistence.pvc.existingClaim` | 使用现有的 PVC                        | `""`                |
-| `db.sqlite.persistence.pvc.storageClass`  | PVC 的 StorageClass（可选）           | `""`                |
-| `db.sqlite.persistence.pvc.accessModes`   | PVC 的访问模式                        | `["ReadWriteOnce"]` |
-| `db.sqlite.persistence.pvc.size`          | PVC 请求的存储大小                    | `1Gi`               |
-| `db.sqlite.persistence.hostPath.enabled`  | 是否使用 hostPath 存储                | `false`             |
-| `db.sqlite.persistence.hostPath.path`     | hostPath 路径                         | `/path/to/host/dir` |
-| `db.sqlite.persistence.hostPath.type`     | hostPath 类型                         | `DirectoryOrCreate` |
-| `db.sqlite.persistence.mountPath`         | 容器内的挂载路径                      | `/data`             |
-| `db.sqlite.persistence.filename`          | 挂载路径内的 sqlite 文件名            | `kite.db`           |
+Ingress/Gateway 终止 TLS 时必须保留公网 Host 与协议；生产环境应显式设置
+`host`。
 
-## 环境变量
+## 数据库
 
-| 参数        | 描述               | 默认值 |
-| ----------- | ------------------ | ------ |
-| `extraEnvs` | 额外的环境变量列表 | `[]`   |
+| Value | 默认值 | 说明 |
+| --- | --- | --- |
+| `db.type` | `sqlite` | `sqlite`、`postgres` 或 `mysql` |
+| `db.dsn` | 空 | 外部数据库 DSN |
+| `db.sqlite.persistence.pvc.enabled` | `true` | 使用 PVC 持久化 SQLite |
+| `db.sqlite.persistence.pvc.existingClaim` | 空 | 复用 PVC |
+| `db.sqlite.persistence.pvc.storageClass` | 空 | StorageClass |
+| `db.sqlite.persistence.pvc.size` | `1Gi` | 容量 |
+| `db.sqlite.persistence.mountPath` | `/data` | 挂载路径 |
+| `db.sqlite.persistence.filename` | `lightkite.db` | 文件名 |
 
-## 服务账户配置
+生产多副本需要 PostgreSQL 或 MySQL。Chart 会拒绝 SQLite 多副本、SQLite
+PVC 滚动升级、PVC 与 hostPath 同时启用、不支持的数据库类型，以及缺少 DSN
+的外部数据库配置。
+SQLite 使用单个应用连接，并启用外键、Busy Timeout 与 WAL，从而避免 OIDC
+会话事务之间的锁竞争。
 
-| 参数                         | 描述                        | 默认值 |
-| ---------------------------- | --------------------------- | ------ |
-| `serviceAccount.create`      | 是否创建服务账户            | `true` |
-| `serviceAccount.automount`   | 自动挂载服务账户的 API 凭据 | `true` |
-| `serviceAccount.annotations` | 服务账户的注解              | `{}`   |
-| `serviceAccount.name`        | 使用的服务账户名称          | `""`   |
+## 无凭据集群目录
 
-## RBAC 配置
+`config.enabled` 挂载声明式集群目录。可以通过 `config.existingSecret`
+引用含 `config.yaml` 的 Secret，或内联 `config.clusters`。只接受
+[配置文件](./config-file.md)记录的字段；kubeconfig 与身份策略会被拒绝。
 
-| 参数          | 描述               | 默认值     |
-| ------------- | ------------------ | ---------- |
-| `rbac.create` | 是否创建 RBAC 资源 | `true`     |
-| `rbac.rules`  | RBAC 规则列表      | 见下方示例 |
+## Pod 身份与安全
 
-### RBAC 规则示例
+| Value | 默认值 | 说明 |
+| --- | --- | --- |
+| `serviceAccount.create` | `true` | 为 Lightkite Pod 创建身份 |
+| `serviceAccount.automount` | `false` | 挂载 Kubernetes API token；应保持关闭 |
+| `podSecurityContext` | 非 root UID/GID 65532、RuntimeDefault seccomp | Pod Security Context |
+| `securityContext` | 禁止提权、只读根文件系统、删除全部 capabilities | Container Security Context |
+| `resources` | `{}` | Requests/Limits |
+| `nodeSelector`、`affinity`、`tolerations` | 空 | 调度配置 |
+| `extraEnvs` | 空 | 额外环境变量 |
+| `volumes`、`volumeMounts` | 空 | 额外挂载 |
 
-```yaml
-rbac:
-  rules:
-    - apiGroups: ["*"]
-      resources: ["*"]
-      verbs: ["*"]
-    - nonResourceURLs: ["*"]
-      verbs: ["*"]
-```
-
-## Pod 配置
-
-| 参数                 | 描述                   | 默认值 |
-| -------------------- | ---------------------- | ------ |
-| `podAnnotations`     | Pod 的 Kubernetes 注解 | `{}`   |
-| `podLabels`          | Pod 的 Kubernetes 标签 | `{}`   |
-| `podSecurityContext` | Pod 安全上下文         | `{}`   |
-| `securityContext`    | 容器安全上下文         | `{}`   |
-
-## 服务配置
-
-| 参数           | 描述     | 默认值      |
-| -------------- | -------- | ----------- |
-| `service.type` | 服务类型 | `ClusterIP` |
-| `service.port` | 服务端口 | `8080`      |
-
-## Ingress 配置
-
-| 参数                  | 描述             | 默认值     |
-| --------------------- | ---------------- | ---------- |
-| `ingress.enabled`     | 是否启用 Ingress | `false`    |
-| `ingress.className`   | Ingress 类名     | `"nginx"`  |
-| `ingress.annotations` | Ingress 注解     | `{}`       |
-| `ingress.hosts`       | Ingress 主机配置 | 见下方示例 |
-| `ingress.tls`         | TLS 配置         | `[]`       |
-
-### Ingress 主机配置示例
-
-```yaml
-ingress:
-  hosts:
-    - host: kite.zzde.me
-      paths:
-        - path: /
-          pathType: ImplementationSpecific
-```
-
-## 资源限制
-
-| 参数        | 描述               | 默认值 |
-| ----------- | ------------------ | ------ |
-| `resources` | 容器资源限制和请求 | `{}`   |
-
-### 资源限制示例
-
-```yaml
-resources:
-  limits:
-    cpu: 100m
-    memory: 128Mi
-  requests:
-    cpu: 100m
-    memory: 128Mi
-```
-
-## 健康检查
-
-| 参数             | 描述         | 默认值     |
-| ---------------- | ------------ | ---------- |
-| `livenessProbe`  | 存活探针配置 | 见下方示例 |
-| `readinessProbe` | 就绪探针配置 | 见下方示例 |
-
-### 健康检查示例
-
-```yaml
-livenessProbe:
-  httpGet:
-    path: /healthz
-    port: http
-  initialDelaySeconds: 10
-  periodSeconds: 10
-readinessProbe:
-  httpGet:
-    path: /healthz
-    port: http
-  initialDelaySeconds: 10
-  periodSeconds: 10
-```
-
-## 存储配置
-
-| 参数           | 描述             | 默认值 |
-| -------------- | ---------------- | ------ |
-| `volumes`      | 额外的卷配置     | `[]`   |
-| `volumeMounts` | 额外的卷挂载配置 | `[]`   |
-
-## 调度配置
-
-| 参数           | 描述       | 默认值 |
-| -------------- | ---------- | ------ |
-| `nodeSelector` | 节点选择器 | `{}`   |
-| `tolerations`  | 容忍度配置 | `[]`   |
-| `affinity`     | 亲和性配置 | `{}`   |
+包括 Gateway API 与 Probe 结构在内的完整权威默认值位于
+`charts/lightkite/values.yaml`。

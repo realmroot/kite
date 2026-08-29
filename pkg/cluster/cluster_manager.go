@@ -1,143 +1,114 @@
 package cluster
 
 import (
+	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
-	"maps"
 	"net/http"
 	"net/url"
 	"strings"
 	"sync"
-	"time"
 
-	"github.com/zxh326/kite/pkg/clusteragent"
-	"github.com/zxh326/kite/pkg/kube"
-	"github.com/zxh326/kite/pkg/model"
-	"github.com/zxh326/kite/pkg/prometheus"
-	"gorm.io/gorm"
+	"github.com/realmroot/lightkite/pkg/common"
+	"github.com/realmroot/lightkite/pkg/kube"
+	"github.com/realmroot/lightkite/pkg/model"
+	"github.com/realmroot/lightkite/pkg/prometheus"
+	utilvalidation "k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
-	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
-	"k8s.io/klog/v2"
+	kubetransport "k8s.io/client-go/transport"
 )
 
 type ClientSet struct {
+	ClusterID  uint
 	Name       string
 	Version    string // Kubernetes version
 	K8sClient  *kube.K8sClient
 	PromClient *prometheus.Client
 
 	DiscoveredPrometheusURL string
-	config                  string
 	prometheusURL           string
-	clusterAgentGeneration  uint64
 }
 
 type ClusterManager struct {
-	mu                  sync.RWMutex
-	syncMu              sync.Mutex
-	clusters            map[string]*ClientSet
-	errors              map[string]string
-	defaultContext      string
-	clusterAgentManager *clusteragent.Manager
+	inventoryCatalog *inventoryCatalog
+	runtimeMu        sync.Mutex
+	runtimes         map[uint]*clusterRuntime
+	transportFor     func(*rest.Config) (http.RoundTripper, error)
 }
 
-const clusterStartupSyncTimeout = 10 * time.Second
-
-func createClientSetInCluster(name, prometheusURL string) (*ClientSet, error) {
-	config, err := rest.InClusterConfig()
-	if err != nil {
-		return nil, err
-	}
-
-	return newClientSet(name, config, prometheusURL)
+type clusterRuntime struct {
+	signature string
+	config    *rest.Config
+	transport http.RoundTripper
 }
 
-func createClientSetFromConfig(name, content, prometheusURL string) (*ClientSet, error) {
-	restConfig, err := clientcmd.RESTConfigFromKubeConfig([]byte(content))
-	if err != nil {
-		klog.Warningf("Failed to create REST config for cluster %s: %v", name, err)
-		return nil, err
+func validateKubernetesAPIServerURL(value string) error {
+	apiURL, err := url.Parse(strings.TrimSpace(value))
+	if err != nil || apiURL.Scheme != "https" || apiURL.Host == "" {
+		return errors.New("API server URL must be an absolute HTTPS URL")
 	}
-	cs, err := newClientSet(name, restConfig, prometheusURL)
-	if err != nil {
-		return nil, err
+	if apiURL.User != nil || apiURL.RawQuery != "" || apiURL.ForceQuery || apiURL.Fragment != "" {
+		return errors.New("API server URL must not contain credentials, query, or fragment")
 	}
-	cs.config = content
-
-	return cs, nil
+	return nil
 }
 
-func newClientSet(name string, k8sConfig *rest.Config, prometheusURL string) (*ClientSet, error) {
-	cs := &ClientSet{
-		Name:          name,
-		prometheusURL: prometheusURL,
+func ValidateDirectClusterMetadata(apiServerURL, caBundle, tlsServerName, prometheusURL string) error {
+	if err := validateKubernetesAPIServerURL(apiServerURL); err != nil {
+		return err
 	}
-	var err error
-	cs.K8sClient, err = kube.NewClient(k8sConfig)
+	if _, err := kube.NormalizeCABundle(caBundle); err != nil {
+		return err
+	}
+	if err := kube.ValidateTLSServerName(tlsServerName); err != nil {
+		return err
+	}
+	if strings.TrimSpace(prometheusURL) != "" {
+		if _, err := parseClusterLocalPrometheusURL(strings.TrimSpace(prometheusURL)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func parseClusterLocalPrometheusURL(urlStr string) (*url.URL, error) {
+	parsedURL, err := url.Parse(urlStr)
 	if err != nil {
-		klog.Warningf("Failed to create k8s client for cluster %s: %v", name, err)
-		return nil, err
+		return nil, fmt.Errorf("parse prometheus URL: %w", err)
 	}
-	if prometheusURL == "" {
-		prometheusURL = discoveryPrometheusURL(cs.K8sClient)
-		if prometheusURL != "" {
-			cs.DiscoveredPrometheusURL = prometheusURL
-			klog.Infof("Discovered Prometheus URL for cluster %s: %s", name, cs.DiscoveredPrometheusURL)
-		}
+	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+		return nil, errors.New("prometheus URL scheme must be http or https")
 	}
-	if prometheusURL != "" {
-		var rt = http.DefaultTransport
-		var err error
-		if isClusterLocalURL(prometheusURL) {
-			rt, err = createK8sProxyTransport(k8sConfig, prometheusURL)
-			if err != nil {
-				klog.Warningf("Failed to create k8s proxy transport for cluster %s: %v, using direct connection", name, err)
-			} else {
-				klog.Infof("Using k8s API proxy for Prometheus in cluster %s", name)
-			}
-		} else if k8sConfig.Dial != nil {
-			transport := http.DefaultTransport.(*http.Transport).Clone()
-			transport.Proxy = nil
-			transport.DialContext = k8sConfig.Dial
-			rt = transport
-			klog.Infof("Using cluster agent TCP proxy for Prometheus in cluster %s", name)
-		}
-		cs.PromClient, err = prometheus.NewClientWithRoundTripper(prometheusURL, rt)
-		if err != nil {
-			klog.Warningf("Failed to create Prometheus client for cluster %s, some features may not work as expected, err: %v", name, err)
-		}
+	if parsedURL.User != nil || parsedURL.Path != "" || parsedURL.RawQuery != "" || parsedURL.Fragment != "" {
+		return nil, errors.New("prometheus URL must be a service base URL without credentials, path, query, or fragment")
 	}
-	v, err := cs.K8sClient.ClientSet.Discovery().ServerVersion()
-	if err != nil {
-		klog.Warningf("Failed to get server version for cluster %s: %v", name, err)
-	} else {
-		cs.Version = v.String()
+	parts := strings.Split(parsedURL.Hostname(), ".")
+	validSuffix := len(parts) == 3 && parts[2] == "svc"
+	validFQDN := len(parts) == 5 && parts[2] == "svc" && parts[3] == "cluster" && parts[4] == "local"
+	if (!validSuffix && !validFQDN) || len(utilvalidation.IsDNS1123Label(parts[0])) > 0 || len(utilvalidation.IsDNS1123Label(parts[1])) > 0 {
+		return nil, errors.New("prometheus URL must target <service>.<namespace>.svc or <service>.<namespace>.svc.cluster.local")
 	}
-	klog.Infof("Loaded K8s client for cluster: %s, version: %s", name, cs.Version)
-	return cs, nil
+	return parsedURL, nil
 }
 
 func isClusterLocalURL(urlStr string) bool {
-	return strings.Contains(urlStr, ".svc.cluster.local") || strings.Contains(urlStr, ".svc:")
+	_, err := parseClusterLocalPrometheusURL(urlStr)
+	return err == nil
 }
 
-func createK8sProxyTransport(k8sConfig *rest.Config, prometheusURL string) (*k8sProxyTransport, error) {
-	parsedURL, err := url.Parse(prometheusURL)
+func createK8sProxyTransport(k8sConfig *rest.Config, transport http.RoundTripper, prometheusURL string) (*k8sProxyTransport, error) {
+	parsedURL, err := parseClusterLocalPrometheusURL(prometheusURL)
 	if err != nil {
 		return nil, err
 	}
 
-	parts := strings.Split(parsedURL.Host, ".")
-	if len(parts) < 2 {
-		return nil, fmt.Errorf("invalid cluster local URL format")
-	}
+	parts := strings.Split(parsedURL.Hostname(), ".")
 	svcName := parts[0]
 	namespace := parts[1]
 
-	transport, err := rest.TransportFor(k8sConfig)
-	if err != nil {
-		return nil, err
+	if transport == nil {
+		return nil, errors.New("kubernetes transport is required")
 	}
 
 	transportWrapper := &k8sProxyTransport{
@@ -182,337 +153,195 @@ func (t *k8sProxyTransport) RoundTrip(req *http.Request) (*http.Response, error)
 	return t.transport.RoundTrip(req)
 }
 
-func (cm *ClusterManager) GetClientSet(clusterName string) (*ClientSet, error) {
-	cm.mu.RLock()
-	defer cm.mu.RUnlock()
-
-	if len(cm.clusters) == 0 {
-		return nil, fmt.Errorf("no clusters available")
+func (cm *ClusterManager) GetClientSet(clusterName, idToken string) (*ClientSet, error) {
+	if idToken == "" {
+		return nil, errors.New("OIDC ID token is required")
 	}
 	if clusterName == "" {
-		clusterName = cm.defaultContext
-		if clusterName == "" {
-			// If no default context is set, return the first available cluster
-			for _, cs := range cm.clusters {
-				return cs, nil
-			}
-		}
-	}
-	if cluster, ok := cm.clusters[clusterName]; ok {
-		return cluster, nil
-	}
-	return nil, fmt.Errorf("cluster not found: %s", clusterName)
-}
-
-func ImportClustersFromKubeconfig(kubeconfig *clientcmdapi.Config, setDefault bool) int64 {
-	if len(kubeconfig.Contexts) == 0 {
-		return 0
-	}
-
-	importedCount := 0
-	for contextName, context := range kubeconfig.Contexts {
-		config := clientcmdapi.NewConfig()
-		config.Contexts = map[string]*clientcmdapi.Context{
-			contextName: context,
-		}
-		config.CurrentContext = contextName
-		config.Clusters = map[string]*clientcmdapi.Cluster{
-			context.Cluster: kubeconfig.Clusters[context.Cluster],
-		}
-		config.AuthInfos = map[string]*clientcmdapi.AuthInfo{
-			context.AuthInfo: kubeconfig.AuthInfos[context.AuthInfo],
-		}
-		configStr, err := clientcmd.Write(*config)
+		clusters, err := model.ListClusters()
 		if err != nil {
-			continue
+			return nil, err
 		}
-		cluster := model.Cluster{
-			Name:      contextName,
-			Config:    model.SecretString(configStr),
-			IsDefault: setDefault && contextName == kubeconfig.CurrentContext,
-		}
-		existingCluster, err := model.GetClusterByName(contextName)
-		if err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				if err := model.AddCluster(&cluster); err != nil {
-					continue
+		for _, candidate := range clusters {
+			if candidate.Enable && (clusterName == "" || candidate.IsDefault) {
+				clusterName = candidate.Name
+				if candidate.IsDefault {
+					break
 				}
-				importedCount++
-				klog.Infof("Imported cluster success: %s", contextName)
 			}
-			continue
 		}
-		if existingCluster.ClusterAgent {
-			continue
-		}
-		if err := model.UpdateCluster(existingCluster, map[string]interface{}{
-			"config": model.SecretString(configStr),
-		}); err != nil {
-			continue
-		}
-		importedCount++
-		klog.Infof("Updated cluster config success: %s", contextName)
-	}
-	return int64(importedCount)
-}
-
-var (
-	syncNow = make(chan struct{}, 1)
-)
-
-func TriggerClusterSync() {
-	select {
-	case syncNow <- struct{}{}:
-	default:
-	}
-}
-
-func syncClusters(cm *ClusterManager, readyCh chan<- struct{}) error {
-	if readyCh != nil {
-		defer func() {
-			select {
-			case readyCh <- struct{}{}:
-			default:
-			}
-		}()
-	}
-
-	clusters, err := model.ListClusters()
-	if err != nil {
-		klog.Warningf("list cluster err: %v", err)
-		time.Sleep(5 * time.Second)
-		return err
-	}
-	dbClusterMap := make(map[string]interface{})
-	type buildResult struct {
-		cluster   *model.Cluster
-		clientSet *ClientSet
-		err       error
-	}
-	buildQueue := make([]*model.Cluster, 0)
-	for _, cluster := range clusters {
-		dbClusterMap[cluster.Name] = cluster
-		if cluster.IsDefault {
-			cm.mu.Lock()
-			cm.defaultContext = cluster.Name
-			cm.mu.Unlock()
-		}
-		cm.mu.RLock()
-		current, currentExist := cm.clusters[cluster.Name]
-		cm.mu.RUnlock()
-		if cluster.ClusterAgent && !cluster.Enable {
-			cm.clusterAgentManager.Disconnect(cluster.ID)
-		}
-		if cluster.ClusterAgent && !cm.clusterAgentManager.Connected(cluster.ID) {
-			if currentExist {
-				cm.mu.Lock()
-				delete(cm.clusters, cluster.Name)
-				cm.mu.Unlock()
-				current.K8sClient.Stop(cluster.Name)
-			}
-			cm.mu.Lock()
-			if cluster.Enable {
-				cm.errors[cluster.Name] = "waiting for cluster agent connection"
-			} else {
-				delete(cm.errors, cluster.Name)
-			}
-			cm.mu.Unlock()
-			continue
-		}
-		clusterAgentConfigChanged := cluster.ClusterAgent && currentExist && current.clusterAgentGeneration != cm.clusterAgentManager.Generation(cluster.ID)
-		if clusterAgentConfigChanged {
-			klog.Infof("Cluster Agent transport configuration changed for cluster %s, updating", cluster.Name)
-		}
-		if clusterAgentConfigChanged || shouldUpdateCluster(current, cluster) {
-			if currentExist {
-				cm.mu.Lock()
-				delete(cm.clusters, cluster.Name)
-				cm.mu.Unlock()
-				current.K8sClient.Stop(cluster.Name)
-			}
-			if cluster.Enable {
-				buildQueue = append(buildQueue, cluster)
-			} else {
-				cm.mu.Lock()
-				delete(cm.errors, cluster.Name)
-				cm.mu.Unlock()
+		if clusterName == "" && cm.inventoryCatalog != nil {
+			contexts := cm.inventoryCatalog.list()
+			if len(contexts) > 0 {
+				clusterName = contexts[0].name
 			}
 		}
 	}
-	results := make(chan buildResult, len(buildQueue))
-	var wg sync.WaitGroup
-	for _, cluster := range buildQueue {
-		wg.Add(1)
-		go func(cluster *model.Cluster) {
-			defer wg.Done()
-			clientSet, err := cm.buildClientSet(cluster)
-			results <- buildResult{
-				cluster:   cluster,
-				clientSet: clientSet,
-				err:       err,
-			}
-		}(cluster)
+	if clusterName == "" {
+		return nil, errors.New("no clusters available")
 	}
-	go func() {
-		wg.Wait()
-		close(results)
-	}()
-	for result := range results {
-		if result.err != nil {
-			klog.Errorf("Failed to build k8s client for cluster %s, in cluster: %t, err: %v", result.cluster.Name, result.cluster.InCluster, result.err)
-			cm.mu.Lock()
-			cm.errors[result.cluster.Name] = result.err.Error()
-			cm.mu.Unlock()
-			continue
-		}
-		cm.mu.Lock()
-		delete(cm.errors, result.cluster.Name)
-		cm.clusters[result.cluster.Name] = result.clientSet
-		cm.mu.Unlock()
+	if cm.inventoryCatalog != nil && strings.HasPrefix(clusterName, inventoryContextPrefix) {
+		return cm.inventoryCatalog.clientSet(clusterName, idToken)
 	}
-	cm.mu.Lock()
-	for name, clientSet := range cm.clusters {
-		if _, ok := dbClusterMap[name]; !ok {
-			delete(cm.clusters, name)
-			clientSet.K8sClient.Stop(name)
-		}
+	cluster, err := model.GetClusterByName(clusterName)
+	if err != nil || !cluster.Enable {
+		return nil, fmt.Errorf("cluster not found: %s", clusterName)
 	}
-	for name := range cm.errors {
-		if _, ok := dbClusterMap[name]; !ok {
-			delete(cm.errors, name)
-		}
-	}
-	cm.mu.Unlock()
-
-	return nil
-}
-
-// shouldUpdateCluster decides whether the cached ClientSet needs to be updated
-// based on the desired state from the database.
-func shouldUpdateCluster(cs *ClientSet, cluster *model.Cluster) bool {
-	// enable/disable toggle
-	if (cs == nil && cluster.Enable) || (cs != nil && !cluster.Enable) {
-		klog.Infof("Cluster %s status changed, updating, enabled -> %v", cluster.Name, cluster.Enable)
-		return true
-	}
-	if cs == nil && !cluster.Enable {
-		return false
-	}
-
-	if cs == nil || cs.K8sClient == nil || cs.K8sClient.ClientSet == nil {
-		return true
-	}
-
-	// kubeconfig change
-	if cs.config != string(cluster.Config) {
-		klog.Infof("Kubeconfig changed for cluster %s, updating", cluster.Name)
-		return true
-	}
-
-	// prometheus URL change
-	if cs.prometheusURL != cluster.PrometheusURL {
-		klog.Infof("Prometheus URL changed for cluster %s, updating", cluster.Name)
-		return true
-	}
-
-	// k8s version change
-	// TODO: Replace direct ClientSet.Discovery() call with a small DiscoveryInterface.
-	// current code depends on *kubernetes.Clientset, which is hard to mock in tests.
-	version, err := cs.K8sClient.ClientSet.Discovery().ServerVersion()
-	if err != nil {
-		klog.Warningf("Failed to get server version for cluster %s: %v", cluster.Name, err)
-	} else if version.String() != cs.Version {
-		klog.Infof("Server version changed for cluster %s, updating, old: %s, new: %s", cluster.Name, cs.Version, version.String())
-		return true
-	}
-
-	return false
-}
-
-func buildClientSet(cluster *model.Cluster) (*ClientSet, error) {
-	if cluster.InCluster {
-		return createClientSetInCluster(cluster.Name, cluster.PrometheusURL)
-	}
-	return createClientSetFromConfig(cluster.Name, string(cluster.Config), cluster.PrometheusURL)
-}
-
-func (cm *ClusterManager) buildClientSet(cluster *model.Cluster) (*ClientSet, error) {
-	if !cluster.ClusterAgent {
-		return buildClientSet(cluster)
-	}
-	config, generation, err := cm.clusterAgentManager.RESTConfig(cluster.ID)
+	runtime, err := cm.runtimeForCluster(cluster)
 	if err != nil {
 		return nil, err
 	}
-	clientSet, err := newClientSet(cluster.Name, config, cluster.PrometheusURL)
+	httpClient := &http.Client{
+		Transport: kubetransport.NewBearerAuthRoundTripper(idToken, runtime.transport),
+	}
+	clientSet, err := newUserClientSet(cluster.Name, runtime.config, httpClient, cluster.PrometheusURL, idToken)
 	if err != nil {
 		return nil, err
 	}
-	clientSet.clusterAgentGeneration = generation
+	clientSet.ClusterID = cluster.ID
 	return clientSet, nil
 }
 
-func (cm *ClusterManager) syncClusters() error {
-	cm.syncMu.Lock()
-	defer cm.syncMu.Unlock()
+func (cm *ClusterManager) runtimeForCluster(cluster *model.Cluster) (*clusterRuntime, error) {
+	config, err := cm.baseRESTConfig(cluster)
+	if err != nil {
+		return nil, err
+	}
+	kube.PrepareConfig(config)
+	signature := clusterRuntimeSignature(cluster, config)
 
-	return syncClusters(cm, nil)
+	cm.runtimeMu.Lock()
+	defer cm.runtimeMu.Unlock()
+	if cm.runtimes == nil {
+		cm.runtimes = make(map[uint]*clusterRuntime)
+	}
+	if existing := cm.runtimes[cluster.ID]; existing != nil && existing.signature == signature {
+		return existing, nil
+	}
+	transportFor := cm.transportFor
+	if transportFor == nil {
+		transportFor = rest.TransportFor
+	}
+	transport, err := transportFor(config)
+	if err != nil {
+		return nil, fmt.Errorf("create shared Kubernetes transport: %w", err)
+	}
+	runtime := &clusterRuntime{
+		signature: signature,
+		config:    rest.CopyConfig(config),
+		transport: transport,
+	}
+	if existing := cm.runtimes[cluster.ID]; existing != nil {
+		closeIdleConnections(existing.transport)
+	}
+	cm.runtimes[cluster.ID] = runtime
+	return runtime, nil
 }
 
-func (cm *ClusterManager) syncClustersUntilReady(readyCh chan<- struct{}) error {
-	cm.syncMu.Lock()
-	defer cm.syncMu.Unlock()
-
-	return syncClusters(cm, readyCh)
+func (cm *ClusterManager) baseRESTConfig(cluster *model.Cluster) (*rest.Config, error) {
+	if err := validateKubernetesAPIServerURL(cluster.APIServerURL); err != nil {
+		return nil, fmt.Errorf("invalid cluster API server URL: %w", err)
+	}
+	caData, err := kube.NormalizeCABundle(cluster.CABundle)
+	if err != nil {
+		return nil, fmt.Errorf("invalid cluster CA bundle: %w", err)
+	}
+	if err := kube.ValidateTLSServerName(cluster.TLSServerName); err != nil {
+		return nil, err
+	}
+	config := &rest.Config{
+		Host: cluster.APIServerURL,
+		TLSClientConfig: rest.TLSClientConfig{
+			CAData:     caData,
+			ServerName: cluster.TLSServerName,
+		},
+	}
+	config = rest.CopyConfig(config)
+	config.BearerToken = ""
+	config.BearerTokenFile = ""
+	config.Username = ""
+	config.Password = ""
+	config.CertData = nil
+	config.KeyData = nil
+	config.CertFile = ""
+	config.KeyFile = ""
+	return config, nil
 }
 
-func (cm *ClusterManager) snapshotState() (map[string]*ClientSet, map[string]string, string) {
-	cm.mu.RLock()
-	defer cm.mu.RUnlock()
+func clusterRuntimeSignature(cluster *model.Cluster, config *rest.Config) string {
+	payload := fmt.Sprintf("%d\x00%s\x00%s\x00%t\x00%x",
+		cluster.ID,
+		config.Host,
+		config.ServerName,
+		config.Insecure,
+		config.CAData,
+	)
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(payload)))
+}
 
-	clusters := make(map[string]*ClientSet, len(cm.clusters))
-	maps.Copy(clusters, cm.clusters)
+func closeIdleConnections(transport http.RoundTripper) {
+	if closer, ok := transport.(interface{ CloseIdleConnections() }); ok {
+		closer.CloseIdleConnections()
+	}
+}
 
-	errors := make(map[string]string, len(cm.errors))
-	maps.Copy(errors, cm.errors)
+func (cm *ClusterManager) invalidateRuntime(clusterID uint) {
+	cm.runtimeMu.Lock()
+	defer cm.runtimeMu.Unlock()
+	runtime := cm.runtimes[clusterID]
+	if runtime == nil {
+		return
+	}
+	delete(cm.runtimes, clusterID)
+	closeIdleConnections(runtime.transport)
+}
 
-	return clusters, errors, cm.defaultContext
+func (cm *ClusterManager) InvalidateCatalogRuntimes() {
+	cm.runtimeMu.Lock()
+	for clusterID, runtime := range cm.runtimes {
+		delete(cm.runtimes, clusterID)
+		closeIdleConnections(runtime.transport)
+	}
+	cm.runtimeMu.Unlock()
+}
+
+func newUserClientSet(name string, config *rest.Config, httpClient *http.Client, prometheusURL, idToken string) (*ClientSet, error) {
+	k8sClient, err := kube.NewDirectClient(config, httpClient)
+	if err != nil {
+		return nil, err
+	}
+	// Helm constructs additional clients from this request-scoped config. Keep
+	// the user's token here without ever placing it in the shared cluster runtime.
+	k8sClient.Configuration.BearerToken = idToken
+	clientSet := &ClientSet{Name: name, K8sClient: k8sClient, prometheusURL: prometheusURL}
+	if prometheusURL != "" && isClusterLocalURL(prometheusURL) {
+		proxyTransport, err := createK8sProxyTransport(config, httpClient.Transport, prometheusURL)
+		if err != nil {
+			return nil, fmt.Errorf("create Kubernetes-authorized Prometheus transport: %w", err)
+		}
+		clientSet.PromClient, err = prometheus.NewClientWithRoundTripper(prometheusURL, proxyTransport)
+		if err != nil {
+			return nil, fmt.Errorf("create Prometheus client: %w", err)
+		}
+	}
+	return clientSet, nil
 }
 
 func NewClusterManager() (*ClusterManager, error) {
-	cm := new(ClusterManager)
-	cm.clusters = make(map[string]*ClientSet)
-	cm.errors = make(map[string]string)
-	cm.clusterAgentManager = clusteragent.NewManager(TriggerClusterSync)
+	return NewClusterManagerWithContext(context.Background())
+}
 
-	initialReady := make(chan struct{}, 1)
-	go func() {
-		if err := cm.syncClustersUntilReady(initialReady); err != nil {
-			klog.Warningf("Failed to sync clusters: %v", err)
+func NewClusterManagerWithContext(ctx context.Context) (*ClusterManager, error) {
+	cm := &ClusterManager{
+		runtimes:     make(map[uint]*clusterRuntime),
+		transportFor: rest.TransportFor,
+	}
+	if common.ClusterInventoryEnabled {
+		catalog, err := newInventoryCatalog(ctx)
+		if err != nil {
+			return nil, err
 		}
-	}()
-
-	go func() {
-		ticker := time.NewTicker(1 * time.Minute)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-			case <-syncNow:
-			}
-			if err := cm.syncClusters(); err != nil {
-				klog.Warningf("Failed to sync clusters: %v", err)
-			}
-		}
-	}()
-
-	timer := time.NewTimer(clusterStartupSyncTimeout)
-	defer timer.Stop()
-
-	select {
-	case <-initialReady:
-	case <-timer.C:
-		klog.Warningf("Timed out waiting for cluster readiness after %s, continuing startup", clusterStartupSyncTimeout)
+		cm.inventoryCatalog = catalog
 	}
 	return cm, nil
 }

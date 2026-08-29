@@ -5,36 +5,25 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/zxh326/kite/pkg/common"
-	"github.com/zxh326/kite/pkg/model"
-	"github.com/zxh326/kite/pkg/rbac"
+	"github.com/realmroot/lightkite/pkg/common"
+	"github.com/realmroot/lightkite/pkg/model"
 	"k8s.io/klog/v2"
 )
 
-type bootstrapSetupState struct {
-	Initialized bool `json:"initialized"`
-	Step        int  `json:"step"`
-}
-
 type bootstrapAuthOptions struct {
-	Providers           []string `json:"providers"`
-	CredentialProviders []string `json:"credentialProviders"`
-	OAuthProviders      []string `json:"oauthProviders"`
-	LoginPrompt         string   `json:"loginPrompt"`
-	MFAEnabled          bool     `json:"mfaEnabled"`
-	PasskeyLoginEnabled bool     `json:"passkeyLoginEnabled"`
+	ProviderName string `json:"providerName"`
+	LoginPrompt  string `json:"loginPrompt"`
 }
 
 type bootstrapCapabilities struct {
-	AIEnabled      bool `json:"aiEnabled"`
 	KubectlEnabled bool `json:"kubectlEnabled"`
 }
 
 type bootstrapResponse struct {
-	Setup                      bootstrapSetupState   `json:"setup"`
 	Auth                       bootstrapAuthOptions  `json:"auth"`
 	Capabilities               bootstrapCapabilities `json:"capabilities"`
 	User                       *model.User           `json:"user"`
+	PlatformAdmin              bool                  `json:"platformAdmin"`
 	HasGlobalSidebarPreference bool                  `json:"hasGlobalSidebarPreference"`
 	GlobalSidebarPreference    string                `json:"globalSidebarPreference"`
 }
@@ -46,12 +35,13 @@ func (h *AuthHandler) Bootstrap(c *gin.Context) {
 		return
 	}
 
-	setup := currentBootstrapSetup()
-	var user *model.User
-	if setup.Step == 0 && !setup.Initialized {
-		c.SetCookie("auth_token", "", -1, "/", "", false, true)
-	} else {
-		user = h.bootstrapUser(c, setting)
+	user, authErr := h.bootstrapUser(c, setting)
+	if authErr != nil {
+		klog.V(2).Infof("OIDC bootstrap authentication failed: %v", authErr)
+		if transientSessionError(authErr) {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "OIDC session refresh is temporarily unavailable"})
+			return
+		}
 	}
 
 	globalSidebarPreference := strings.TrimSpace(setting.GlobalSidebarPreference)
@@ -60,120 +50,43 @@ func (h *AuthHandler) Bootstrap(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, bootstrapResponse{
-		Setup: setup,
-		Auth:  h.bootstrapAuth(setting),
+		Auth: h.bootstrapAuth(setting),
 		Capabilities: bootstrapCapabilities{
-			AIEnabled:      setting.AIAgentEnabled && strings.TrimSpace(string(setting.AIAPIKey)) != "",
 			KubectlEnabled: setting.KubectlEnabled,
 		},
 		User:                       user,
+		PlatformAdmin:              user != nil && platformAdmin(*user),
 		HasGlobalSidebarPreference: globalSidebarPreference != "",
 		GlobalSidebarPreference:    globalSidebarPreference,
 	})
 }
 
-func currentBootstrapSetup() bootstrapSetupState {
-	step := 0
-	uc, _ := model.CountUsers()
-	if uc == 0 && !common.AnonymousUserEnabled {
-		return bootstrapSetupState{Initialized: false, Step: step}
-	}
-	if uc > 0 || common.AnonymousUserEnabled {
-		step++
-	}
-
-	if common.IsSectionManaged("clusters") {
-		step++
-	} else {
-		cc, _ := model.CountClusters()
-		if cc > 0 {
-			step++
-		}
-	}
-
-	return bootstrapSetupState{Initialized: step == 2, Step: step}
-}
-
 func (h *AuthHandler) bootstrapAuth(setting *model.GeneralSetting) bootstrapAuthOptions {
-	var credentialProviders []string
-	loginPrompt := ""
-
-	if setting == nil || !setting.PasswordLoginDisabled {
-		credentialProviders = append(credentialProviders, model.AuthProviderPassword)
+	loginPrompt := strings.TrimSpace(setting.LoginPrompt)
+	if loginPrompt == "" {
+		loginPrompt = "Kubernetes permissions come directly from your identity provider claims."
 	}
-	if setting != nil {
-		loginPrompt = setting.LoginPrompt
-	}
-
-	oauthProviders := uniqueStrings(h.manager.GetAvailableProviders())
-
-	ldapSetting, err := model.GetLDAPSetting()
-	if err != nil {
-		klog.Warningf("Failed to load ldap setting for providers: %v", err)
-	} else if ldapSetting.Enabled {
-		credentialProviders = append(credentialProviders, model.AuthProviderLDAP)
-	}
-
-	credentialProviders = uniqueStrings(credentialProviders)
-	providers := append(append([]string{}, credentialProviders...), oauthProviders...)
-
 	return bootstrapAuthOptions{
-		Providers:           providers,
-		CredentialProviders: credentialProviders,
-		OAuthProviders:      oauthProviders,
-		LoginPrompt:         loginPrompt,
-		MFAEnabled:          setting == nil || setting.EnableMFA,
-		PasskeyLoginEnabled: setting != nil && setting.EnablePasskeyLogin,
+		ProviderName: common.OIDCProviderName,
+		LoginPrompt:  loginPrompt,
 	}
 }
 
-func (h *AuthHandler) bootstrapUser(c *gin.Context, setting *model.GeneralSetting) *model.User {
-	if common.AnonymousUserEnabled {
-		u := model.GetAnonymousUser()
-		if u == nil {
-			anonymousUser := model.AnonymousUser
-			applyBootstrapSidebarPreference(&anonymousUser, setting)
-			return &anonymousUser
-		}
-		currentUser := *u
-		currentUser.Roles = model.AnonymousUser.Roles
-		applyBootstrapSidebarPreference(&currentUser, setting)
-		return &currentUser
-	}
-
-	tokenString, _ := c.Cookie("auth_token")
-	if tokenString == "" {
-		return nil
-	}
-
-	claims, err := h.manager.ValidateJWT(tokenString)
+func (h *AuthHandler) bootstrapUser(c *gin.Context, setting *model.GeneralSetting) (*model.User, error) {
+	user, _, _, err := h.oidc.authenticatedSession(c)
 	if err != nil {
-		refreshedToken, refreshErr := h.manager.RefreshJWT(c, tokenString)
-		if refreshErr != nil {
-			return nil
-		}
-		setCookieSecure(c, "auth_token", refreshedToken, common.CookieExpirationSeconds)
-		claims, err = h.manager.ValidateJWT(refreshedToken)
-		if err != nil {
-			return nil
-		}
-	}
-
-	user, err := model.GetUserByIDCached(uint64(claims.UserID))
-	if err != nil || !user.Enabled {
-		return nil
+		return nil, err
 	}
 
 	currentUser := *user
-	currentUser.Roles = rbac.GetUserRoles(currentUser)
 	applyBootstrapSidebarPreference(&currentUser, setting)
 
-	return &currentUser
+	return &currentUser, nil
 }
 
 func applyBootstrapSidebarPreference(user *model.User, setting *model.GeneralSetting) {
 	globalSidebarPreference := strings.TrimSpace(setting.GlobalSidebarPreference)
-	if globalSidebarPreference != "" && (!rbac.UserHasRole(*user, model.DefaultAdminRole.Name) || strings.TrimSpace(user.SidebarPreference) == "") {
+	if globalSidebarPreference != "" && (!platformAdmin(*user) || strings.TrimSpace(user.SidebarPreference) == "") {
 		user.SidebarPreference = globalSidebarPreference
 	}
 }

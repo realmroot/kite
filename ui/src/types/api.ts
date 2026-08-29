@@ -236,9 +236,10 @@ export interface HelmChartDetail extends HelmChart {
 export interface HelmReleaseInstallRequest {
   releaseName: string
   namespace?: string
-  chartUrl: string
   repositoryName?: string
   source?: 'repository' | 'artifacthub'
+  chartName: string
+  chartVersion?: string
   values?: Record<string, unknown>
   description?: string
   createNamespace?: boolean
@@ -246,44 +247,15 @@ export interface HelmReleaseInstallRequest {
 }
 
 export interface HelmReleaseUpgradeRequest {
-  chartUrl?: string
   repositoryName?: string
   source?: 'repository' | 'artifacthub'
+  chartName?: string
+  chartVersion?: string
   values?: Record<string, unknown>
   description?: string
   forceConflicts?: boolean
   wait?: boolean
   rollbackOnFailure?: boolean
-}
-
-export interface HelmReleaseAutoUpgrade {
-  clusterName: string
-  namespace: string
-  releaseName: string
-  enabled: boolean
-  scheduleType: 'interval' | 'daily'
-  intervalMinutes: number
-  scheduleTime: string
-  timeoutMinutes: number
-  rollbackOnFailure: boolean
-  source?: 'repository' | 'artifacthub'
-  repositoryName?: string
-  chartName?: string
-  lastCheckedAt?: string
-  lastUpgradedAt?: string
-  lastError?: string
-}
-
-export interface HelmReleaseAutoUpgradeRequest {
-  enabled: boolean
-  scheduleType: 'interval' | 'daily'
-  intervalMinutes: number
-  scheduleTime: string
-  timeoutMinutes: number
-  rollbackOnFailure: boolean
-  source?: 'repository' | 'artifacthub'
-  repositoryName?: string
-  chartName?: string
 }
 
 export interface HelmReleaseDryRunResource {
@@ -305,6 +277,7 @@ export interface HelmReleaseDryRunResponse {
 type listMetadataType = {
   continue?: string
   remainingItemCount?: number
+  resourceVersion?: string
 }
 
 export interface KubernetesResource {
@@ -628,90 +601,18 @@ export interface RelatedResources {
 export interface Cluster {
   id: number
   name: string
+  displayName?: string
   description?: string
   version?: string
-  config?: string
+  apiServerUrl?: string
+  caBundle?: string
+  tlsServerName?: string
   enabled: boolean
-  inCluster: boolean
-  clusterAgent: boolean
-  clusterAgentVersion?: string
-  connected: boolean
   isDefault: boolean
   createdAt: string
   updatedAt: string
   prometheusURL?: string
   error?: string
-}
-
-export interface OAuthProvider {
-  id: number
-  name: string
-  clientId: string
-  clientSecret: string
-  authUrl?: string
-  tokenUrl?: string
-  userInfoUrl?: string
-  scopes?: string
-  issuer?: string
-  usernameClaim?: string
-  groupsClaim?: string
-  allowedGroups?: string
-  enabled: boolean
-  createdAt: string
-  updatedAt: string
-}
-
-export interface RoleAssignment {
-  id: number
-  roleId: number
-  subjectType: 'user' | 'group'
-  subject: string
-  createdAt: string
-  updatedAt: string
-}
-
-export interface Role {
-  id: number
-  name: string
-  description?: string
-  isSystem?: boolean
-  clusters: string[]
-  namespaces: string[]
-  resources: string[]
-  verbs: string[]
-  assignments?: RoleAssignment[]
-  createdAt: string
-  updatedAt: string
-}
-
-export interface UserItem {
-  id: number
-  username: string
-  sub?: string
-  provider: string
-  createdAt: string
-  lastLoginAt?: string
-  enabled?: boolean
-  avatar_url?: string
-  name?: string
-  roles?: Role[]
-}
-
-export interface FetchUserListResponse {
-  users: UserItem[]
-  total: number
-  page: number
-  size: number
-}
-
-export interface APIKey {
-  id: number
-  username: string
-  apiKey: string
-  lastLoginAt?: string
-  createdAt: string
-  updatedAt: string
-  roles?: Role[]
 }
 
 // Resource History types
@@ -730,7 +631,8 @@ export interface ResourceHistory {
   operatorId: number
   operator: {
     username: string
-    provider: string
+    issuer: string
+    sub: string
   }
   createdAt: string
   updatedAt: string
@@ -766,11 +668,16 @@ export interface WorkloadRevisionsResponse {
 }
 
 export interface AuditLogResponse {
-  data: ResourceHistory[]
+  data: AuditLogEntry[]
   total: number
   page: number
   size: number
 }
+
+export type AuditLogEntry = Omit<
+  ResourceHistory,
+  'resourceYaml' | 'previousYaml'
+>
 export interface ResourceTemplate {
   id: number
   name: string

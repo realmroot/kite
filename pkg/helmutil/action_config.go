@@ -1,7 +1,7 @@
 package helmutil
 
 import (
-	"github.com/zxh326/kite/pkg/common"
+	"github.com/realmroot/lightkite/pkg/common"
 	"helm.sh/helm/v4/pkg/action"
 	"helm.sh/helm/v4/pkg/kube"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -60,26 +60,47 @@ func (g *restClientGetter) ToRESTMapper() (meta.RESTMapper, error) {
 }
 
 func (g *restClientGetter) ToRawKubeConfigLoader() clientcmd.ClientConfig {
+	return &restClientConfig{config: g.config, namespace: g.namespace}
+}
+
+type restClientConfig struct {
+	config    *rest.Config
+	namespace string
+}
+
+func (c *restClientConfig) RawConfig() (clientcmdapi.Config, error) {
 	config := clientcmdapi.Config{
 		Clusters: map[string]*clientcmdapi.Cluster{
-			"kite": {Server: g.config.Host},
-		},
-		AuthInfos: map[string]*clientcmdapi.AuthInfo{
-			"kite": {},
-		},
-		Contexts: map[string]*clientcmdapi.Context{
-			"kite": {
-				Cluster:   "kite",
-				AuthInfo:  "kite",
-				Namespace: g.namespace,
+			"lightkite": {
+				Server:                   c.config.Host,
+				CertificateAuthorityData: append([]byte(nil), c.config.CAData...),
+				InsecureSkipTLSVerify:    c.config.Insecure,
+				TLSServerName:            c.config.ServerName,
 			},
 		},
-		CurrentContext: "kite",
-	}
-	return clientcmd.NewDefaultClientConfig(config, &clientcmd.ConfigOverrides{
-		CurrentContext: "kite",
-		Context: clientcmdapi.Context{
-			Namespace: g.namespace,
+		AuthInfos: map[string]*clientcmdapi.AuthInfo{
+			"lightkite": {Token: c.config.BearerToken},
 		},
-	})
+		Contexts: map[string]*clientcmdapi.Context{
+			"lightkite": {
+				Cluster:   "lightkite",
+				AuthInfo:  "lightkite",
+				Namespace: c.namespace,
+			},
+		},
+		CurrentContext: "lightkite",
+	}
+	return config, nil
+}
+
+func (c *restClientConfig) ClientConfig() (*rest.Config, error) {
+	return rest.CopyConfig(c.config), nil
+}
+
+func (c *restClientConfig) Namespace() (string, bool, error) {
+	return c.namespace, true, nil
+}
+
+func (c *restClientConfig) ConfigAccess() clientcmd.ConfigAccess {
+	return nil
 }

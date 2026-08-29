@@ -1,153 +1,48 @@
-# 认证
+# 认证 API
 
-Kite 支持通过 OAuth、密码用户、LDAP、MFA 和 Passkey 进行页面登录，也支持通过 API 密钥进行程序化访问。API 密钥会以一个特殊用户身份完成认证，并沿用与页面登录用户相同的 RBAC 模型。
+Lightkite 只使用由部署者配置的一个标准 OpenID Connect 提供方。它不再提供密码、
+LDAP、Passkey、Lightkite 托管 MFA、OAuth Provider CRUD 或 API Key 认证接口。
 
-## 页面登录
+## 浏览器登录流程
 
-密码登录接口：
-
-```http
-POST /api/auth/login/password
-Content-Type: application/json
-```
-
-请求体：
+`GET /api/auth/login` 创建带 PKCE 的 Authorization Code 事务，并返回认证地址：
 
 ```json
 {
-  "username": "alice",
-  "password": "change-me",
-  "mfa_code": "123456"
+  "auth_url": "https://identity.example.com/authorize?...",
+  "provider": "OpenID Connect"
 }
 ```
 
-只有当该密码用户已启用 MFA 时，才需要传 `mfa_code`。
+浏览器跳转到 `auth_url`。身份提供方回调 `GET /api/auth/callback` 后，Lightkite 会
+验证 state、nonce、issuer、签名、audience 和 token 有效期，然后建立会话。
 
-LDAP 登录使用相同请求体，接口为 `POST /api/auth/login/ldap`。
+浏览器只获得一个不透明的 `HttpOnly`、`SameSite=Lax` Cookie。ID token、access
+token 和 refresh token 均加密保存在服务端会话中；HTTPS 部署还会设置
+`Secure` 属性。
 
-## MFA
-
-MFA 适用于密码用户。用户可以在账号设置中管理 MFA，也可以使用以下已认证接口：
-
-```http
-POST /api/users/me/mfa/setup
-POST /api/users/me/mfa/enable
-POST /api/users/me/mfa/disable
-```
-
-初始化 MFA 需要当前密码：
-
-```json
-{
-  "current_password": "change-me"
-}
-```
-
-初始化响应包含 `secret`、`otpauth_url` 和 `qr_code`。启用或停用 MFA 时提交 TOTP 验证码：
-
-```json
-{
-  "code": "123456"
-}
-```
-
-## Passkey 登录
-
-Passkey 适用于密码用户。用户可以在账号设置中注册和删除 Passkey。
-
-当前用户 Passkey 接口：
-
-```http
-GET /api/users/me/passkeys
-POST /api/users/me/passkeys/begin
-POST /api/users/me/passkeys/finish
-DELETE /api/users/me/passkeys/:id
-```
-
-注册 Passkey 时需要传名称和当前密码。如果该用户已启用 MFA，还需要传 `mfa_code`：
-
-```json
-{
-  "name": "Work laptop",
-  "current_password": "change-me",
-  "mfa_code": "123456"
-}
-```
-
-Passkey 登录使用 WebAuthn begin/finish 流程：
-
-```http
-POST /api/auth/passkey/login/begin
-POST /api/auth/passkey/login/finish
-```
-
-## 认证设置
-
-管理员可以在 **设置 -> 认证** 中启用或停用密码登录、MFA 和 Passkey 登录。
-
-同样的设置也可以通过以下接口管理：
-
-```http
-GET /api/v1/admin/general-setting/
-PUT /api/v1/admin/general-setting/
-```
-
-相关请求字段：
-
-```json
-{
-  "passwordLoginDisabled": false,
-  "enableMFA": true,
-  "enablePasskeyLogin": true
-}
-```
-
-## 登录尝试封禁
-
-基于账号密码的登录会在连续失败时按客户端 IP 临时封禁。Kite 允许 1 分钟内最多 10 次错误密码或 MFA 验证失败；第 11 次失败会封禁该客户端 IP 的账号密码登录 5 分钟。
-
-当 Kite 运行在 Ingress 或负载均衡器后面时，封禁使用的客户端 IP 取决于 `TRUSTED_PROXIES` 配置。详见[环境变量](/zh/config/env)。
-
-## API 密钥格式
-
-完整 API 密钥格式如下：
+## 会话接口
 
 ```text
-kite<ID>-<SECRET>
+GET  /api/auth/user
+POST /api/auth/refresh
+POST /api/auth/logout
+GET  /api/v1/bootstrap
 ```
 
-使用时直接把完整值放进 `Authorization` 请求头，不要加 `Bearer`。
+`GET /api/auth/user` 返回本地展示资料、用户是否可管理 Lightkite 自有共享数据，
+以及最终生效的侧边栏偏好；它不会返回提供方 token。
 
-```http
-Authorization: kite12-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-```
+`POST /api/auth/refresh` 刷新并重新验证上游 OIDC 会话。
+`POST /api/auth/logout` 删除服务端会话并使 Cookie 过期。
 
-## 在哪里配置
+## 授权边界
 
-拥有 `admin` 角色的用户可以在 **设置 -> API 密钥** 中创建 API 密钥。
+Lightkite 会把当前会话的 OIDC ID token 用于该用户自己的 Kubernetes 请求。
+Kubernetes 负责认证 token，并通过原生 RBAC 对用户或 group 授权。此路径中
+不存在 Lightkite Role 或 API Key。
 
-创建后，复制完整密钥值，并把它作为 API 请求里的 `Authorization` 请求头使用。
+`PLATFORM_ADMIN_GROUPS` 只控制集群目录、全局偏好等 Lightkite 自有共享数据，绝不
+授予 Kubernetes 权限。
 
-## 权限说明
-
-API 密钥与普通用户共用同一套 RBAC 权限模型。
-
-- 创建 API 密钥本身不会自动获得任何资源权限。
-- `/api/v1/...` 下的资源访问仍然会经过 RBAC 校验。
-- `/api/v1/admin/...` 下的管理接口要求调用方拥有 `admin` 角色。
-- 集群资源接口通常还需要传 `x-cluster-name`。
-
-## 认证请求
-
-示例：
-
-```bash
-curl \
-  -H "Authorization: kite12-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \
-  -H "x-cluster-name: demo-cluster" \
-  https://kite.example.com/api/v1/pods/default
-```
-
-说明：
-
-- `/api/v1/...` 下的资源接口通常还需要传 `x-cluster-name`。
+部署与 claim 映射要求参见 [OIDC 原生 Kubernetes 架构](../../oidc-kubernetes.md)。

@@ -1,27 +1,35 @@
 # Helm Management
 
-Kite provides basic Helm management in the dashboard, covering chart discovery, release installation, upgrade, rollback, and uninstall.
+Lightkite provides basic Helm management in the dashboard, covering chart discovery, release installation, upgrade, rollback, and uninstall.
 
 ## App Catalog
 
 Open **App Catalog** from the sidebar to browse Helm charts.
 
-Kite supports two chart sources:
+Lightkite supports two chart sources:
 
 - **Artifact Hub**: search public Helm charts.
-- **Repositories**: browse Helm repositories managed in Kite.
+- **Repositories**: browse Helm repositories managed in Lightkite.
 
 ::: tip
-When using the Artifact Hub source, Kite may request Artifact Hub to fetch chart lists and chart details.
+When using the Artifact Hub source, Lightkite may request Artifact Hub to fetch chart lists and chart details.
 :::
 
 ::: warning
-Kite only displays chart information and is not responsible for the chart content. Review chart details, templates, and values carefully before installing or upgrading.
+Lightkite only displays chart information and is not responsible for the chart content. Review chart details, templates, and values carefully before installing or upgrading.
 :::
 
-Users with the **admin** role can add or remove Helm repositories. Removing a repository only removes it from Kite and does not uninstall existing releases.
+OIDC principals configured as platform administrators can add or remove Helm
+repositories. Removing a repository only removes it from Lightkite and does not
+uninstall existing releases.
 
-Open a chart to view its README, values, templates, and versions. If the chart package is available, you can install it directly from Kite.
+Open a chart to view its README, values, templates, and versions. If the chart package is available, you can install it directly from Lightkite.
+
+Install and upgrade requests identify a package by source, repository, chart
+name, and version. Lightkite resolves the download URL again from the configured
+repository index or Artifact Hub; it never treats a browser-supplied URL as an
+outbound fetch target. Catalog, content, and archive caches have global entry
+limits and expiration, and oversized chart archives are rejected.
 
 ## Helm Releases
 
@@ -29,14 +37,33 @@ Open **Helm Release** from the sidebar to view installed releases.
 
 The release detail page shows release status, chart version, values, resources, history, logs, and rendered manifests.
 
-Kite supports dry-run previews before install and upgrade. You can upgrade a release from the detail page, roll back from the history tab, or delete a release to uninstall it from the cluster.
+Lightkite supports dry-run previews before install and upgrade. You can upgrade a release from the detail page, roll back from the history tab, or delete a release to uninstall it from the cluster.
+
+## Automatic Upgrades
+
+Automatic upgrade is retained and follows the same identity boundary as an
+interactive Helm operation. Saving its configuration explicitly binds the task
+to the current OIDC session. At run time Lightkite refreshes that session, presents
+the resulting user token to Kubernetes, and lets Kubernetes RBAC authorize the
+release Secrets and rendered resources. Lightkite never substitutes a platform or
+cluster service-account credential.
+
+Reading or changing automatic-upgrade configuration first requires access to
+the corresponding Helm release under the current Kubernetes identity. Saving
+the configuration transfers future task attribution to the user and session
+that performed that save. A task whose stored actor and session no longer match
+is disabled instead of running under ambiguous attribution.
+
+If the identity provider revokes the refresh grant, the user logs out that
+session, or the provider stops issuing a refreshed ID token, the task is
+disabled with an error. Re-enable it while signed in to authorize it again.
 
 ## Permissions
 
-Repository management requires the **admin** role. Release operations are controlled by Kite RBAC through the `helmrelease` resource (`get`, `create`, `update`, `delete`).
+Repository metadata is Lightkite-owned shared data and requires platform-management
+access from `PLATFORM_ADMIN_GROUPS`. Helm release operations run against the
+selected cluster with the current user's OIDC identity; Kubernetes RBAC on the
+release Secrets and managed resources is authoritative.
 
-::: warning
-Grant `helmrelease` permissions carefully. Helm actions are executed by Kite with the cluster credentials configured in Kite, so users with `helmrelease` `create`, `update`, or `delete` permissions may create, update, or delete chart-rendered resources even if their own Kubernetes RBAC permissions would not allow those direct operations.
-
-The cluster credentials configured in Kite also need enough Kubernetes permissions for the resources rendered by the chart.
-:::
+Kubernetes must grant the current user every operation Helm needs, including
+access to Helm release Secrets and the resources rendered by the chart.

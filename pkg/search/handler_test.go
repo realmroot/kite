@@ -1,6 +1,7 @@
 package search
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -10,11 +11,33 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/zxh326/kite/pkg/common"
-	"github.com/zxh326/kite/pkg/middleware"
-	"github.com/zxh326/kite/pkg/model"
-	"github.com/zxh326/kite/pkg/resources"
+	"github.com/realmroot/lightkite/pkg/common"
+	"github.com/realmroot/lightkite/pkg/middleware"
+	"github.com/realmroot/lightkite/pkg/model"
+	"github.com/realmroot/lightkite/pkg/resources"
 )
+
+func TestSearchPropagatesRequestCancellation(t *testing.T) {
+	var canceled atomic.Bool
+	handler := NewSearchHandler(map[string]resources.SearchFunc{
+		"pods": func(c *gin.Context, _ string, _ int64) ([]common.SearchResult, error) {
+			<-c.Request.Context().Done()
+			canceled.Store(true)
+			return nil, c.Request.Context().Err()
+		},
+	})
+	requestContext, cancel := context.WithCancel(context.Background())
+	ctx := newSearchContext(t, "cluster-a")
+	ctx.Request = ctx.Request.WithContext(requestContext)
+	cancel()
+
+	if _, err := handler.Search(ctx, "target", 10); err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if !canceled.Load() {
+		t.Fatal("search function did not observe request cancellation")
+	}
+}
 
 func TestNormalizeSearchQuery(t *testing.T) {
 	got := normalizeSearchQuery("  pod   target\t\n")
@@ -65,52 +88,12 @@ func TestSortResults(t *testing.T) {
 	}
 }
 
-func TestGetSearchClusterNamePrecedence(t *testing.T) {
-	t.Run("context beats header query and cookie", func(t *testing.T) {
-		ctx := newSearchContextWithRequest(t)
-		ctx.Set(middleware.ClusterNameKey, "context-cluster")
-		ctx.Request.Header.Set(middleware.ClusterNameHeader, "header-cluster")
-		ctx.Request.URL.RawQuery = middleware.ClusterNameHeader + "=query-cluster"
-
-		if got := getSearchClusterName(ctx); got != "context-cluster" {
-			t.Fatalf("getSearchClusterName() = %q, want %q", got, "context-cluster")
-		}
-	})
-
-	t.Run("header beats query and cookie", func(t *testing.T) {
-		ctx := newSearchContextWithRequest(t)
-		ctx.Request.Header.Set(middleware.ClusterNameHeader, "header-cluster")
-		ctx.Request.URL.RawQuery = middleware.ClusterNameHeader + "=query-cluster"
-
-		if got := getSearchClusterName(ctx); got != "header-cluster" {
-			t.Fatalf("getSearchClusterName() = %q, want %q", got, "header-cluster")
-		}
-	})
-
-	t.Run("query beats cookie", func(t *testing.T) {
-		ctx := newSearchContextWithRequest(t)
-		ctx.Request.URL.RawQuery = middleware.ClusterNameHeader + "=query-cluster"
-
-		if got := getSearchClusterName(ctx); got != "query-cluster" {
-			t.Fatalf("getSearchClusterName() = %q, want %q", got, "query-cluster")
-		}
-	})
-
-	t.Run("cookie fallback", func(t *testing.T) {
-		ctx := newSearchContextWithRequest(t)
-
-		if got := getSearchClusterName(ctx); got != "cookie-cluster" {
-			t.Fatalf("getSearchClusterName() = %q, want %q", got, "cookie-cluster")
-		}
-	})
-}
-
 func TestGlobalSearchNegativeLimitDoesNotPanic(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	rec := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(rec)
 	ctx.Request = httptest.NewRequest(http.MethodGet, "/search?q=po&limit=-1", nil)
-	ctx.Set("user", model.AnonymousUser)
+	ctx.Set("user", model.User{Username: "test-user"})
 
 	handler := NewSearchHandler(map[string]resources.SearchFunc{})
 
@@ -127,7 +110,7 @@ func TestGlobalSearchNegativeLimitDoesNotPanic(t *testing.T) {
 	}
 }
 
-func TestGlobalSearchCacheKeyIncludesClusterAndLimit(t *testing.T) {
+func TestGlobalSearchUsesCurrentClusterAndLimit(t *testing.T) {
 	searchFuncs := map[string]resources.SearchFunc{
 		"pods": func(c *gin.Context, _ string, _ int64) ([]common.SearchResult, error) {
 			clusterName := c.GetString(middleware.ClusterNameKey)
@@ -158,12 +141,12 @@ func TestGlobalSearchCacheKeyIncludesClusterAndLimit(t *testing.T) {
 
 	resp := performGlobalSearch(t, handler, "cluster-a", "/search?q=po+target&limit=3")
 	if resp.Total != 3 {
-		t.Fatalf("cluster/limit cache miss returned %d results, want 3", resp.Total)
+		t.Fatalf("cluster/limit search returned %d results, want 3", resp.Total)
 	}
 
 	resp = performGlobalSearch(t, handler, "cluster-b", "/search?q=po+target&limit=3")
 	if resp.Total != 2 {
-		t.Fatalf("cluster-specific cache miss returned %d results, want 2", resp.Total)
+		t.Fatalf("cluster-specific search returned %d results, want 2", resp.Total)
 	}
 	if len(resp.Results) == 0 || resp.Results[0].Name != "target-b-1" {
 		t.Fatalf("unexpected cluster-b results: %#v", resp.Results)
@@ -180,24 +163,12 @@ func newSearchContext(t *testing.T, clusterName string) *gin.Context {
 	if clusterName != "" {
 		ctx.Set(middleware.ClusterNameKey, clusterName)
 	}
-	ctx.Set("user", model.AnonymousUser)
-	return ctx
-}
-
-func newSearchContextWithRequest(t *testing.T) *gin.Context {
-	t.Helper()
-
-	gin.SetMode(gin.TestMode)
-	rec := httptest.NewRecorder()
-	ctx, _ := gin.CreateTestContext(rec)
-	req := httptest.NewRequest(http.MethodGet, "/search", nil)
-	req.AddCookie(&http.Cookie{Name: middleware.ClusterNameHeader, Value: "cookie-cluster"})
-	ctx.Request = req
+	ctx.Set("user", model.User{Username: "test-user"})
 	return ctx
 }
 
 func performGlobalSearch(t *testing.T, handler *SearchHandler, clusterName, target string) SearchResponse {
-	return performGlobalSearchForUser(t, handler, clusterName, target, model.AnonymousUser)
+	return performGlobalSearchForUser(t, handler, clusterName, target, model.User{Username: "test-user"})
 }
 
 func performGlobalSearchForUser(t *testing.T, handler *SearchHandler, clusterName, target string, user model.User) SearchResponse {
@@ -224,7 +195,7 @@ func performGlobalSearchForUser(t *testing.T, handler *SearchHandler, clusterNam
 	return resp
 }
 
-func TestGlobalSearchCacheRechecksRBAC(t *testing.T) {
+func TestGlobalSearchRechecksKubernetesForEveryRequest(t *testing.T) {
 	var calls atomic.Int32
 	handler := NewSearchHandler(map[string]resources.SearchFunc{
 		string(common.Nodes): func(_ *gin.Context, _ string, _ int64) ([]common.SearchResult, error) {
@@ -232,50 +203,57 @@ func TestGlobalSearchCacheRechecksRBAC(t *testing.T) {
 			return []common.SearchResult{{Name: "worker-node", ResourceType: string(common.Nodes)}}, nil
 		},
 	})
-	allowedUser := model.User{Username: "alice", Roles: []common.Role{{
-		Name:       "node-reader",
-		Clusters:   []string{"cluster-a"},
-		Namespaces: []string{common.AllNamespaces},
-		Resources:  []string{string(common.Nodes)},
-		Verbs:      []string{string(common.VerbGet)},
-	}}}
+	allowedUser := model.User{Issuer: "https://issuer.example", Sub: "alice-subject", Username: "alice"}
 	response := performGlobalSearchForUser(t, handler, "cluster-a", "/search?q=worker&limit=50", allowedUser)
 	if response.Total != 1 {
 		t.Fatalf("initial search returned %#v, want one node", response.Results)
 	}
 
-	revokedUser := model.User{Username: "alice", Roles: []common.Role{{
-		Name:       "pod-reader",
-		Clusters:   []string{"cluster-a"},
-		Namespaces: []string{"default"},
-		Resources:  []string{string(common.Pods)},
-		Verbs:      []string{string(common.VerbGet)},
-	}}}
+	revokedUser := model.User{Issuer: "https://issuer.example", Sub: "alice-subject", Username: "alice"}
 	response = performGlobalSearchForUser(t, handler, "cluster-a", "/search?q=worker&limit=50", revokedUser)
-	if response.Total != 0 {
-		t.Fatalf("cached search after role revocation returned %#v", response.Results)
+	if response.Total != 1 {
+		t.Fatalf("second authorized search returned %#v", response.Results)
 	}
-	if calls.Load() != 1 {
-		t.Fatalf("search function called %d times, want cache hit", calls.Load())
+	if calls.Load() != 2 {
+		t.Fatalf("search function called %d times, want Kubernetes recheck", calls.Load())
 	}
 }
 
-func TestGlobalSearchFiltersUnauthorizedResults(t *testing.T) {
+func TestGlobalSearchUsesCurrentAuthenticatedUser(t *testing.T) {
+	var calls atomic.Int32
+	handler := NewSearchHandler(map[string]resources.SearchFunc{
+		string(common.Nodes): func(c *gin.Context, _ string, _ int64) ([]common.SearchResult, error) {
+			calls.Add(1)
+			user := c.MustGet("user").(model.User)
+			return []common.SearchResult{{Name: user.Sub, ResourceType: string(common.Nodes)}}, nil
+		},
+	})
+	first := model.User{Issuer: "https://issuer.example", Sub: "subject-one", Username: "shared@example.com"}
+	second := model.User{Issuer: "https://issuer.example", Sub: "subject-two", Username: "shared@example.com"}
+
+	response := performGlobalSearchForUser(t, handler, "cluster-a", "/search?q=subject&limit=50", first)
+	if response.Results[0].Name != first.Sub {
+		t.Fatalf("first identity results = %#v", response.Results)
+	}
+	response = performGlobalSearchForUser(t, handler, "cluster-a", "/search?q=subject&limit=50", second)
+	if response.Results[0].Name != second.Sub {
+		t.Fatalf("second identity received another subject's results: %#v", response.Results)
+	}
+	if calls.Load() != 2 {
+		t.Fatalf("search calls = %d, want separate query per OIDC subject", calls.Load())
+	}
+}
+
+func TestGlobalSearchTrustsKubernetesAuthorizedSearchResults(t *testing.T) {
 	handler := NewSearchHandler(map[string]resources.SearchFunc{
 		string(common.Nodes): func(_ *gin.Context, _ string, _ int64) ([]common.SearchResult, error) {
 			return []common.SearchResult{{Name: "worker-node", ResourceType: string(common.Nodes)}}, nil
 		},
 	})
-	user := model.User{Username: "alice", Roles: []common.Role{{
-		Name:       "pod-reader",
-		Clusters:   []string{"cluster-a"},
-		Namespaces: []string{"default"},
-		Resources:  []string{string(common.Pods)},
-		Verbs:      []string{string(common.VerbGet)},
-	}}}
+	user := model.User{Username: "alice"}
 	response := performGlobalSearchForUser(t, handler, "cluster-a", "/search?q=worker&limit=50", user)
-	if response.Total != 0 {
-		t.Fatalf("unauthorized search returned %#v", response.Results)
+	if response.Total != 1 {
+		t.Fatalf("search result was filtered by application roles: %#v", response.Results)
 	}
 }
 
@@ -333,8 +311,7 @@ func TestSearchParallelExecution(t *testing.T) {
 	}
 }
 
-// TestSearchPartialFailure ensures that one failing resource type doesn't break others
-// and that partial results due to errors are NOT cached.
+// TestSearchPartialFailure ensures that one failing resource type doesn't break others.
 func TestSearchPartialFailure(t *testing.T) {
 	var callCount atomic.Int32
 	searchFuncs := map[string]resources.SearchFunc{
@@ -367,7 +344,7 @@ func TestSearchPartialFailure(t *testing.T) {
 
 	callsBefore := callCount.Load()
 
-	// Second call: should NOT be served from cache because one resource errored.
+	// Every call rechecks the API server, including after a partial failure.
 	ctx2 := newSearchContext(t, "test-cluster")
 	results2, err := handler.Search(ctx2, "ok", 50)
 	if err != nil {
@@ -379,51 +356,13 @@ func TestSearchPartialFailure(t *testing.T) {
 
 	callsAfter := callCount.Load()
 	if callsAfter == callsBefore {
-		t.Fatal("second call was served from cache — error results should NOT be cached")
+		t.Fatal("second call did not recheck Kubernetes after a partial failure")
 	}
 }
 
-// TestGlobalSearchCacheDoesNotTriggerBackgroundRefresh validates Solution E:
-// a cache hit should NOT invoke Search again (no background goroutine).
-func TestGlobalSearchCacheDoesNotTriggerBackgroundRefresh(t *testing.T) {
-	var searchCallCount atomic.Int32
-
-	searchFuncs := map[string]resources.SearchFunc{
-		"pods": func(_ *gin.Context, _ string, _ int64) ([]common.SearchResult, error) {
-			searchCallCount.Add(1)
-			return []common.SearchResult{{Name: "nginx", ResourceType: "pods"}}, nil
-		},
-	}
-
-	handler := NewSearchHandler(searchFuncs)
-
-	// First call: populates the cache
-	resp := performGlobalSearch(t, handler, "test-cluster", "/search?q=nginx&limit=50")
-	if resp.Total != 1 {
-		t.Fatalf("first call: expected 1 result, got %d", resp.Total)
-	}
-
-	callsAfterFirst := searchCallCount.Load()
-
-	// Second call: should serve from cache WITHOUT launching background search
-	resp = performGlobalSearch(t, handler, "test-cluster", "/search?q=nginx&limit=50")
-	if resp.Total != 1 {
-		t.Fatalf("second call: expected 1 result, got %d", resp.Total)
-	}
-
-	// Give any hypothetical background goroutine time to execute
-	time.Sleep(100 * time.Millisecond)
-
-	callsAfterSecond := searchCallCount.Load()
-	if callsAfterSecond != callsAfterFirst {
-		t.Fatalf("cache hit triggered %d extra Search calls (background refresh not removed)",
-			callsAfterSecond-callsAfterFirst)
-	}
-}
-
-// TestSearchPanicDoesNotCacheResults verifies that when a search function panics,
-// partial results are still returned but NOT cached (avoids serving stale incomplete data).
-func TestSearchPanicDoesNotCacheResults(t *testing.T) {
+// TestSearchPanicReturnsPartialResults verifies that one buggy resource search
+// does not suppress the authorized results returned by other resource types.
+func TestSearchPanicReturnsPartialResults(t *testing.T) {
 	var callCount atomic.Int32
 
 	searchFuncs := map[string]resources.SearchFunc{
@@ -439,7 +378,7 @@ func TestSearchPanicDoesNotCacheResults(t *testing.T) {
 
 	handler := NewSearchHandler(searchFuncs)
 
-	// First call: one func panics → partial results returned, cache NOT written
+	// First call: one function panics and partial results are returned.
 	ctx1 := newSearchContext(t, "test-cluster")
 	results, err := handler.Search(ctx1, "ok", 50)
 	if err != nil {
@@ -451,8 +390,7 @@ func TestSearchPanicDoesNotCacheResults(t *testing.T) {
 
 	callsBefore := callCount.Load()
 
-	// Second call: should NOT be served from cache (cache was skipped due to panic).
-	// Both search funcs must be invoked again.
+	// Both search functions must be invoked again on the next request.
 	ctx2 := newSearchContext(t, "test-cluster")
 	results2, err := handler.Search(ctx2, "ok", 50)
 	if err != nil {
@@ -464,7 +402,7 @@ func TestSearchPanicDoesNotCacheResults(t *testing.T) {
 
 	callsAfter := callCount.Load()
 	if callsAfter == callsBefore {
-		t.Fatal("second call was served from cache — panic results should NOT be cached")
+		t.Fatal("second call did not recheck Kubernetes after a panic")
 	}
 }
 

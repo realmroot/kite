@@ -1,26 +1,31 @@
-# Kite - 现代化的 Kubernetes Dashboard
+# Lightkite — 基于标准协议的 Kubernetes Dashboard
 
 <div align="center">
 
-<img src="./docs/assets/logo.svg" alt="Kite Logo" width="128" height="128">
+<img src="./docs/assets/logo.svg" alt="Lightkite Logo" width="128" height="128">
 
-_一个现代 Kubernetes Dashboard_
+_让用户身份直达 API Server 的 Kubernetes Dashboard_
 
-<a href="https://trendshift.io/repositories/21820" target="_blank"><img src="https://trendshift.io/api/badge/repositories/21820" alt="kite-org%2Fkite | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
-
-[![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat&logo=go)](https://golang.org)
+[![Go Version](https://img.shields.io/badge/Go-1.26+-00ADD8?style=flat&logo=go)](https://go.dev)
 [![React](https://img.shields.io/badge/React-19+-61DAFB?style=flat&logo=react)](https://reactjs.org)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5+-3178C6?style=flat&logo=typescript)](https://www.typescriptlang.org)
+[![TypeScript](https://img.shields.io/badge/TypeScript-6+-3178C6?style=flat&logo=typescript)](https://www.typescriptlang.org)
 [![License](https://img.shields.io/badge/License-Apache-green.svg)](LICENSE)
-<a href="https://join.slack.com/t/kite-dashboard/shared_invite/zt-3cl9mccs7-eQZ1_t6IoTPHZkxXED1ceg"><img alt="Join Kite" src="https://badgen.net/badge/Slack/Join%20Kite/0abd59?icon=slack" /></a>
-
-[**在线 Demo**](https://kite-demo.zzde.me) | [**文档**](https://kite.zzde.me)
+[**文档**](docs/zh/index.md) | [**架构**](docs/oidc-kubernetes.md) | [**与 Kite 的区别**](docs/zh/architecture/upstream-kite.md)
 <br>
 [English](./README.md) | **中文**
 
 </div>
 
-Kite是一款轻量级、现代化的Kubernetes仪表板工具，它将实时可观测性、多集群管理和资源管理功能，以及企业级用户管理功能（如OAuth、MFA、Passkey、RBAC和审计日志功能），以及AI代理功能整合到一个工作空间中。它不仅仅是一个工具，而更像是一个平台。
+Lightkite 是 [Kite](https://github.com/kite-org/kite) 的独立 Fork。它保留 Kite 的 Kubernetes 操作界面，并以标准 OpenID Connect 和
+Kubernetes 原生 RBAC 替换本地身份、本地授权以及共享高权限 kubeconfig。
+用户通过配置的 OIDC 提供方登录，Lightkite 将该用户验证后的 ID token 发送给所选
+Kubernetes API Server；用户或 group 直接绑定 RoleBinding/ClusterRoleBinding。
+
+Lightkite 只作为全新部署安装，不支持在现有 Kite 安装上原地升级。
+
+架构说明参见 [OIDC Kubernetes 架构](docs/oidc-kubernetes.md)和
+[与上游 Kite 的详细对比](docs/zh/architecture/upstream-kite.md)。内置 AI/Agent
+已经移除；Helm、Metrics/Prometheus、Search 以及 Kubernetes 资源管理继续保留。
 
 <img width="1586" height="1167" alt="image" src="https://github.com/user-attachments/assets/a88a63b7-5b71-444d-8d98-66f147a68ef7" />
 
@@ -36,9 +41,9 @@ Kite是一款轻量级、现代化的Kubernetes仪表板工具，它将实时可
 ### 多集群管理
 
 - 在多个 Kubernetes 集群间切换
-- 按集群独立配置 Prometheus
-- 自动从 kubeconfig 发现集群
-- 细粒度的集群访问权限控制
+- 每个集群通过 Kubernetes 授权访问集群内 Prometheus
+- 无 Kubernetes 凭据的 HTTPS API Server 连接
+- 添加、编辑、切换和删除集群目录记录
 
 ### 资源管理
 
@@ -59,44 +64,43 @@ Kite是一款轻量级、现代化的Kubernetes仪表板工具，它将实时可
 - 支持过滤和搜索的实时 Pod 日志
 - 面向 Pod 和 Node 的 Web 终端
 - 内置 kubectl 控制台
-- AI 助手
 
 ### 安全
 
-- OAuth 集成
-- 密码用户 MFA
-- Passkey 登录
-- 基于角色的访问控制
-- 用户管理和角色分配
+- 与提供方无关的 OIDC Authorization Code + PKCE
+- OIDC token 加密保存在服务端，不暴露给浏览器 JavaScript
+- Kubernetes 原生 RBAC 是资源权限的唯一来源
+- 不保存 kubeconfig、bearer token、客户端证书或高权限 ServiceAccount
 
 ---
 
 ## 🚀 快速开始
 
-有关详细说明，请参阅[文档](https://kite.zzde.me/guide/installation.html)。
+有关详细说明，请参阅[安装指南](docs/zh/guide/installation.md)。
 
 ### Docker
 
-```bash
-docker run -d -p 8080:8080 -v ./data:/data -e DB_DSN=/data/db.sqlite ghcr.io/kite-org/kite:latest
-```
+请先配置 [OIDC 架构文档](docs/oidc-kubernetes.md)列出的 OIDC、公开 Host 与独立
+加密密钥。缺少必需配置或继续使用开发默认密钥时，服务会拒绝启动。
 
 ### 在 Kubernetes 中部署
 
 #### 使用 Helm (推荐)
 
-1.  **从 OCI registry 安装**
+1.  **安装 Lightkite 发布的版本化 OCI Chart**
 
     ```bash
-    helm install kite oci://ghcr.io/kite-org/charts/kite -n kube-system
+    helm install lightkite oci://ghcr.io/realmroot/charts/lightkite \
+      --version <version> -n lightkite-system --create-namespace -f values.yaml
     ```
 
 2.  **或从 Helm 仓库安装**
 
     ```bash
-    helm repo add kite https://kite-org.github.io/kite/
+    helm repo add lightkite https://realmroot.github.io/lightkite/
     helm repo update
-    helm install kite kite/kite -n kube-system
+    helm install lightkite lightkite/lightkite --version <version> \
+      -n lightkite-system --create-namespace -f values.yaml
     ```
 
 #### 使用 kubectl
@@ -105,16 +109,16 @@ docker run -d -p 8080:8080 -v ./data:/data -e DB_DSN=/data/db.sqlite ghcr.io/kit
 
     ```bash
     kubectl apply -f deploy/install.yaml
-    # 或在线安装
-    # 注意：此方法可能不适合生产环境，因为他没有配置任何持久化相关内容，你需要手动挂载持久化卷并设置环境变量 DB_DSN=/data/db.sqlite 来确保数据不会丢失。或者也可以外部数据库。
-    # 参考: https://kite.zzde.me/zh/faq.html#%E6%8C%81%E4%B9%85%E5%8C%96%E7%9B%B8%E5%85%B3
-    kubectl apply -f https://raw.githubusercontent.com/kite-org/kite/refs/heads/main/deploy/install.yaml
+    # Release 资产包含带不可变镜像版本的同一清单。
+    curl -fLO https://github.com/realmroot/lightkite/releases/download/vX.Y.Z/install.yaml
+    $EDITOR install.yaml
+    kubectl apply -f install.yaml
     ```
 
 2.  **通过端口转发访问**
 
     ```bash
-    kubectl port-forward -n kube-system svc/kite 8080:8080
+    kubectl port-forward -n lightkite-system svc/lightkite 8080:8080
     ```
 
 ### 从源码构建
@@ -122,8 +126,8 @@ docker run -d -p 8080:8080 -v ./data:/data -e DB_DSN=/data/db.sqlite ghcr.io/kit
 1.  **克隆仓库**
 
     ```bash
-    git clone https://github.com/kite-org/kite.git
-    cd kite
+    git clone https://github.com/realmroot/lightkite.git
+    cd lightkite
     ```
 
 2.  **构建项目**
@@ -143,38 +147,18 @@ docker run -d -p 8080:8080 -v ./data:/data -e DB_DSN=/data/db.sqlite ghcr.io/kit
 
 ## 🔍 问题排查
 
-有关问题排查，请参阅[文档](https://kite.zzde.me)。
-
-## 💖 支持本项目
-
-如果您觉得 Kite 对您有帮助，请考虑支持本项目的开发！您的捐赠将帮助我们维护和改进这个项目。
-
-### 捐赠方式
-
-<table>
-  <tr>
-    <td align="center">
-      <b>支付宝</b><br>
-      <img src="./docs/donate/alipay.jpeg" alt="支付宝二维码" width="200">
-    </td>
-    <td align="center">
-      <b>微信支付</b><br>
-      <img src="./docs/donate/wechat.jpeg" alt="微信支付二维码" width="200">
-    </td>
-    <td align="center">
-      <b>PayPal</b><br>
-      <a href="https://www.paypal.me/zxh326">
-        <img src="https://www.paypalobjects.com/webstatic/mktg/logo/pp_cc_mark_111x69.jpg" alt="PayPal" width="150">
-      </a>
-    </td>
-  </tr>
-</table>
-
-感谢您的支持！❤️
+有关问题排查，请参阅本仓库的[常见问题](docs/zh/faq.md)和配置指南。
 
 ## 🤝 贡献
 
 我们欢迎贡献！请参阅我们的[贡献指南](./CONTRIBUTING.md)了解如何参与。
+
+## 🙏 上游项目
+
+Lightkite 基于 Kite，并感谢其维护者和贡献者创建了本项目所依赖的 Dashboard、
+资源视图与交互基础。Lightkite 由独立团队维护，与上游项目不存在从属或背书
+关系，也不计划把这一架构 Fork 整体合并回 Kite。具有普遍价值的小型修复仍可
+根据情况贡献给上游。
 
 ## 📄 许可证
 

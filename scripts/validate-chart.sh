@@ -5,7 +5,7 @@
 
 set -euo pipefail
 
-CHART_DIR="charts/kite"
+CHART_DIR="charts/lightkite"
 TEMP_DIR=$(mktemp -d)
 
 echo "🔍 Validating Helm Chart..."
@@ -110,8 +110,8 @@ if ! grep -E -q "kind:\s*PersistentVolumeClaim" "$RENDERED_SQLITE"; then
     fail "PersistentVolumeClaim not found in sqlite rendered output"
 fi
 
-# Ensure the PVC name or claim reference contains 'kite-storage'
-if ! grep -E -q "kite-storage" "$RENDERED_SQLITE"; then
+# Ensure the PVC name or claim reference contains 'lightkite-storage'
+if ! grep -E -q "lightkite-storage" "$RENDERED_SQLITE"; then
     fail "sqlite PVC name or reference not found in rendered output"
 fi
 
@@ -129,7 +129,7 @@ replicaCount: 1
 db:
     type: postgres
     postgres:
-        dsn: "host=127.0.0.1 port=5432 user=test password=test dbname=kite sslmode=disable"
+        dsn: "host=127.0.0.1 port=5432 user=test password=test dbname=lightkite sslmode=disable"
 EOF
 
 if helm template test-release "$CHART_DIR" -f "$TEMP_DIR/test-values-postgres.yaml" > "$TEMP_DIR/rendered-custom-postgres.yaml"; then

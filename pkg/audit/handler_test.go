@@ -2,7 +2,6 @@ package audit
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -10,15 +9,15 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
-	"github.com/zxh326/kite/pkg/model"
+	"github.com/realmroot/lightkite/pkg/model"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
 
 func TestListAuditLogsFiltersOrdersAndPaginates(t *testing.T) {
 	db := setupAuditTestDB(t)
-	alice := model.User{Username: "alice", Provider: model.AuthProviderPassword}
-	bob := model.User{Username: "bob", Provider: model.AuthProviderPassword}
+	alice := model.User{Issuer: "https://issuer.test", Sub: "alice", Username: "alice"}
+	bob := model.User{Issuer: "https://issuer.test", Sub: "bob", Username: "bob"}
 	if err := db.Create(&alice).Error; err != nil {
 		t.Fatalf("creating alice: %v", err)
 	}
@@ -32,6 +31,7 @@ func TestListAuditLogsFiltersOrdersAndPaginates(t *testing.T) {
 			CreatedAt:   baseTime,
 			ClusterName: "prod", ResourceType: "pods", ResourceName: "web-old", Namespace: "default",
 			OperationType: "update", OperationSource: "manual", OperatorID: alice.ID, Success: true,
+			ResourceYAML: "apiVersion: v1\nkind: Secret\ndata:\n  token: must-not-leak\n", PreviousYAML: "previous-secret",
 		},
 		{
 			CreatedAt:   baseTime.Add(time.Hour),
@@ -48,7 +48,7 @@ func TestListAuditLogsFiltersOrdersAndPaginates(t *testing.T) {
 		t.Fatalf("creating audit history: %v", err)
 	}
 
-	url := fmt.Sprintf("/audit?page=1&size=1&operatorId=%d&cluster=prod&resourceType=pods&namespace=default&operation=update&search=web", alice.ID)
+	url := "/audit?page=1&size=1&operator=alice&cluster=prod&resourceType=pods&namespace=default&operation=update&search=web"
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
 	ctx.Request = httptest.NewRequest(http.MethodGet, url, nil)
@@ -76,6 +76,18 @@ func TestListAuditLogsFiltersOrdersAndPaginates(t *testing.T) {
 	if response.Data[0].Operator == nil || response.Data[0].Operator.Username != "alice" {
 		t.Fatalf("preloaded operator = %#v", response.Data[0].Operator)
 	}
+	var rawResponse map[string]any
+	if err := json.Unmarshal(recorder.Body.Bytes(), &rawResponse); err != nil {
+		t.Fatalf("decoding raw response: %v", err)
+	}
+	items := rawResponse["data"].([]any)
+	entry := items[0].(map[string]any)
+	if _, exists := entry["resourceYaml"]; exists {
+		t.Fatal("audit response exposed resourceYaml")
+	}
+	if _, exists := entry["previousYaml"]; exists {
+		t.Fatal("audit response exposed previousYaml")
+	}
 }
 
 func TestListAuditLogsRejectsInvalidQueryParameters(t *testing.T) {
@@ -86,8 +98,8 @@ func TestListAuditLogsRejectsInvalidQueryParameters(t *testing.T) {
 		wantError string
 	}{
 		{"page=0", "invalid page parameter"},
-		{"size=abc", "invalid size parameter"},
-		{"operatorId=-1", "invalid operatorId parameter"},
+		{"size=abc", "size must be between 1 and 100"},
+		{"size=101", "size must be between 1 and 100"},
 	}
 
 	for _, tt := range tests {

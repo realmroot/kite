@@ -150,12 +150,12 @@ func TestGetPodMetrics(t *testing.T) {
 	client := &Client{client: api}
 
 	queries := []string{
-		`sum(rate(container_cpu_usage_seconds_total{container!="POD",container!="",pod=~"web.*",container="api",namespace="default"}[1m]))`,
-		`sum(container_memory_working_set_bytes{container!="POD",container!="",pod=~"web.*",container="api",namespace="default"}) / 1024 / 1024`,
-		`sum(rate(container_network_receive_bytes_total{pod=~"web.*",container="api",namespace="default"}[1m]))`,
-		`sum(rate(container_network_transmit_bytes_total{pod=~"web.*",container="api",namespace="default"}[1m]))`,
-		`sum(rate(container_fs_reads_bytes_total{container!="POD",container!="",pod=~"web.*",container="api",namespace="default"}[1m]))`,
-		`sum(rate(container_fs_writes_bytes_total{container!="POD",container!="",pod=~"web.*",container="api",namespace="default"}[1m]))`,
+		`sum(rate(container_cpu_usage_seconds_total{container!="POD",container!="",pod="web",container="api",namespace="default"}[1m]))`,
+		`sum(container_memory_working_set_bytes{container!="POD",container!="",pod="web",container="api",namespace="default"}) / 1024 / 1024`,
+		`sum(rate(container_network_receive_bytes_total{pod="web",container="api",namespace="default"}[1m]))`,
+		`sum(rate(container_network_transmit_bytes_total{pod="web",container="api",namespace="default"}[1m]))`,
+		`sum(rate(container_fs_reads_bytes_total{container!="POD",container!="",pod="web",container="api",namespace="default"}[1m]))`,
+		`sum(rate(container_fs_writes_bytes_total{container!="POD",container!="",pod="web",container="api",namespace="default"}[1m]))`,
 	}
 	for _, query := range queries {
 		api.queryRangeResponses[query] = matrixValue(sampleTime, 2)
@@ -186,5 +186,13 @@ func TestGetPodMetricsUnsupportedDuration(t *testing.T) {
 
 	if _, err := client.GetPodMetrics(context.Background(), "default", "web", "api", "bad"); err == nil || !strings.Contains(err.Error(), "unsupported duration") {
 		t.Fatalf("GetPodMetrics() error = %v, want unsupported duration", err)
+	}
+}
+
+func TestExactLabelMatcherEscapesPromQLStringValues(t *testing.T) {
+	got := exactLabelMatcher("pod", "web\"} or vector(1) #")
+	want := `pod="web\"} or vector(1) #"`
+	if got != want {
+		t.Fatalf("exactLabelMatcher() = %q, want %q", got, want)
 	}
 }

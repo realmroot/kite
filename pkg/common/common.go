@@ -1,6 +1,7 @@
 package common
 
 import (
+	"encoding/json"
 	"os"
 	"strings"
 	"sync"
@@ -10,11 +11,10 @@ import (
 )
 
 const (
-	JWTExpirationSeconds = 24 * 60 * 60 // 24 hours
-	DefaultJWTSecret     = "kite-default-jwt-secret-key-change-in-production"
+	CookieExpirationSeconds = 48 * 60 * 60
 
-	NodeTerminalPodName    = "kite-node-terminal-agent"
-	KubectlTerminalPodName = "kite-kubectl-agent"
+	NodeTerminalPodName    = "lightkite-node-terminal-agent"
+	KubectlTerminalPodName = "lightkite-kubectl-agent"
 
 	KubectlAnnotation = "kubectl.kubernetes.io/last-applied-configuration"
 
@@ -25,28 +25,43 @@ const (
 )
 
 var (
-	Port            = "8080"
-	JwtSecret       = DefaultJWTSecret
-	EnableAnalytics = false
-	Host            = ""
-	Base            = ""
+	Port               = "8080"
+	PprofAddress       = ""
+	EnableAnalytics    = false
+	AnalyticsScriptURL = ""
+	AnalyticsWebsiteID = ""
+	Host               = ""
+	Base               = ""
 
-	NodeTerminalImage    = "busybox:latest"
-	KubectlTerminalImage = "zzde/kubectl:latest"
-	ClusterAgentImage    = "ghcr.io/kite-org/kite:latest"
-	DBType               = "sqlite"
-	DBDSN                = "dev.db"
+	NodeTerminalImage             = "busybox:1.37.0"
+	KubectlTerminalImage          = "alpine/kubectl:1.36.3"
+	OIDCIssuer                    = ""
+	OIDCCAFile                    = ""
+	OIDCClientID                  = ""
+	OIDCClientSecret              = ""
+	OIDCProviderName              = "OpenID Connect"
+	OIDCScopes                    = []string{"openid", "profile", "email", "offline_access"}
+	OIDCUsernameClaim             = "email"
+	OIDCGroupsClaim               = "groups"
+	OIDCNameClaim                 = "name"
+	OIDCPictureClaim              = "picture"
+	PlatformAdminGroups           []string
+	PlatformAdminSubjects         []string
+	ClusterInventoryEnabled       = false
+	ClusterInventoryKubeconfig    = ""
+	ClusterInventoryNamespace     = "cluster-inventory"
+	ClusterInventoryLabelSelector = ""
+	DBType                        = "sqlite"
+	DBDSN                         = "dev.db?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)"
 
-	KiteEncryptKey = "kite-default-encryption-key-change-in-production"
+	LightkiteEncryptKey = "kite-default-encryption-key-change-in-production"
 
 	AllNamespaces = "_all"
 
-	AnonymousUserEnabled = false
-
-	CookieExpirationSeconds = 2 * JWTExpirationSeconds // double jwt
-
-	DisableGZIP        = true
-	EnableVersionCheck = true
+	DisableGZIP               = true
+	EnableVersionCheck        = true
+	VersionCheckDisabledByEnv = false
+	ReleaseAPIURL             = ""
 
 	// CORSAllowedOrigins is empty by default (no CORS in production).
 	// Developers can set CORS_ALLOWED_ORIGINS=http://localhost:5173 for
@@ -65,15 +80,13 @@ var (
 		"fc00::/7",
 	}
 
-	APIKeyProvider = "api_key"
-
 	AgentPodNamespace = "kube-system"
 
 	// ConfigFilePath is the path to the external config file (set via KITE_CONFIG_FILE env)
 	ConfigFilePath = ""
 
 	// ManagedSections tracks which configuration sections are managed by the config file.
-	// Keys: "clusters", "oauth", "ldap", "rbac", "superUser"
+	// Currently only the "clusters" section can be file-managed.
 	ManagedSections = map[string]bool{}
 	managedMu       sync.RWMutex
 )
@@ -99,17 +112,14 @@ func SetManagedSections(sections map[string]bool) {
 }
 
 func LoadEnvs() {
-	if secret := os.Getenv("JWT_SECRET"); secret != "" {
-		JwtSecret = secret
-	}
-
 	if port := os.Getenv("PORT"); port != "" {
 		Port = port
 	}
+	PprofAddress = strings.TrimSpace(os.Getenv("PPROF_ADDRESS"))
 
-	if analytics := os.Getenv("ENABLE_ANALYTICS"); analytics == "true" {
-		EnableAnalytics = true
-	}
+	EnableAnalytics = os.Getenv("ENABLE_ANALYTICS") == "true"
+	AnalyticsScriptURL = strings.TrimSpace(os.Getenv("ANALYTICS_SCRIPT_URL"))
+	AnalyticsWebsiteID = strings.TrimSpace(os.Getenv("ANALYTICS_WEBSITE_ID"))
 	if ns := os.Getenv("NAMESPACE"); ns != "" {
 		AgentPodNamespace = ns
 	}
@@ -122,31 +132,21 @@ func LoadEnvs() {
 		KubectlTerminalImage = kubectlTerminalImage
 	}
 
-	if clusterAgentImage := os.Getenv("CLUSTER_AGENT_IMAGE"); clusterAgentImage != "" {
-		ClusterAgentImage = clusterAgentImage
+	loadOIDCEnvs()
+	ClusterInventoryEnabled = os.Getenv("CLUSTER_INVENTORY_ENABLED") == "true"
+	ClusterInventoryKubeconfig = strings.TrimSpace(os.Getenv("CLUSTER_INVENTORY_KUBECONFIG"))
+	if namespace := strings.TrimSpace(os.Getenv("CLUSTER_INVENTORY_NAMESPACE")); namespace != "" {
+		ClusterInventoryNamespace = namespace
 	}
-
-	if dbDSN := os.Getenv("DB_DSN"); dbDSN != "" {
-		DBDSN = dbDSN
-	}
-
-	if dbType := os.Getenv("DB_TYPE"); dbType != "" {
-		if dbType != "sqlite" && dbType != "mysql" && dbType != "postgres" {
-			klog.Fatalf("Invalid DB_TYPE: %s, must be one of sqlite, mysql, postgres", dbType)
-		}
-		DBType = dbType
-	}
+	ClusterInventoryLabelSelector = strings.TrimSpace(os.Getenv("CLUSTER_INVENTORY_LABEL_SELECTOR"))
+	loadDatabaseEnvs()
 
 	if key := os.Getenv("KITE_ENCRYPT_KEY"); key != "" {
-		KiteEncryptKey = key
+		LightkiteEncryptKey = key
 	} else {
 		klog.Warningf("KITE_ENCRYPT_KEY is not set, using default key, this is not secure for production!")
 	}
 
-	if v := os.Getenv("ANONYMOUS_USER_ENABLED"); v == "true" {
-		AnonymousUserEnabled = true
-		klog.Warningf("Anonymous user is enabled, this is not secure for production!")
-	}
 	if v := os.Getenv("HOST"); v != "" {
 		Host = v
 	}
@@ -154,7 +154,9 @@ func LoadEnvs() {
 		DisableGZIP = v == "true"
 	}
 
-	if v := os.Getenv("DISABLE_VERSION_CHECK"); v == "true" {
+	VersionCheckDisabledByEnv = os.Getenv("DISABLE_VERSION_CHECK") == "true"
+	ReleaseAPIURL = strings.TrimSpace(os.Getenv("RELEASE_API_URL"))
+	if VersionCheckDisabledByEnv {
 		EnableVersionCheck = false
 	}
 
@@ -194,4 +196,80 @@ func LoadEnvs() {
 		}
 	}
 	klog.Infof("Trusted proxies configured: %v", TrustedProxies)
+}
+
+func AnalyticsConfigured() bool {
+	return AnalyticsScriptURL != "" && AnalyticsWebsiteID != ""
+}
+
+func loadOIDCEnvs() {
+	OIDCProviderName = "OpenID Connect"
+	OIDCScopes = []string{"openid", "profile", "email", "offline_access"}
+	OIDCUsernameClaim = "email"
+	OIDCGroupsClaim = "groups"
+	OIDCNameClaim = "name"
+	OIDCPictureClaim = "picture"
+	OIDCIssuer = strings.TrimRight(strings.TrimSpace(os.Getenv("OIDC_ISSUER")), "/")
+	OIDCCAFile = strings.TrimSpace(os.Getenv("OIDC_CA_FILE"))
+	OIDCClientID = strings.TrimSpace(os.Getenv("OIDC_CLIENT_ID"))
+	OIDCClientSecret = os.Getenv("OIDC_CLIENT_SECRET")
+	if name := strings.TrimSpace(os.Getenv("OIDC_PROVIDER_NAME")); name != "" {
+		OIDCProviderName = name
+	}
+	if scopes := splitConfigList(os.Getenv("OIDC_SCOPES")); len(scopes) != 0 {
+		OIDCScopes = scopes
+	}
+	if claim := strings.TrimSpace(os.Getenv("OIDC_USERNAME_CLAIM")); claim != "" {
+		OIDCUsernameClaim = claim
+	}
+	if claim := strings.TrimSpace(os.Getenv("OIDC_GROUPS_CLAIM")); claim != "" {
+		OIDCGroupsClaim = claim
+	}
+	if claim := strings.TrimSpace(os.Getenv("OIDC_NAME_CLAIM")); claim != "" {
+		OIDCNameClaim = claim
+	}
+	if claim := strings.TrimSpace(os.Getenv("OIDC_PICTURE_CLAIM")); claim != "" {
+		OIDCPictureClaim = claim
+	}
+	PlatformAdminGroups = nil
+	for _, group := range splitPrincipalList(os.Getenv("PLATFORM_ADMIN_GROUPS")) {
+		if group = strings.TrimSpace(group); group != "" {
+			PlatformAdminGroups = append(PlatformAdminGroups, group)
+		}
+	}
+	PlatformAdminSubjects = nil
+	for _, subject := range splitPrincipalList(os.Getenv("PLATFORM_ADMIN_SUBJECTS")) {
+		if subject = strings.TrimSpace(subject); subject != "" {
+			PlatformAdminSubjects = append(PlatformAdminSubjects, subject)
+		}
+	}
+}
+
+func splitPrincipalList(value string) []string {
+	trimmed := strings.TrimSpace(value)
+	if strings.HasPrefix(trimmed, "[") {
+		var values []string
+		if json.Unmarshal([]byte(trimmed), &values) == nil {
+			return values
+		}
+	}
+	return splitConfigList(value)
+}
+
+func splitConfigList(value string) []string {
+	return strings.FieldsFunc(value, func(r rune) bool {
+		return r == ',' || r == ' ' || r == '\t' || r == '\n'
+	})
+}
+
+func loadDatabaseEnvs() {
+	if dbDSN := os.Getenv("DB_DSN"); dbDSN != "" {
+		DBDSN = dbDSN
+	}
+	if dbType := os.Getenv("DB_TYPE"); dbType != "" {
+		if dbType != "sqlite" && dbType != "mysql" && dbType != "postgres" {
+			klog.Fatalf("Invalid DB_TYPE: %s, must be one of sqlite, mysql, postgres", dbType)
+		}
+		DBType = dbType
+	}
 }

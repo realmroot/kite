@@ -1,195 +1,100 @@
-# Chart Values
+# Helm chart values
 
-This document describes all available configuration options for the Kite Helm Chart.
+The chart deploys Lightkite without a mounted ServiceAccount token and does not
+create Kubernetes RBAC grants for dashboard resource access. Configure OIDC and
+bind users/groups in every target cluster separately.
 
-## Basic Configuration
+## Required identity values
 
-| Parameter          | Description                                                | Default                 |
-| ------------------ | ---------------------------------------------------------- | ----------------------- |
-| `replicaCount`     | Number of replicas                                         | `1`                     |
-| `image.repository` | Container image repository                                 | `ghcr.io/kite-org/kite` |
-| `image.pullPolicy` | Image pull policy                                          | `IfNotPresent`          |
-| `image.tag`        | Image tag. If set, will override the chart's `appVersion`. | `""`                    |
-| `imagePullSecrets` | Image pull secrets for private repositories                | `[]`                    |
-| `nameOverride`     | Override chart name                                        | `""`                    |
-| `fullnameOverride` | Override full name                                         | `""`                    |
-| `debug`            | Enable debug mode                                          | `false`                 |
-| `basePath`         | Base path where Kite is served. See notes below.           | `""`                    |
+| Value | Description |
+| --- | --- |
+| `image.repository` | Container repository; required when rendering the chart from source |
+| `oidc.issuer` | Standard OpenID Connect issuer URL |
+| `oidc.clientId` | Public PKCE or confidential client ID |
+| `oidc.clientSecret` | Optional confidential-client secret; empty for a public PKCE client |
+| `platformAdminGroups` | Groups allowed to manage Lightkite-owned shared metadata; use a JSON string array when a group contains spaces, commas, or other punctuation |
+| `platformAdminSubjects` | Exact OIDC `sub` values with the same platform access; accepts the same JSON string-array form |
+| `encryptKey` | Random key used to encrypt server-side provider tokens |
 
-## Authentication & Security
+Optional OIDC mappings are `oidc.providerName`, `oidc.scopes`,
+`oidc.usernameClaim`, `oidc.groupsClaim`, `oidc.nameClaim`, and
+`oidc.pictureClaim`. None is provider-specific.
 
-| Parameter              | Description                                                                              | Default                                              |
-| ---------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| `anonymousUserEnabled` | Enable anonymous user access with full admin privileges. Use with caution in production. | `false`                                              |
-| `jwtSecret`            | Secret key for signing JWT tokens. Auto-generated on first boot if empty.                | `""`                                                 |
-| `encryptKey`           | Secret key used for encrypting sensitive data. Change this in production.                | `"kite-default-encryption-key-change-in-production"` |
-| `host`                 | Hostname for the application                                                             | `""`                                                 |
+For a private issuer CA, create a Secret containing the PEM certificate and set
+`oidc.ca.existingSecret`. `oidc.ca.key` defaults to `ca.crt`; the chart mounts it
+read-only and configures `OIDC_CA_FILE`.
 
-## Database Configuration
+For production, prefer `secret.create=false` and `secret.existingSecret`.
+The existing Secret must contain `OIDC_CLIENT_ID`, `KITE_ENCRYPT_KEY`,
+and database keys when applicable. Add `OIDC_CLIENT_SECRET` only
+for a confidential client.
 
-| Parameter | Description                                                              | Default  |
-| --------- | ------------------------------------------------------------------------ | -------- |
-| `db.type` | Database type: `sqlite`, `postgres`, `mysql`                             | `sqlite` |
-| `db.dsn`  | Full DSN string for MySQL/Postgres. Required when type is mysql/postgres | `""`     |
+## Runtime and exposure
 
-### SQLite Configuration
+| Value | Default | Description |
+| --- | --- | --- |
+| `replicaCount` | `1` | Application replicas |
+| `image.repository` | empty in source | Container repository; release-packaged charts set their publisher repository |
+| `image.tag` | Chart appVersion | Container tag |
+| `deploymentStrategy.type` | `Recreate` | Safe default for one-replica SQLite; external databases may use `RollingUpdate` |
+| `host` | required | Public HTTPS origin used for the OIDC callback; paths are rejected |
+| `basePath` | empty | Optional URL path prefix |
+| `service.type` | `ClusterIP` | Service type |
+| `service.port` | `8080` | HTTP port |
+| `ingress.enabled` | `false` | Create an Ingress |
+| `gateway.enabled` | `false` | Create Gateway API resources |
+| `debug` | `false` | Enable verbose application logging |
+| `terminalImages.kubectl` | `alpine/kubectl:1.36.3` | Versioned shell + kubectl terminal image |
+| `terminalImages.node` | `busybox:1.37.0` | Versioned node terminal image |
+| `imageRegistryHosts` | empty | Additional comma-separated registry `host[:port]` values allowed for image-tag lookup |
+| `releaseAPIURL` | empty | Optional GitHub-compatible update API; empty disables outbound checks |
+| `analytics.enabled` | `false` | Load the configured operator-owned analytics script |
+| `analytics.scriptURL` | empty | HTTPS Umami-compatible script URL; configure together with `analytics.websiteID` |
+| `analytics.websiteID` | empty | Operator-owned analytics website ID |
 
-| Parameter                                 | Description                                               | Default             |
-| ----------------------------------------- | --------------------------------------------------------- | ------------------- |
-| `db.sqlite.persistence.pvc.enabled`       | Whether to create a PVC to store the sqlite database file | `false`             |
-| `db.sqlite.persistence.pvc.existingClaim` | Use existing PVC                                          | `""`                |
-| `db.sqlite.persistence.pvc.storageClass`  | StorageClass for PVC (optional)                           | `""`                |
-| `db.sqlite.persistence.pvc.accessModes`   | Access modes for PVC                                      | `["ReadWriteOnce"]` |
-| `db.sqlite.persistence.pvc.size`          | Requested storage size for PVC                            | `1Gi`               |
-| `db.sqlite.persistence.hostPath.enabled`  | Whether to use hostPath storage                           | `false`             |
-| `db.sqlite.persistence.hostPath.path`     | hostPath path                                             | `/path/to/host/dir` |
-| `db.sqlite.persistence.hostPath.type`     | hostPath type                                             | `DirectoryOrCreate` |
-| `db.sqlite.persistence.mountPath`         | Mount path inside container                               | `/data`             |
-| `db.sqlite.persistence.filename`          | SQLite filename inside mountPath                          | `kite.db`           |
+Ingress/Gateway TLS termination must preserve the public host and protocol.
+Set `host` explicitly in production.
 
-## Environment Variables
+## Database
 
-| Parameter   | Description                              | Default |
-| ----------- | ---------------------------------------- | ------- |
-| `extraEnvs` | List of additional environment variables | `[]`    |
+| Value | Default | Description |
+| --- | --- | --- |
+| `db.type` | `sqlite` | `sqlite`, `postgres`, or `mysql` |
+| `db.dsn` | empty | Required external database DSN |
+| `db.sqlite.persistence.pvc.enabled` | `true` | Persist SQLite on a PVC |
+| `db.sqlite.persistence.pvc.existingClaim` | empty | Reuse a PVC |
+| `db.sqlite.persistence.pvc.storageClass` | empty | Requested StorageClass |
+| `db.sqlite.persistence.pvc.size` | `1Gi` | Requested size |
+| `db.sqlite.persistence.mountPath` | `/data` | SQLite mount path |
+| `db.sqlite.persistence.filename` | `lightkite.db` | SQLite filename |
 
-## Application Configuration
+Production multi-replica deployments require PostgreSQL or MySQL. The chart
+rejects multiple SQLite replicas, a rolling SQLite PVC deployment, conflicting
+PVC/hostPath storage, unsupported database types, and a generated external-
+database Secret without a DSN.
+SQLite runs through one application connection with foreign keys, a busy
+timeout, and WAL enabled; this avoids lock races in OIDC session transactions.
 
-Kite supports loading cluster, OAuth/LDAP, and RBAC configuration from a YAML config file. When enabled, managed sections become read-only in the UI.
+## Credential-free cluster catalog
 
-Available in Kite `v0.10.0` and later.
+`config.enabled` mounts a declarative catalog. Use
+`config.existingSecret` for a Secret containing `config.yaml`, or define
+`config.clusters` inline. Only the fields documented in
+[Configuration file](./config-file.md) are accepted; kubeconfigs and identity
+policy are rejected.
 
-See [Configuration File](./config-file) for the full config file format, usage examples, and reference.
+## Pod identity and security
 
-| Parameter               | Description                                                                    | Default |
-| ----------------------- | ------------------------------------------------------------------------------ | ------- |
-| `config.enabled`        | Enable configuration file mode                                                 | `false` |
-| `config.existingSecret` | Name of an existing Secret containing a `config.yaml` key. Recommended approach. | `""`    |
-| `config.superUser`      | Inline super user configuration (created on first startup only)                | `{}`    |
-| `config.clusters`       | Inline cluster configurations (when no existingSecret)                         | `[]`    |
-| `config.oauth`          | Inline OAuth provider configurations                                           | `[]`    |
-| `config.ldap`           | Inline LDAP configuration                                                      | `{}`    |
-| `config.rbac.roles`     | Inline RBAC role definitions                                                   | `[]`    |
-| `config.rbac.roleMapping` | Inline RBAC role mappings                                                    | `[]`    |
+| Value | Default | Description |
+| --- | --- | --- |
+| `serviceAccount.create` | `true` | Create an identity for the Lightkite Pod |
+| `serviceAccount.automount` | `false` | Mount a Kubernetes API token; keep disabled |
+| `podSecurityContext` | non-root UID/GID 65532, RuntimeDefault seccomp | Pod security context |
+| `securityContext` | no privilege escalation, read-only root, all capabilities dropped | Container security context |
+| `resources` | `{}` | Requests and limits |
+| `nodeSelector`, `affinity`, `tolerations` | empty | Scheduling controls |
+| `extraEnvs` | empty | Additional application environment variables |
+| `volumes`, `volumeMounts` | empty | Additional mounts |
 
-## Service Account Configuration
-
-| Parameter                    | Description                                         | Default |
-| ---------------------------- | --------------------------------------------------- | ------- |
-| `serviceAccount.create`      | Whether to create a service account                 | `true`  |
-| `serviceAccount.automount`   | Automatically mount service account API credentials | `true`  |
-| `serviceAccount.annotations` | Annotations for service account                     | `{}`    |
-| `serviceAccount.name`        | Name of service account to use                      | `""`    |
-
-## RBAC Configuration
-
-| Parameter     | Description                      | Default           |
-| ------------- | -------------------------------- | ----------------- |
-| `rbac.create` | Whether to create RBAC resources | `true`            |
-| `rbac.rules`  | List of RBAC rules               | See example below |
-
-### RBAC Rules Example
-
-```yaml
-rbac:
-  rules:
-    - apiGroups: ["*"]
-      resources: ["*"]
-      verbs: ["*"]
-    - nonResourceURLs: ["*"]
-      verbs: ["*"]
-```
-
-## Pod Configuration
-
-| Parameter            | Description                    | Default |
-| -------------------- | ------------------------------ | ------- |
-| `podAnnotations`     | Kubernetes annotations for Pod | `{}`    |
-| `podLabels`          | Kubernetes labels for Pod      | `{}`    |
-| `podSecurityContext` | Pod security context           | `{}`    |
-| `securityContext`    | Container security context     | `{}`    |
-
-## Service Configuration
-
-| Parameter      | Description  | Default     |
-| -------------- | ------------ | ----------- |
-| `service.type` | Service type | `ClusterIP` |
-| `service.port` | Service port | `8080`      |
-
-## Ingress Configuration
-
-| Parameter             | Description                | Default           |
-| --------------------- | -------------------------- | ----------------- |
-| `ingress.enabled`     | Whether to enable Ingress  | `false`           |
-| `ingress.className`   | Ingress class name         | `"nginx"`         |
-| `ingress.annotations` | Ingress annotations        | `{}`              |
-| `ingress.hosts`       | Ingress host configuration | See example below |
-| `ingress.tls`         | TLS configuration          | `[]`              |
-
-### Ingress Host Configuration Example
-
-```yaml
-ingress:
-  hosts:
-    - host: kite.zzde.me
-      paths:
-        - path: /
-          pathType: ImplementationSpecific
-```
-
-## Resource Limits
-
-| Parameter   | Description                            | Default |
-| ----------- | -------------------------------------- | ------- |
-| `resources` | Container resource limits and requests | `{}`    |
-
-### Resource Limits Example
-
-```yaml
-resources:
-  limits:
-    cpu: 100m
-    memory: 128Mi
-  requests:
-    cpu: 100m
-    memory: 128Mi
-```
-
-## Health Checks
-
-| Parameter        | Description                   | Default           |
-| ---------------- | ----------------------------- | ----------------- |
-| `livenessProbe`  | Liveness probe configuration  | See example below |
-| `readinessProbe` | Readiness probe configuration | See example below |
-
-### Health Check Example
-
-```yaml
-livenessProbe:
-  httpGet:
-    path: /healthz
-    port: http
-  initialDelaySeconds: 10
-  periodSeconds: 10
-readinessProbe:
-  httpGet:
-    path: /healthz
-    port: http
-  initialDelaySeconds: 10
-  periodSeconds: 10
-```
-
-## Storage Configuration
-
-| Parameter      | Description                            | Default |
-| -------------- | -------------------------------------- | ------- |
-| `volumes`      | Additional volume configurations       | `[]`    |
-| `volumeMounts` | Additional volume mount configurations | `[]`    |
-
-## Scheduling Configuration
-
-| Parameter      | Description               | Default |
-| -------------- | ------------------------- | ------- |
-| `nodeSelector` | Node selector             | `{}`    |
-| `tolerations`  | Tolerations configuration | `[]`    |
-| `affinity`     | Affinity configuration    | `{}`    |
+The authoritative exhaustive defaults, including Gateway API and probe
+structures, are in `charts/lightkite/values.yaml`.

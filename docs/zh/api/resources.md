@@ -1,221 +1,71 @@
-# 资源操作
+# Kubernetes 资源
 
-Kite 在 `/api/v1/<resource>` 下为内置 Kubernetes 资源提供通用的 CRUD 风格接口。
+Lightkite 前端直接使用 Kubernetes API，不再为内置资源或自定义资源维护第二套 CRUD 协议。
 
-## 调用前提
+## 网关
 
-资源接口需要：
-
-- 一个已经认证的用户或 API 密钥
-- 一个目标集群，通常通过 `x-cluster-name` 传入
-
-示例：
-
-```bash
--H "Authorization: kite12-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \
--H "x-cluster-name: demo-cluster"
-```
-
-## 路径规则
-
-内置资源会使用下面两种路径形式：
-
-- namespace 级资源：`/api/v1/<resource>/<namespace>`
-- 集群级资源：`/api/v1/<resource>/_all`
-
-示例：
-
-- ConfigMap：`/api/v1/configmaps/default`
-- Deployment：`/api/v1/deployments/default`
-- Namespace：`/api/v1/namespaces/_all`
-- Node：`/api/v1/nodes/_all`
-
-## 支持的操作
-
-对于内置资源，Kite 暴露了这些通用路由：
-
-### namespace 级资源
+登录后的浏览器可通过以下路径访问 Kubernetes API：
 
 ```text
-GET    /api/v1/<resource>/<namespace>
-GET    /api/v1/<resource>/<namespace>/<name>
-POST   /api/v1/<resource>/<namespace>
-PUT    /api/v1/<resource>/<namespace>/<name>
-PATCH  /api/v1/<resource>/<namespace>/<name>
-DELETE /api/v1/<resource>/<namespace>/<name>
+/api/v1/kubernetes/<kubernetes-api-path>
+/api/v1/_clusters/<cluster>/kubernetes/<kubernetes-api-path>
 ```
 
-### 集群级资源
+网关会原样保留 HTTP 方法、查询参数、请求体、响应状态、Kubernetes `Status`
+对象、流式响应和 Content-Type。浏览器 Cookie 和凭据不会转发给集群；网关使用当前
+用户绑定到目标集群的 OIDC transport。资源授权仍完全由 Kubernetes 决定。
+
+例如：
 
 ```text
-GET    /api/v1/<resource>/_all
-GET    /api/v1/<resource>/_all/<name>
-POST   /api/v1/<resource>/_all
-PUT    /api/v1/<resource>/_all/<name>
-PATCH  /api/v1/<resource>/_all/<name>
-DELETE /api/v1/<resource>/_all/<name>
+GET    /api/v1/kubernetes/api/v1/namespaces/default/configmaps
+GET    /api/v1/kubernetes/apis/apps/v1/namespaces/default/deployments/example
+POST   /api/v1/kubernetes/api/v1/namespaces/default/configmaps
+PUT    /api/v1/kubernetes/api/v1/namespaces/default/configmaps/example
+PATCH  /api/v1/kubernetes/apis/apps/v1/namespaces/default/deployments/example
+DELETE /api/v1/kubernetes/api/v1/namespaces/default/configmaps/example
 ```
 
-## Create 示例
+请求应使用 Kubernetes 原生 media type 和数据结构。例如 Merge Patch 使用
+`application/merge-patch+json`，删除传播策略和宽限期使用 Kubernetes
+`DeleteOptions`。列表直接使用 Kubernetes 的 `limit`、`continue`、
+`labelSelector`、`fieldSelector` 和 `watch` 参数。
 
-下面的例子会在 `default` namespace 创建一个 ConfigMap。
+前端目录维护内置资源的标准 group/version。自定义资源则通过
+`apiextensions.k8s.io/v1` 读取 CRD，选择 storage version（没有时选择第一个
+served version），并使用 CRD 声明的 plural 和 scope。因此新增 CRD 不需要新增
+Lightkite handler。
 
-```bash
-curl \
-  -X POST \
-  -H "Authorization: kite12-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \
-  -H "x-cluster-name: demo-cluster" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "apiVersion": "v1",
-    "kind": "ConfigMap",
-    "metadata": {
-      "name": "example-config",
-      "namespace": "default"
-    },
-    "data": {
-      "APP_MODE": "prod",
-      "LOG_LEVEL": "info"
-    }
-  }' \
-  https://kite.example.com/api/v1/configmaps/default
-```
+Pod 和 Node 表格中的指标由前端组合 core API 与标准
+`metrics.k8s.io/v1beta1` 得到。Metrics API 未安装或当前用户无权读取时，基础资源
+仍可正常显示。
 
-## Update 示例
+## Lightkite 专用资源操作
 
-`PUT` 是完整更新，不是局部更新。请求体里需要带上当前对象的 `metadata.resourceVersion`，否则 Kubernetes 会拒绝这次更新。
+只有无法表达为单次 Kubernetes 资源操作的能力才保留 Lightkite API：
 
-下面的例子会整体更新这个 ConfigMap。
+- 多文档 YAML apply 和历史回滚编排；
+- 资源历史与审计展示；
+- 与 `kubectl describe` 兼容的聚合输出；
+- 关联资源聚合；
+- 工作负载 revision 展示与回滚编排；
+- Node drain（组合 cordon 和多个 Pod eviction）；
+- 基于 exec 的 Pod 文件浏览与传输；
+- Helm release 操作，因为 Helm release 不是 Kubernetes API 资源。
 
-```bash
-curl \
-  -X PUT \
-  -H "Authorization: kite12-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \
-  -H "x-cluster-name: demo-cluster" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "apiVersion": "v1",
-    "kind": "ConfigMap",
-    "metadata": {
-      "name": "example-config",
-      "namespace": "default",
-      "resourceVersion": "123456"
-    },
-    "data": {
-      "APP_MODE": "staging",
-      "LOG_LEVEL": "debug"
-    }
-  }' \
-  https://kite.example.com/api/v1/configmaps/default/example-config
-```
+这些接口不再承载普通的 Kubernetes list/get/create/update/patch/delete。
 
-## Patch 示例
+## 资源历史
 
-`PATCH` 接收原始 patch 内容。当前支持的 patch 类型有：
+内置资源和自定义资源详情页通过 `/<resource>/<namespace>/<name>/history`
+读取分页历史；集群级资源使用 `_all`。读取 Lightkite 历史数据库之前，后端会使用当前
+用户 token 对准确的 group、plural、namespace 和 name 提交 Kubernetes
+`SelfSubjectAccessReview`。拒绝时返回 `403`，平台管理权限不能绕过此检查。
 
-- 默认：strategic merge patch
-- `?patchType=merge`：JSON merge patch
-- `?patchType=json`：JSON patch
+通过标准 Kubernetes 网关发出的变更会在这个统一边界记录。分页参数为从 1 开始的
+`page` 和 `pageSize`，其中 `pageSize` 最大为 100。Secret 操作只保留归属、成功或
+失败等元数据，不保存 Secret YAML 或原始错误详情。历史回滚会产生一次新的 apply，
+并再次接受 Kubernetes 授权。
 
-下面的例子使用 JSON merge patch，只更新一个字段，不发送整个对象。
-
-```bash
-curl \
-  -X PATCH \
-  -H "Authorization: kite12-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \
-  -H "x-cluster-name: demo-cluster" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "data": {
-      "LOG_LEVEL": "warn"
-    }
-  }' \
-  "https://kite.example.com/api/v1/configmaps/default/example-config?patchType=merge"
-```
-
-如果要通过 `PATCH` 重启一个 Deployment，可以更新 `spec.template.metadata.annotations` 下的一个时间戳字段。这样会修改 Pod template，从而触发一次新的 rollout。
-
-```bash
-curl \
-  -X PATCH \
-  -H "Authorization: kite12-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \
-  -H "x-cluster-name: demo-cluster" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "spec": {
-      "template": {
-        "metadata": {
-          "annotations": {
-            "kite.kubernetes.io/restartedAt": "2026-04-20T12:00:00Z"
-          }
-        }
-      }
-    }
-  }' \
-  "https://kite.example.com/api/v1/deployments/default/example-app?patchType=merge"
-```
-
-## Delete 示例
-
-下面的例子会删除这个 ConfigMap。
-
-```bash
-curl \
-  -X DELETE \
-  -H "Authorization: kite12-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \
-  -H "x-cluster-name: demo-cluster" \
-  https://kite.example.com/api/v1/configmaps/default/example-config
-```
-
-可选删除参数：
-
-- `force=true`：使用 0 秒 grace period 强制删除
-- `wait=false`：立即返回，不等待删除完成
-- `cascade=false`：孤儿化依赖对象，而不是前台级联删除
-
-示例：
-
-```bash
-curl \
-  -X DELETE \
-  -H "Authorization: kite12-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \
-  -H "x-cluster-name: demo-cluster" \
-  "https://kite.example.com/api/v1/deployments/default/example-app?force=true&wait=false"
-```
-
-## 集群级资源示例
-
-集群级资源路径里使用 `/_all`。
-
-下面的例子会给一个 Namespace 打标签：
-
-```bash
-curl \
-  -X PATCH \
-  -H "Authorization: kite12-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \
-  -H "x-cluster-name: demo-cluster" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "metadata": {
-      "labels": {
-        "team": "platform"
-      }
-    }
-  }' \
-  https://kite.example.com/api/v1/namespaces/_all/demo
-```
-
-## 自定义资源
-
-自定义资源使用 `/:crd/...` 形式的路由，其中 `:crd` 是 CRD 名称，例如 `rollouts.argoproj.io`。
-
-示例：
-
-- namespace 级自定义资源查询：`/api/v1/rollouts.argoproj.io/default/example`
-- 集群级自定义资源查询：`/api/v1/<crd>/_all/example`
-
-按当前服务端已注册的路由来看：
-
-- 自定义资源支持 list 和 get
-- 自定义资源支持 update 和 delete
-- 这里没有把自定义资源的 create 和 patch 作为当前稳定文档面来写，当前通用的 create / update / patch / delete 示例以已注册的内置资源路由为准
+历史记录绑定不可变的集群目录 ID，而不是只绑定显示名称。重命名集群不会丢失历史；
+删除后再创建同名集群也不会继承旧集群的 YAML。

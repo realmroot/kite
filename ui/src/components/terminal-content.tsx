@@ -264,7 +264,12 @@ export function Terminal({
     if (!terminalRef.current) return
 
     if (xtermRef.current) xtermRef.current.dispose()
-    if (wsRef.current) wsRef.current.close()
+    if (wsRef.current) {
+      if (wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: 'stdin', data: 'exit\r' }))
+      }
+      wsRef.current.close(1000, 'terminal replaced')
+    }
 
     const currentTheme = TERMINAL_THEMES[terminalTheme]
     const terminal = new XTerm({
@@ -486,7 +491,10 @@ export function Terminal({
         currentTerminalRef.removeEventListener('touchmove', handleWheelEvent)
       }
       terminal.dispose()
-      websocket.close()
+      if (websocket.readyState === WebSocket.OPEN) {
+        websocket.send(JSON.stringify({ type: 'stdin', data: 'exit\r' }))
+      }
+      websocket.close(1000, 'terminal closed')
       if (speedUpdateTimerRef.current)
         clearInterval(speedUpdateTimerRef.current)
     }

@@ -14,13 +14,6 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 
@@ -29,18 +22,19 @@ interface ClusterDialogProps {
   onOpenChange: (open: boolean) => void
   cluster?: Cluster | null
   onSubmit: (clusterData: ClusterCreateRequest) => void
+  isSubmitting?: boolean
 }
 
-function createClusterFormData(cluster?: Cluster | null) {
+function createClusterFormData(cluster?: Cluster | null): ClusterCreateRequest {
   return {
     name: cluster?.name || '',
     description: cluster?.description || '',
-    config: cluster?.config || '',
+    apiServerUrl: cluster?.apiServerUrl || '',
+    caBundle: cluster?.caBundle || '',
+    tlsServerName: cluster?.tlsServerName || '',
     prometheusURL: cluster?.prometheusURL || '',
     enabled: cluster?.enabled ?? true,
     isDefault: cluster?.isDefault ?? false,
-    inCluster: cluster?.inCluster ?? false,
-    clusterAgent: cluster?.clusterAgent ?? false,
   }
 }
 
@@ -49,6 +43,7 @@ export function ClusterDialog({
   onOpenChange,
   cluster,
   onSubmit,
+  isSubmitting,
 }: ClusterDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -58,6 +53,7 @@ export function ClusterDialog({
           cluster={cluster}
           onOpenChange={onOpenChange}
           onSubmit={onSubmit}
+          isSubmitting={isSubmitting}
         />
       ) : null}
     </Dialog>
@@ -68,26 +64,20 @@ function ClusterDialogContent({
   cluster,
   onOpenChange,
   onSubmit,
+  isSubmitting,
 }: Omit<ClusterDialogProps, 'open'>) {
   const { t } = useTranslation()
-  const isEditMode = !!cluster
-
+  const isEditMode = Boolean(cluster)
   const [formData, setFormData] = useState(() => createClusterFormData(cluster))
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    onSubmit(formData)
-  }
-
-  const handleChange = (field: string, value: string | boolean) => {
-    setFormData((prev) => ({
-      ...prev,
-      [field]: value,
-    }))
-  }
+  const change = <K extends keyof ClusterCreateRequest>(
+    key: K,
+    value: ClusterCreateRequest[K]
+  ) => setFormData((current) => ({ ...current, [key]: value }))
+  const canSubmit =
+    formData.name.trim() !== '' && formData.apiServerUrl?.trim() !== ''
 
   return (
-    <DialogContent className="sm:max-w-[600px]">
+    <DialogContent className="sm:max-w-[640px]">
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2">
           {isEditMode ? (
@@ -101,8 +91,14 @@ function ClusterDialogContent({
         </DialogTitle>
       </DialogHeader>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <form
+        className="space-y-4"
+        onSubmit={(event) => {
+          event.preventDefault()
+          onSubmit(formData)
+        }}
+      >
+        <div className="space-y-2">
           <div className="space-y-2">
             <Label htmlFor="cluster-name">
               {t('clusterManagement.dialog.name', 'Cluster Name')} *
@@ -110,54 +106,11 @@ function ClusterDialogContent({
             <Input
               id="cluster-name"
               value={formData.name}
-              onChange={(e) => handleChange('name', e.target.value)}
-              placeholder={t(
-                'clusterManagement.dialog.namePlaceholder',
-                'e.g., production, staging'
-              )}
+              onChange={(event) => change('name', event.target.value)}
+              placeholder="production"
               required
             />
           </div>
-
-          {!isEditMode && (
-            <div className="space-y-2">
-              <Label htmlFor="cluster-type">
-                {t('clusterManagement.dialog.type', 'Cluster Type')}
-              </Label>
-              <Select
-                value={
-                  formData.clusterAgent
-                    ? 'clusterAgent'
-                    : formData.inCluster
-                      ? 'inCluster'
-                      : 'external'
-                }
-                onValueChange={(value) => {
-                  setFormData((prev) => ({
-                    ...prev,
-                    clusterAgent: value === 'clusterAgent',
-                    inCluster: value === 'inCluster',
-                    config: value === 'external' ? prev.config : '',
-                  }))
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="external">
-                    {t('clusterManagement.type.external', 'External Cluster')}
-                  </SelectItem>
-                  <SelectItem value="inCluster">
-                    {t('clusterManagement.type.inCluster', 'In-Cluster')}
-                  </SelectItem>
-                  <SelectItem value="clusterAgent">
-                    {t('clusterManagement.type.clusterAgent', 'Cluster Agent')}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          )}
         </div>
 
         <div className="space-y-2">
@@ -167,45 +120,28 @@ function ClusterDialogContent({
           <Textarea
             id="cluster-description"
             value={formData.description}
-            onChange={(e) => handleChange('description', e.target.value)}
-            placeholder={t(
-              'clusterManagement.dialog.descriptionPlaceholder',
-              'Brief description of this cluster'
-            )}
+            onChange={(event) => change('description', event.target.value)}
             rows={2}
           />
         </div>
 
-        {!formData.inCluster && !formData.clusterAgent && (
-          <div className="space-y-2">
-            <Label htmlFor="cluster-config">
-              {t('clusterManagement.dialog.config', 'Kubeconfig')}
-              {!isEditMode && ' *'}
-            </Label>
-            {isEditMode && (
-              <p className="text-xs text-muted-foreground">
-                {t(
-                  'common.messages.keepCurrentConfiguration',
-                  'Leave empty to keep current configuration'
-                )}
-              </p>
-            )}
-            <Textarea
-              id="cluster-config"
-              value={formData.config}
-              onChange={(e) => handleChange('config', e.target.value)}
-              placeholder={t(
-                'clusterManagement.dialog.configPlaceholder',
-                'Paste your kubeconfig content here...'
-              )}
-              rows={8}
-              className="text-sm"
-              required={
-                !isEditMode && !formData.inCluster && !formData.clusterAgent
-              }
-            />
-          </div>
-        )}
+        <div className="space-y-2">
+          <Label htmlFor="api-server">
+            {t(
+              'clusterManagement.dialog.apiServerUrl',
+              'Kubernetes API Server URL'
+            )}{' '}
+            *
+          </Label>
+          <Input
+            id="api-server"
+            type="url"
+            value={formData.apiServerUrl}
+            onChange={(event) => change('apiServerUrl', event.target.value)}
+            placeholder="https://api.cluster.example:6443"
+            required
+          />
+        </div>
 
         <div className="space-y-2">
           <Label htmlFor="prometheus-url">
@@ -213,69 +149,39 @@ function ClusterDialogContent({
           </Label>
           <Input
             id="prometheus-url"
-            value={formData.prometheusURL}
-            onChange={(e) => handleChange('prometheusURL', e.target.value)}
             type="url"
+            value={formData.prometheusURL}
+            onChange={(event) => change('prometheusURL', event.target.value)}
+            placeholder={t('clusterManagement.dialog.prometheusUrlPlaceholder')}
           />
+          <p className="text-xs text-muted-foreground">
+            {t('clusterManagement.dialog.prometheusUrlDescription')}
+          </p>
         </div>
 
-        {/* Cluster Status Controls */}
         <div className="space-y-4 border-t pt-4">
-          {/* Enabled Status */}
           <div className="flex items-center justify-between">
-            <div className="space-y-1">
-              <Label htmlFor="cluster-enabled">
-                {t('clusterManagement.dialog.enabled', 'Enable Cluster')}
-              </Label>
-            </div>
+            <Label htmlFor="cluster-enabled">
+              {t('clusterManagement.dialog.enabled', 'Enable Cluster')}
+            </Label>
             <Switch
               id="cluster-enabled"
               checked={formData.enabled}
-              onCheckedChange={(checked) => handleChange('enabled', checked)}
+              onCheckedChange={(value) => change('enabled', value)}
             />
           </div>
-
-          {/* Default Status */}
           <div className="flex items-center justify-between">
-            <div className="space-y-1">
-              <Label htmlFor="cluster-default">
-                {t('clusterManagement.dialog.isDefault', 'Set as Default')}
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                {t(
-                  'common.messages.defaultClusterDescription',
-                  'Use this cluster as the default for new operations'
-                )}
-              </p>
-            </div>
+            <Label htmlFor="cluster-default">
+              {t('clusterManagement.dialog.isDefault', 'Set as Default')}
+            </Label>
             <Switch
               id="cluster-default"
               checked={formData.isDefault}
-              onCheckedChange={(checked) => handleChange('isDefault', checked)}
+              onCheckedChange={(value) => change('isDefault', value)}
             />
           </div>
         </div>
 
-        {formData.inCluster && (
-          <div className="p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
-            <p className="text-sm text-blue-700 dark:text-blue-300">
-              {t(
-                'common.messages.inClusterConfiguration',
-                'This cluster uses the in-cluster service account configuration. No additional kubeconfig is required.'
-              )}
-            </p>
-          </div>
-        )}
-        {formData.clusterAgent && (
-          <div className="p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
-            <p className="text-sm text-blue-700 dark:text-blue-300">
-              {t(
-                'clusterManagement.dialog.clusterAgentDescription',
-                'Create the cluster first, then run the generated command inside the target cluster.'
-              )}
-            </p>
-          </div>
-        )}
         <DialogFooter>
           <Button
             type="button"
@@ -284,19 +190,12 @@ function ClusterDialogContent({
           >
             {t('common.actions.cancel', 'Cancel')}
           </Button>
-          <Button
-            type="submit"
-            disabled={
-              !formData.name ||
-              (!isEditMode &&
-                !formData.inCluster &&
-                !formData.clusterAgent &&
-                !formData.config)
-            }
-          >
-            {isEditMode
-              ? t('common.actions.saveChanges', 'Save Changes')
-              : t('clusterManagement.actions.add', 'Add Cluster')}
+          <Button type="submit" disabled={!canSubmit || isSubmitting}>
+            {isSubmitting
+              ? t('common.messages.saving', 'Saving...')
+              : isEditMode
+                ? t('common.actions.saveChanges', 'Save Changes')
+                : t('clusterManagement.actions.add', 'Add Cluster')}
           </Button>
         </DialogFooter>
       </form>

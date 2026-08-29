@@ -1,0 +1,29 @@
+{{- if .Values.clusterInventory.enabled }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "lightkite.fullname" . }}-cluster-inventory-reader
+  namespace: {{ .Values.clusterInventory.namespace }}
+  labels:
+    {{- include "lightkite.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["multicluster.x-k8s.io"]
+    resources: ["clusterprofiles"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "lightkite.fullname" . }}-cluster-inventory-reader
+  namespace: {{ .Values.clusterInventory.namespace }}
+  labels:
+    {{- include "lightkite.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "lightkite.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "lightkite.fullname" . }}-cluster-inventory-reader
+{{- end }}

@@ -51,7 +51,7 @@ jobs:
 
       - uses: pnpm/action-setup@v4
         with:
-          version: 10
+          version: 10.30.2
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -74,7 +74,7 @@ jobs:
         id: tags
         run: |
           OWNER_LC=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          echo "tags=ghcr.io/${OWNER_LC}/kite:main" >> $GITHUB_OUTPUT
+          echo "tags=ghcr.io/${OWNER_LC}/lightkite:main" >> $GITHUB_OUTPUT
           echo "image_tag=main" >> $GITHUB_OUTPUT
 
       - name: Build

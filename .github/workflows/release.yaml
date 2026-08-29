@@ -6,16 +6,64 @@ on:
       - 'v[0-9]+\.[0-9]+\.[0-9]+'
 
 env:
-  IMAGE_NAME: kite
+  IMAGE_NAME: lightkite
   GO_VERSION: "1.26"
   NODE_VERSION: "24"
 
 jobs:
+  quality:
+    name: Release quality gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      E2E_KIND_NAME: lightkite-release-e2e
+      E2E_NODE_IMAGE: kindest/node:v1.36.1@sha256:3489c7674813ba5d8b1a9977baea8a6e553784dab7b84759d1014dbd78f7ebd5
+      E2E_KUBECONFIG: ${{ github.workspace }}/lightkite-release-e2e.kubeconfig
+      E2E_PORT: "38080"
+      KITE_E2E_USE_SYSTEM_CHROME: "true"
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.2
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "pnpm"
+          cache-dependency-path: |
+            ui/pnpm-lock.yaml
+            docs/pnpm-lock.yaml
+            e2e/pnpm-lock.yaml
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+          check-latest: true
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install --yes ripgrep
+      - name: Install kind
+        run: |
+          [ "$(uname -m)" = "x86_64" ] && curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.32.0/kind-linux-amd64
+          [ "$(uname -m)" = "aarch64" ] && curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.32.0/kind-linux-arm64
+          chmod +x ./kind
+          sudo mv ./kind /usr/local/bin/kind
+      - name: Install dependencies
+        run: make deps e2e-install
+      - name: Static, architecture, deployment, and unit gates
+        run: make verify test docs-build
+      - name: OIDC to Kubernetes RBAC end-to-end gate
+        run: make e2e-run
+
   # Push image to GitHub Packages.
   # See also https://docs.docker.com/docker-hub/builds/
   push:
     runs-on: ubuntu-latest
-    if: ${{ github.repository_owner == 'kite-org' }}
+    needs: quality
     permissions:
       packages: write
       contents: write
@@ -31,12 +79,6 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Login to Docker hub Registry
-        uses: docker/login-action@v4
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
       - name: Set up Docker Buildx
@@ -44,13 +86,15 @@ jobs:
 
       - uses: pnpm/action-setup@v4
         with:
-          version: 10
+          version: 10.30.2
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "pnpm"
-          cache-dependency-path: ui/pnpm-lock.yaml
+          cache-dependency-path: |
+            ui/pnpm-lock.yaml
+            docs/pnpm-lock.yaml
 
       - name: Setup Go
         uses: actions/setup-go@v6
@@ -66,7 +110,9 @@ jobs:
         id: check_version
         run: |
           TAG_NAME=${GITHUB_REF#refs/tags/}
+          OWNER_LC=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
+          echo "owner_lc=$OWNER_LC" >> $GITHUB_OUTPUT
 
       - name: Build
         run: make cross-compile
@@ -84,10 +130,8 @@ jobs:
           cache-to: type=gha,mode=max
           platforms: linux/amd64,linux/arm64
           tags: |
-            ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ steps.check_version.outputs.tag_name }}
-            zzde/${{ env.IMAGE_NAME }}:${{ steps.check_version.outputs.tag_name }}
-            ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:latest
-            zzde/${{ env.IMAGE_NAME }}:latest
+            ghcr.io/${{ steps.check_version.outputs.owner_lc }}/${{ env.IMAGE_NAME }}:${{ steps.check_version.outputs.tag_name }}
+            ghcr.io/${{ steps.check_version.outputs.owner_lc }}/${{ env.IMAGE_NAME }}:latest
           labels: runnumber=${{ github.run_id }}
 
       - name: Login Helm to GitHub Container Registry
@@ -95,12 +139,25 @@ jobs:
 
       - name: Package Helm chart
         run: |
-          helm package charts/kite/
+          OWNER_LC=${{ steps.check_version.outputs.owner_lc }}
+          TAG_NAME=${{ steps.check_version.outputs.tag_name }}
+          VERSION=${TAG_NAME#v}
+          sed -i "s|repository: \"\"|repository: ghcr.io/${OWNER_LC}/lightkite|" charts/lightkite/values.yaml
+          sed -i "s|releaseAPIURL: \"\"|releaseAPIURL: \"https://api.github.com/repos/${{ github.repository }}/releases/latest\"|" charts/lightkite/values.yaml
+          helm package charts/lightkite/ --version "$VERSION" --app-version "$TAG_NAME"
+
+      - name: Render versioned installation manifest
+        run: |
+          OWNER_LC=${{ steps.check_version.outputs.owner_lc }}
+          TAG_NAME=${{ steps.check_version.outputs.tag_name }}
+          sed -e "s|ghcr.io/OWNER/lightkite:VERSION|ghcr.io/${OWNER_LC}/lightkite:${TAG_NAME}|g" \
+            -e "s|https://api.github.com/repos/OWNER/lightkite/releases/latest|https://api.github.com/repos/${{ github.repository }}/releases/latest|" \
+            deploy/install.yaml > install.yaml
 
       - name: Push Helm chart to OCI registry
         run: |
-          CHART_PACKAGE=$(ls kite-*.tgz)
-          helm push "$CHART_PACKAGE" oci://ghcr.io/${{ github.repository_owner }}/charts
+          CHART_PACKAGE=$(ls lightkite-*.tgz)
+          helm push "$CHART_PACKAGE" oci://ghcr.io/${{ steps.check_version.outputs.owner_lc }}/charts
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -111,15 +168,16 @@ jobs:
           prerelease: false
           generate_release_notes: true
           files: |
-            bin/kite-*-${{ steps.check_version.outputs.tag_name }}.tar.gz
-            kite-*.tgz
+            bin/lightkite-*-${{ steps.check_version.outputs.tag_name }}.tar.gz
+            lightkite-*.tgz
+            install.yaml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   update-helm-index:
     runs-on: ubuntu-latest
     needs: push
-    if: ${{ github.repository_owner == 'kite-org' && startsWith(github.ref, 'refs/tags/v') }}
+    if: ${{ vars.PUBLISH_HELM_INDEX == 'true' && startsWith(github.ref, 'refs/tags/v') }}
     permissions:
       contents: write
     steps:
@@ -135,7 +193,7 @@ jobs:
           VERSION=$(echo $TAG_NAME | sed 's/^v//')
 
           # Download the helm chart from the release
-          gh release download $TAG_NAME --pattern "kite-$VERSION.tgz"
+          gh release download $TAG_NAME --pattern "lightkite-$VERSION.tgz"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

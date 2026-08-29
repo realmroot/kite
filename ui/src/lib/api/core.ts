@@ -8,8 +8,6 @@ import {
   HelmChartDetail,
   HelmChartList,
   HelmRelease,
-  HelmReleaseAutoUpgrade,
-  HelmReleaseAutoUpgradeRequest,
   HelmReleaseDryRunResponse,
   HelmReleaseHistoryResponse,
   HelmReleaseInstallRequest,
@@ -25,20 +23,19 @@ import {
   WorkloadRevisionResourceType,
   WorkloadRevisionsResponse,
 } from '@/types/api'
+import { getKubernetesResourcePath } from '@/lib/kubernetes-api'
 import { getResourceQueryKey } from '@/lib/resource-metadata'
+import { enrichResourceList } from '@/lib/resource-metrics'
 import { useCluster } from '@/hooks/use-cluster'
 
 import { API_BASE_URL, apiClient } from '../api-client'
-import {
-  appendCurrentClusterParam,
-  withCurrentClusterPath,
-} from '../current-cluster'
+import { withCurrentClusterPath } from '../current-cluster'
 import { withSubPath } from '../subpath'
 import { fetchAPI } from './shared'
 
 type ResourcesItems<T extends ResourceType> = ResourcesTypeMap[T]['items']
 
-export const fetchResources = <T>(
+export const fetchResources = async <T>(
   resource: string,
   namespace?: string,
   opts?: {
@@ -46,10 +43,8 @@ export const fetchResources = <T>(
     continueToken?: string
     labelSelector?: string
     fieldSelector?: string
-    reduce?: boolean
   }
 ): Promise<T> => {
-  let endpoint = namespace ? `/${resource}/${namespace}` : `/${resource}`
   const params = new URLSearchParams()
 
   if (opts?.limit) {
@@ -64,15 +59,15 @@ export const fetchResources = <T>(
   if (opts?.fieldSelector) {
     params.append('fieldSelector', opts.fieldSelector)
   }
-  if (opts?.reduce) {
-    params.append('reduce', 'true')
+  if (resource === 'helmrelease') {
+    const path = `/${resource}${namespace ? `/${namespace}` : ''}`
+    return fetchAPI<T>(params.size ? `${path}?${params.toString()}` : path)
   }
-
-  if (params.toString()) {
-    endpoint += `?${params.toString()}`
-  }
-
-  return fetchAPI<T>(endpoint)
+  const path = await getKubernetesResourcePath(resource, namespace)
+  const list = await fetchAPI<T>(
+    params.size ? `${path}?${params.toString()}` : path
+  )
+  return enrichResourceList(resource, namespace, list)
 }
 
 // Search API types
@@ -94,7 +89,7 @@ export const globalSearch = async (
   query: string,
   options?: {
     limit?: number
-    namespace?: string
+    signal?: AbortSignal
   }
 ): Promise<SearchResponse> => {
   if (!query.trim()) {
@@ -106,12 +101,10 @@ export const globalSearch = async (
     limit: String(options?.limit || 50),
   })
 
-  if (options?.namespace) {
-    params.append('namespace', options.namespace)
-  }
-
   const endpoint = `/search?${params.toString()}`
-  const response = await fetchAPI<SearchResponse>(endpoint)
+  const response = await apiClient.get<SearchResponse>(endpoint, {
+    signal: options?.signal,
+  })
   const results = response.results || []
   return {
     ...response,
@@ -120,23 +113,6 @@ export const globalSearch = async (
   }
 }
 // Scale deployment API
-export const scaleDeployment = async (
-  namespace: string,
-  name: string,
-  replicas: number
-): Promise<{ message: string; deployment: unknown; replicas: number }> => {
-  const endpoint = `/deployments/${namespace}/${name}/scale`
-  const response = await apiClient.put<{
-    message: string
-    deployment: unknown
-    replicas: number
-  }>(endpoint, {
-    replicas,
-  })
-
-  return response
-}
-
 export const upgradeHelmRelease = async (
   namespace: string,
   name: string,
@@ -168,39 +144,6 @@ export const rollbackHelmRelease = async (
     `/helmrelease/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}/rollback`,
     revision ? { revision } : {}
   )
-}
-
-export const fetchHelmReleaseAutoUpgrade = (
-  namespace: string,
-  name: string
-): Promise<HelmReleaseAutoUpgrade> => {
-  return fetchAPI<HelmReleaseAutoUpgrade>(
-    `/helmrelease/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}/auto-upgrade`
-  )
-}
-
-export const updateHelmReleaseAutoUpgrade = (
-  namespace: string,
-  name: string,
-  body: HelmReleaseAutoUpgradeRequest
-): Promise<HelmReleaseAutoUpgrade> => {
-  return apiClient.put<HelmReleaseAutoUpgrade>(
-    `/helmrelease/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}/auto-upgrade`,
-    body
-  )
-}
-
-export const useHelmReleaseAutoUpgrade = (
-  namespace: string,
-  name: string,
-  options?: { enabled?: boolean; staleTime?: number }
-) => {
-  return useQuery({
-    queryKey: ['helmrelease-auto-upgrade', namespace, name],
-    queryFn: () => fetchHelmReleaseAutoUpgrade(namespace, name),
-    enabled: (options?.enabled ?? true) && !!namespace && !!name,
-    staleTime: options?.staleTime || 30000,
-  })
 }
 
 export const installHelmRelease = async (
@@ -471,27 +414,19 @@ export const drainNode = async (
 export const cordonNode = async (
   nodeName: string
 ): Promise<{ message: string; node: string; unschedulable: boolean }> => {
-  const endpoint = `/nodes/_all/${nodeName}/cordon`
-  const response = await apiClient.put<{
-    message: string
-    node: string
-    unschedulable: boolean
-  }>(endpoint)
-
-  return response
+  await patchResource('nodes', nodeName, undefined, {
+    spec: { unschedulable: true },
+  })
+  return { message: 'node cordoned', node: nodeName, unschedulable: true }
 }
 
 export const uncordonNode = async (
   nodeName: string
 ): Promise<{ message: string; node: string; unschedulable: boolean }> => {
-  const endpoint = `/nodes/_all/${nodeName}/uncordon`
-  const response = await apiClient.put<{
-    message: string
-    node: string
-    unschedulable: boolean
-  }>(endpoint)
-
-  return response
+  await patchResource('nodes', nodeName, undefined, {
+    spec: { unschedulable: false },
+  })
+  return { message: 'node uncordoned', node: nodeName, unschedulable: false }
 }
 
 export const taintNode = async (
@@ -502,28 +437,31 @@ export const taintNode = async (
     effect: 'NoSchedule' | 'PreferNoSchedule' | 'NoExecute'
   }
 ): Promise<{ message: string; node: string; taint: unknown }> => {
-  const endpoint = `/nodes/_all/${nodeName}/taint`
-  const response = await apiClient.put<{
-    message: string
-    node: string
-    taint: unknown
-  }>(endpoint, taint)
-
-  return response
+  const node = await fetchResource<ResourceTypeMap['nodes']>('nodes', nodeName)
+  const taints = (node.spec?.taints || []).filter(
+    (existing) => existing.key !== taint.key
+  )
+  taints.push(taint)
+  await updateResource('nodes', nodeName, undefined, {
+    ...node,
+    spec: { ...node.spec, taints },
+  })
+  return { message: 'node tainted', node: nodeName, taint }
 }
 
 export const untaintNode = async (
   nodeName: string,
   key: string
 ): Promise<{ message: string; node: string; removedTaintKey: string }> => {
-  const endpoint = `/nodes/_all/${nodeName}/untaint`
-  const response = await apiClient.put<{
-    message: string
-    node: string
-    removedTaintKey: string
-  }>(endpoint, { key })
-
-  return response
+  const node = await fetchResource<ResourceTypeMap['nodes']>('nodes', nodeName)
+  const taints = (node.spec?.taints || []).filter(
+    (existing) => existing.key !== key
+  )
+  await updateResource('nodes', nodeName, undefined, {
+    ...node,
+    spec: { ...node.spec, taints },
+  })
+  return { message: 'node untainted', node: nodeName, removedTaintKey: key }
 }
 
 export const updateResource = async <T extends ResourceType>(
@@ -532,8 +470,12 @@ export const updateResource = async <T extends ResourceType>(
   namespace: string | undefined,
   body: ResourceTypeMap[T]
 ): Promise<void> => {
-  const endpoint = `/${resource}/${namespace || '_all'}/${name}`
-  await apiClient.put(`${endpoint}`, body)
+  if (resource === 'helmrelease') {
+    await apiClient.put(`/${resource}/${namespace || '_all'}/${name}`, body)
+    return
+  }
+  const endpoint = await getKubernetesResourcePath(resource, namespace, name)
+  await apiClient.put(endpoint, body)
 }
 
 export const resizePod = async (
@@ -541,8 +483,15 @@ export const resizePod = async (
   name: string,
   body: Partial<Pod>
 ): Promise<void> => {
-  const endpoint = `/pods/${namespace || '_all'}/${name}/resize`
-  await apiClient.patch(`${endpoint}`, body)
+  const endpoint = await getKubernetesResourcePath(
+    'pods',
+    namespace,
+    name,
+    'resize'
+  )
+  await apiClient.patch(endpoint, body, {
+    headers: { 'Content-Type': 'application/merge-patch+json' },
+  })
 }
 
 type DeepPartial<T> = T extends object
@@ -556,8 +505,10 @@ export const patchResource = async <T extends ResourceType>(
   namespace: string | undefined,
   body: DeepPartial<ResourceTypeMap[T]>
 ): Promise<void> => {
-  const endpoint = `/${resource}/${namespace || '_all'}/${name}`
-  await apiClient.patch(`${endpoint}`, body)
+  const endpoint = await getKubernetesResourcePath(resource, namespace, name)
+  await apiClient.patch(endpoint, body, {
+    headers: { 'Content-Type': 'application/merge-patch+json' },
+  })
 }
 
 export const restartWorkload = async (
@@ -565,18 +516,22 @@ export const restartWorkload = async (
   name: string,
   namespace: string
 ): Promise<void> => {
-  const endpoint = `/${resource}/${namespace}/${name}`
-  await apiClient.patch(endpoint, {
-    spec: {
-      template: {
-        metadata: {
-          annotations: {
-            'kite.kubernetes.io/restartedAt': new Date().toISOString(),
+  const endpoint = await getKubernetesResourcePath(resource, namespace, name)
+  await apiClient.patch(
+    endpoint,
+    {
+      spec: {
+        template: {
+          metadata: {
+            annotations: {
+              'lightkite.kubernetes.io/restartedAt': new Date().toISOString(),
+            },
           },
         },
       },
     },
-  })
+    { headers: { 'Content-Type': 'application/merge-patch+json' } }
+  )
 }
 
 export const createResource = async <T extends ResourceType>(
@@ -584,8 +539,14 @@ export const createResource = async <T extends ResourceType>(
   namespace: string | undefined,
   body: ResourceTypeMap[T]
 ): Promise<ResourceTypeMap[T]> => {
-  const endpoint = `/${resource}/${namespace || '_all'}`
-  return await apiClient.post<ResourceTypeMap[T]>(`${endpoint}`, body)
+  if (resource === 'helmrelease') {
+    return apiClient.post<ResourceTypeMap[T]>(
+      `/${resource}/${namespace || '_all'}`,
+      body
+    )
+  }
+  const endpoint = await getKubernetesResourcePath(resource, namespace)
+  return await apiClient.post<ResourceTypeMap[T]>(endpoint, body)
 }
 
 export const deleteResource = async <T extends ResourceType>(
@@ -597,14 +558,20 @@ export const deleteResource = async <T extends ResourceType>(
     wait?: boolean
   }
 ): Promise<void> => {
-  const params = new URLSearchParams()
+  if (resource === 'helmrelease') {
+    await apiClient.delete(`/${resource}/${namespace || '_all'}/${name}`)
+    return
+  }
+  const endpoint = await getKubernetesResourcePath(resource, namespace, name)
   if (opts?.force) {
-    params.append('force', 'true')
+    await apiClient.deleteWithBody(endpoint, {
+      apiVersion: 'v1',
+      kind: 'DeleteOptions',
+      gracePeriodSeconds: 0,
+      propagationPolicy: 'Background',
+    })
+    return
   }
-  if (opts?.wait === false) {
-    params.append('wait', 'false')
-  }
-  const endpoint = `/${resource}/${namespace || '_all'}/${name}?${params.toString()}`
   await apiClient.delete(endpoint)
 }
 
@@ -641,15 +608,26 @@ export const useResourcesEvents = <T extends ResourceType>(
 ) => {
   return useQuery({
     queryKey: ['resource-events', resource, namespace, name],
-    queryFn: () => {
-      const endpoint =
-        '/events/resources?' +
-        new URLSearchParams({
-          resource: resource,
-          name: name,
-          namespace: namespace || '',
-        }).toString()
-      return fetchAPI<ResourcesTypeMap['events']>(endpoint)
+    queryFn: async () => {
+      const target = await fetchResource<ResourceTypeMap[T]>(
+        resource,
+        name,
+        namespace
+      )
+      const targetIdentity = target as {
+        kind?: string
+        metadata?: { uid?: string }
+      }
+      const selectors = [
+        targetIdentity.kind ? `involvedObject.kind=${targetIdentity.kind}` : '',
+        `involvedObject.name=${name}`,
+        targetIdentity.metadata?.uid
+          ? `involvedObject.uid=${targetIdentity.metadata.uid}`
+          : '',
+      ].filter(Boolean)
+      return fetchResources<ResourcesTypeMap['events']>('events', namespace, {
+        fieldSelector: selectors.join(','),
+      })
     },
     select: (data: ResourcesTypeMap['events']): ResourcesItems<'events'> =>
       data.items,
@@ -667,7 +645,6 @@ export const useResources = <T extends ResourceType>(
     fieldSelector?: string
     refreshInterval?: number
     disable?: boolean
-    reduce?: boolean
   }
 ) => {
   return useQuery({
@@ -684,7 +661,6 @@ export const useResources = <T extends ResourceType>(
         continueToken: undefined,
         labelSelector: options?.labelSelector,
         fieldSelector: options?.fieldSelector,
-        reduce: options?.reduce,
       })
     },
     enabled: !options?.disable,
@@ -702,7 +678,6 @@ export function useResourcesWatch<T extends ResourceType>(
   options?: {
     labelSelector?: string
     fieldSelector?: string
-    reduce?: boolean
     enabled?: boolean
   }
 ) {
@@ -710,49 +685,66 @@ export function useResourcesWatch<T extends ResourceType>(
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
   const [isConnected, setIsConnected] = useState(false)
-  const eventSourceRef = useRef<EventSource | null>(null)
+  const abortControllerRef = useRef<AbortController | null>(null)
+  const metricsRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const buildUrl = useCallback(() => {
-    const ns = namespace || '_all'
+  const buildQuery = useCallback(() => {
     const params = new URLSearchParams()
-    if (options?.reduce !== false) params.append('reduce', 'true')
     if (options?.labelSelector)
       params.append('labelSelector', options.labelSelector)
     if (options?.fieldSelector)
       params.append('fieldSelector', options.fieldSelector)
-    appendCurrentClusterParam(params)
-    return withSubPath(
-      `${API_BASE_URL}/${resource}/${ns}/watch?${params.toString()}`
-    )
-  }, [
-    resource,
-    namespace,
-    options?.reduce,
-    options?.labelSelector,
-    options?.fieldSelector,
-  ])
+    return params
+  }, [options?.labelSelector, options?.fieldSelector])
 
   const disconnect = useCallback(() => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close()
-      eventSourceRef.current = null
+    abortControllerRef.current?.abort()
+    abortControllerRef.current = null
+    if (metricsRefreshRef.current) {
+      clearInterval(metricsRefreshRef.current)
+      metricsRefreshRef.current = null
     }
   }, [])
 
-  const connect = useCallback(() => {
+  const connect = useCallback(async () => {
     disconnect()
     setData(undefined)
     if (options?.enabled === false) return
-    const url = buildUrl()
+    const controller = new AbortController()
+    abortControllerRef.current = controller
     setError(null)
     setIsConnected(false)
+    setIsLoading(true)
 
     try {
-      const es = new EventSource(url, { withCredentials: true })
-      eventSourceRef.current = es
+      const endpoint = await getKubernetesResourcePath(resource, namespace)
+      const list = await fetchResources<ResourcesTypeMap[T]>(
+        resource,
+        namespace,
+        {
+          labelSelector: options?.labelSelector,
+          fieldSelector: options?.fieldSelector,
+        }
+      )
+      if (controller.signal.aborted) return
+      setData(list.items)
+      setIsLoading(false)
 
-      es.onopen = () => {
-        setIsConnected(true)
+      if (resource === 'pods' || resource === 'nodes') {
+        metricsRefreshRef.current = setInterval(() => {
+          void fetchResources<ResourcesTypeMap[T]>(resource, namespace, {
+            labelSelector: options?.labelSelector,
+            fieldSelector: options?.fieldSelector,
+          })
+            .then((refreshed) => {
+              if (!controller.signal.aborted) setData(refreshed.items)
+            })
+            .catch((refreshError: unknown) => {
+              if (!controller.signal.aborted && refreshError instanceof Error) {
+                setError(refreshError)
+              }
+            })
+        }, 15_000)
       }
 
       const getKey = (obj: ResourceTypeMap[T]) => {
@@ -761,8 +753,7 @@ export function useResourcesWatch<T extends ResourceType>(
         )
       }
 
-      const upsert = (obj: string) => {
-        const object = JSON.parse(obj) as ResourceTypeMap[T]
+      const upsert = (object: ResourceTypeMap[T]) => {
         setData((prev) => {
           const arr = prev ? [...prev] : []
           const key = getKey(object)
@@ -775,8 +766,7 @@ export function useResourcesWatch<T extends ResourceType>(
         })
       }
 
-      const remove = (obj: string) => {
-        const object = JSON.parse(obj) as ResourceTypeMap[T]
+      const remove = (object: ResourceTypeMap[T]) => {
         setData((prev) => {
           const arr = prev ? [...prev] : []
           const key = getKey(object)
@@ -787,48 +777,79 @@ export function useResourcesWatch<T extends ResourceType>(
         })
       }
 
-      es.addEventListener('added', (e: MessageEvent<string>) => {
-        upsert(e.data)
-      })
-      es.addEventListener('modified', (e: MessageEvent<string>) => {
-        upsert(e.data)
-      })
-      es.addEventListener('deleted', (e: MessageEvent<string>) => {
-        remove(e.data)
-      })
+      const watchParams = buildQuery()
+      watchParams.set('watch', 'true')
+      watchParams.set('allowWatchBookmarks', 'true')
+      const resourceVersion = list.metadata?.resourceVersion
+      if (resourceVersion) watchParams.set('resourceVersion', resourceVersion)
+      const response = await apiClient.request(
+        `${endpoint}?${watchParams.toString()}`,
+        { signal: controller.signal }
+      )
+      if (!response.ok) {
+        const status = (await response.json().catch(() => undefined)) as
+          { message?: string } | undefined
+        throw new Error(status?.message || `Watch failed (${response.status})`)
+      }
+      if (!response.body) throw new Error('Watch response has no body')
+      setIsConnected(true)
 
-      es.addEventListener('error', (e: MessageEvent) => {
-        try {
-          const payload = JSON.parse(e.data)
-          setError(new Error(payload?.error || 'SSE error'))
-        } catch {
-          setError(new Error('SSE error'))
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      while (!controller.signal.aborted) {
+        const { done, value } = await reader.read()
+        buffer += decoder.decode(value, { stream: !done })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
+        for (const line of lines) {
+          if (!line.trim()) continue
+          const event = JSON.parse(line) as {
+            type: 'ADDED' | 'MODIFIED' | 'DELETED' | 'BOOKMARK' | 'ERROR'
+            object: ResourceTypeMap[T] & { message?: string }
+          }
+          if (event.type === 'ADDED' || event.type === 'MODIFIED') {
+            upsert(event.object)
+          } else if (event.type === 'DELETED') {
+            remove(event.object)
+          } else if (event.type === 'ERROR') {
+            throw new Error(event.object.message || 'Kubernetes watch failed')
+          }
         }
-        setIsLoading(false)
-        setIsConnected(false)
-      })
-      es.addEventListener('close', () => {
-        setIsConnected(false)
-      })
-
-      es.onerror = () => {
-        setIsConnected(false)
+        if (done) break
       }
     } catch (err) {
-      if (err instanceof Error) setError(err)
+      if (!controller.signal.aborted && err instanceof Error) setError(err)
       setIsLoading(false)
       setIsConnected(false)
+    } finally {
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null
+        setIsConnected(false)
+      }
+      if (metricsRefreshRef.current) {
+        clearInterval(metricsRefreshRef.current)
+        metricsRefreshRef.current = null
+      }
     }
-  }, [buildUrl, disconnect, options?.enabled])
+  }, [
+    buildQuery,
+    disconnect,
+    namespace,
+    options?.enabled,
+    options?.fieldSelector,
+    options?.labelSelector,
+    resource,
+  ])
 
   const refetch = useCallback(() => {
     disconnect()
-    setTimeout(connect, 100)
+    void connect()
   }, [disconnect, connect])
 
   useEffect(() => {
     if (options?.enabled === false) return
-    connect()
+    void connect()
     return () => {
       disconnect()
     }
@@ -843,10 +864,13 @@ export const fetchResource = <T>(
   namespace?: string,
   cluster?: string | null
 ): Promise<T> => {
-  const resourcePath = namespace
-    ? `/${resource}/${namespace}/${name}`
-    : `/${resource}/${name}`
-  return fetchAPI<T>(withCurrentClusterPath(resourcePath, cluster))
+  if (resource === 'helmrelease') {
+    const path = `/${resource}/${namespace || '_all'}/${name}`
+    return fetchAPI<T>(withCurrentClusterPath(path, cluster))
+  }
+  return getKubernetesResourcePath(resource, namespace, name).then((path) =>
+    fetchAPI<T>(withCurrentClusterPath(path, cluster))
+  )
 }
 export const useResource = <T extends keyof ResourceTypeMap>(
   resource: T,

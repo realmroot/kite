@@ -1,119 +1,59 @@
 package auth
 
 import (
+	"context"
+	"errors"
 	"net/http"
-	"strconv"
-	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/zxh326/kite/pkg/common"
-	"github.com/zxh326/kite/pkg/model"
-	"github.com/zxh326/kite/pkg/rbac"
+	"github.com/realmroot/lightkite/pkg/model"
+	"k8s.io/klog/v2"
 )
 
-func (h *AuthHandler) RequireAPIKeyAuth(c *gin.Context, token string) {
-	keyPart := strings.SplitN(token, "-", 2)
-	if len(keyPart) < 2 {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "Invalid API key",
-		})
-		c.Abort()
-		return
+const oidcSessionIDContextKey = "oidc-session-id"
+
+func OIDCSessionID(c *gin.Context) (uint, bool) {
+	value, exists := c.Get(oidcSessionIDContextKey)
+	if !exists {
+		return 0, false
 	}
-	id := keyPart[0]
-	key := keyPart[1]
-	dbID, err := strconv.ParseUint(id, 10, 64)
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "Invalid API key",
-		})
-		c.Abort()
-		return
-	}
-	apikey, err := model.GetUserByIDCached(dbID)
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "Invalid API key",
-		})
-		c.Abort()
-		return
-	}
-	if !apikey.Enabled || apikey.Provider != common.APIKeyProvider || key == "" || string(apikey.APIKey) == "" || key != string(apikey.APIKey) {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "Invalid API key",
-		})
-		c.Abort()
-		return
-	}
-	_ = model.LoginUser(apikey)
-	apikey.Roles = rbac.GetUserRoles(*apikey)
-	c.Set("user", *apikey)
+	sessionID, ok := value.(uint)
+	return sessionID, ok && sessionID != 0
 }
 
 func (h *AuthHandler) RequireAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if common.AnonymousUserEnabled {
-			u := model.GetAnonymousUser()
-			if u == nil {
-				c.Set("user", model.AnonymousUser)
-			} else {
-				u.Roles = model.AnonymousUser.Roles
-				c.Set("user", *u)
-			}
-			c.Next()
-			return
-		}
-		authHeader := c.GetHeader("Authorization")
-		if authHeader != "" {
-			if after, ok := strings.CutPrefix(authHeader, "kite"); ok {
-				h.RequireAPIKeyAuth(c, after)
-				return
-			}
-		}
-		tokenString, _ := c.Cookie("auth_token")
-		if tokenString == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"error": "Invalid or expired token",
-			})
-			c.Abort()
-			return
-		}
-
-		claims, err := h.manager.ValidateJWT(tokenString)
+		user, idToken, sessionID, err := h.oidc.authenticatedSession(c)
 		if err != nil {
-			refreshedToken, refreshErr := h.manager.RefreshJWT(c, tokenString)
-			if refreshErr != nil {
-				c.JSON(http.StatusUnauthorized, gin.H{
-					"error": "Invalid or expired token",
+			klog.V(2).Infof("OIDC session authentication failed: %v", err)
+			if transientSessionError(err) {
+				c.JSON(http.StatusServiceUnavailable, gin.H{
+					"error": "OIDC session refresh is temporarily unavailable",
 				})
-				setCookieSecure(c, "auth_token", "", -1)
 				c.Abort()
 				return
 			}
-			setCookieSecure(c, "auth_token", refreshedToken, common.CookieExpirationSeconds)
-			claims, err = h.manager.ValidateJWT(refreshedToken)
-			if err != nil {
-				c.JSON(http.StatusUnauthorized, gin.H{
-					"error": "Failed to validate refreshed token",
-				})
-				setCookieSecure(c, "auth_token", "", -1)
-				c.Abort()
-				return
-			}
-		}
-		user, err := model.GetUserByIDCached(uint64(claims.UserID))
-		if err != nil || !user.Enabled {
 			c.JSON(http.StatusUnauthorized, gin.H{
-				"error": "user not found",
+				"error": "Invalid or expired OIDC session",
 			})
-			setCookieSecure(c, "auth_token", "", -1)
+			setCookieSecure(c, sessionCookieName, "", -1)
 			c.Abort()
 			return
 		}
-		user.Roles = rbac.GetUserRoles(*user)
 		c.Set("user", *user)
+		c.Set("platform-admin", platformAdmin(*user))
+		c.Set(idTokenContextKey, idToken)
+		c.Set(oidcSessionIDContextKey, sessionID)
 		c.Next()
 	}
+}
+
+func transientSessionError(err error) bool {
+	var credentialError *SessionCredentialError
+	if errors.As(err, &credentialError) {
+		return !credentialError.Permanent
+	}
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
 }
 
 func (h *AuthHandler) RequireAdmin() gin.HandlerFunc {
@@ -128,7 +68,7 @@ func (h *AuthHandler) RequireAdmin() gin.HandlerFunc {
 		}
 
 		u := user.(model.User)
-		if !rbac.UserHasRole(u, model.DefaultAdminRole.Name) {
+		if !platformAdmin(u) {
 			c.JSON(http.StatusForbidden, gin.H{
 				"error": "Admin role required",
 			})

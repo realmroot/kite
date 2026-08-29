@@ -20,10 +20,9 @@ export function SiteHeader() {
   const isMobile = useIsMobile()
   const navigate = useNavigate()
   const { user, capabilities } = useAuth()
-  const { toggleTerminal, isOpen } = useTerminal()
+  const { isOpen, toggleTerminal } = useTerminal()
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const isAdmin = user?.isAdmin() ?? false
-  const kubectlEnabled = capabilities.kubectlEnabled
 
   return (
     <>
@@ -42,8 +41,9 @@ export function SiteHeader() {
               onClick={() => setCreateDialogOpen(true)}
               aria-label="Create new resource"
             />
-            {isAdmin && kubectlEnabled && (
+            {user && capabilities.kubectlEnabled && (
               <button
+                type="button"
                 onClick={toggleTerminal}
                 title="Kubectl Terminal"
                 aria-label="Toggle Kubectl Terminal"

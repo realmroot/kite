@@ -24,20 +24,27 @@ export const ClusterContext = createContext<ClusterContextType | undefined>(
   undefined
 )
 
+const shouldRefreshForClusterSwitch = (query: {
+  queryKey: readonly unknown[]
+}) => {
+  const key = query.queryKey[0]
+  return typeof key === 'string' && !['user', 'auth', 'clusters'].includes(key)
+}
+
 export const ClusterProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
-  const [clusters, setClusters] = useState<Cluster[]>([])
   const [currentCluster, setCurrentClusterState] = useState<string | null>(
     getCurrentCluster()
   )
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<Error | null>(null)
   const [isSwitching, setIsSwitching] = useState(false)
   const queryClient = useQueryClient()
-  const { refetch: refetchClusters } = useCurrentClusterList({
-    enabled: false,
-  })
+  const {
+    data: clusters = [],
+    isLoading,
+    error: queryError,
+  } = useCurrentClusterList()
+  const error = queryError instanceof Error ? queryError : null
 
   useEffect(() => {
     if (currentCluster) {
@@ -48,51 +55,30 @@ export const ClusterProvider: React.FC<{ children: React.ReactNode }> = ({
   }, [currentCluster])
 
   useEffect(() => {
-    let cancelled = false
-
-    const bootstrap = async () => {
-      setIsLoading(true)
-      const result = await refetchClusters()
-      if (cancelled) {
-        return
-      }
-
-      if (result.data) {
-        setClusters(result.data)
-        setError(null)
-      } else {
-        setClusters([])
-        setError(result.error instanceof Error ? result.error : null)
-      }
-      setIsLoading(false)
+    if (clusters.length === 0) {
+      return
     }
 
-    void bootstrap()
-
-    return () => {
-      cancelled = true
-    }
-  }, [refetchClusters])
-
-  useEffect(() => {
-    if (clusters.length > 0 && !currentCluster) {
+    if (
+      !currentCluster ||
+      !clusters.some((cluster) => cluster.name === currentCluster)
+    ) {
       const defaultCluster = clusters.find((cluster) => cluster.isDefault)
       const nextCluster = defaultCluster
         ? defaultCluster.name
         : clusters[0].name
       setCurrentClusterState(nextCluster)
       persistCurrentCluster(nextCluster)
-    }
 
-    if (
-      currentCluster &&
-      clusters.length > 0 &&
-      !clusters.some((cluster) => cluster.name === currentCluster)
-    ) {
-      setCurrentClusterState(null)
-      clearCurrentCluster()
+      void queryClient
+        .resetQueries({ predicate: shouldRefreshForClusterSwitch })
+        .catch(() => {
+          toast.error('Failed to load the selected cluster', {
+            id: 'cluster-switch',
+          })
+        })
     }
-  }, [clusters, currentCluster])
+  }, [clusters, currentCluster, queryClient])
 
   const setCurrentCluster = async (clusterName: string) => {
     if (clusterName === currentCluster || isSwitching) {
@@ -104,11 +90,8 @@ export const ClusterProvider: React.FC<{ children: React.ReactNode }> = ({
     persistCurrentCluster(clusterName)
 
     try {
-      await queryClient.invalidateQueries({
-        predicate: (query) => {
-          const key = query.queryKey[0] as string
-          return !['user', 'auth', 'clusters'].includes(key)
-        },
+      await queryClient.resetQueries({
+        predicate: shouldRefreshForClusterSwitch,
       })
       toast.success(`Switched to cluster: ${clusterName}`, {
         id: 'cluster-switch',

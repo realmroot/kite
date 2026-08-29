@@ -3,22 +3,19 @@
 layout: home
 
 hero:
-  name: "Kite"
+  name: "Lightkite"
   text: "A modern Kubernetes dashboard"
-  tagline: "Unify observability, multi-cluster operations, user governance, and AI agents in one workspace"
+  tagline: "Inspect, operate, and troubleshoot Kubernetes resources across clusters"
   image:
     src: /logo.svg
-    alt: Kite Logo
+    alt: Lightkite Logo
   actions:
     - theme: brand
       text: Get Started
       link: /guide/
     - theme: alt
-      text: View on GitHub
-      link: https://github.com/kite-org/kite
-    - theme: alt
-      text: View Demo
-      link: https://kite-demo.zzde.me
+      text: Architecture
+      link: /oidc-kubernetes
 
 features:
   - icon: 🖥️
@@ -26,7 +23,7 @@ features:
     details: Dark/light/color themes, global search, responsive design, and i18n support
   - icon: 🏘
     title: Multi-Cluster Management
-    details: Switch clusters quickly with per-cluster Prometheus setup, kubeconfig discovery, and fine-grained access control
+    details: Credential-free HTTPS API connections with Kubernetes-authorized Prometheus
   - icon: 🔍
     title: Resource Management
     details: Full resource coverage, live YAML editing, relationship view, CRD support, and kube proxy access
@@ -35,8 +32,5 @@ features:
     details: Real-time metrics, live logs, pod/node web terminal, and built-in kubectl console
   - icon: 🔐
     title: Security
-    details: OAuth integration, MFA, passkey login, RBAC, user management, role mapping, and audit logs
-  - icon: 🤖
-    title: AI Assistant
-    details: Built-in AI assistant to speed up cluster operations and troubleshooting
+    details: Standard OIDC sessions, direct identity propagation, Kubernetes-native RBAC, and audit history
 ---

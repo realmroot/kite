@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/zxh326/kite/pkg/common"
+	"github.com/realmroot/lightkite/pkg/common"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -34,16 +34,6 @@ func IsPodReady(pod *corev1.Pod) bool {
 		if condition.Type == corev1.PodReady && condition.Status == corev1.ConditionTrue {
 			return true
 		}
-	}
-	return false
-}
-
-func IsPodErrorOrSuccess(pod *corev1.Pod) bool {
-	if pod == nil {
-		return false
-	}
-	if pod.Status.Phase == corev1.PodFailed || pod.Status.Phase == corev1.PodSucceeded {
-		return true
 	}
 	return false
 }

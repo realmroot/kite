@@ -48,7 +48,9 @@ export function ClusterSelector() {
           <span className="text-sm font-medium truncate">
             {isSwitching
               ? 'Switching...'
-              : currentClusterData?.name || 'Select Cluster'}
+              : currentClusterData?.displayName ||
+                currentClusterData?.name ||
+                'Select Cluster'}
           </span>
           <IconChevronDown className="h-3 w-3 opacity-50" />
         </Button>
@@ -63,7 +65,9 @@ export function ClusterSelector() {
           >
             <div className="flex flex-col overflow-hidden">
               <div className="flex items-center gap-2">
-                <span className="font-medium">{cluster.name}</span>
+                <span className="font-medium">
+                  {cluster.displayName || cluster.name}
+                </span>
                 {cluster.isDefault && (
                   <Badge className="text-xs">Default</Badge>
                 )}
@@ -82,7 +86,7 @@ export function ClusterSelector() {
                 )}
                 title={cluster.error}
               >
-                {cluster.error || cluster.version}
+                {cluster.error || cluster.version || cluster.name}
               </span>
             </div>
             {currentCluster === cluster.name && (
