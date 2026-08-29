@@ -13,7 +13,7 @@ Kite supports several environment variables by default to change the default val
 - **PLATFORM_ADMIN_GROUPS**: Groups allowed to manage Kite-owned shared metadata. Comma/space-separated values remain supported; use a JSON string array such as `["operators,west","platform admins"]` to preserve claim values containing separators. This does not grant Kubernetes access.
 - **PLATFORM_ADMIN_SUBJECTS**: Exact OIDC `sub` values with the same platform access. It accepts the same legacy-list or JSON-array syntax and is useful when the issuer does not emit groups.
 - **CLUSTER_GATEWAY_URL**: Optional Kube Cluster Hub root URL. When set, Kite
-  requests `${CLUSTER_GATEWAY_URL}/api/catalog` as an RFC 8707 resource,
+  requests `${CLUSTER_GATEWAY_URL}/api` as an RFC 8707 resource,
   retains only a local metadata projection, uses the Access Token for catalog
   calls, and uses the ID Token for Kubernetes calls.
 

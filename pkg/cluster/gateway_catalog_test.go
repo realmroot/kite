@@ -24,11 +24,11 @@ func TestGatewayCatalogProjectsCredentialFreeClusters(t *testing.T) {
 			ConnectorID: "development", ConnectorURL: "https://connector.example.test", Enabled: true, Default: true, ResourceVersion: 7,
 		}
 		switch r.URL.Path {
-		case "/api/catalog/clusters":
+		case "/api/clusters":
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"items": []gatewayCluster{cluster}, "pagination": map[string]any{"pageSize": 200},
 			})
-		case "/api/catalog/clusters/development":
+		case "/api/clusters/development":
 			_ = json.NewEncoder(w).Encode(cluster)
 		default:
 			http.NotFound(w, r)

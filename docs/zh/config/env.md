@@ -12,7 +12,7 @@ Kite 默认支持一些环境变量，来改变一些配置项的默认值。
 - **OIDC_NAME_CLAIM** / **OIDC_PICTURE_CLAIM**：可选的资料 Claim 名称，默认分别为 `name` 和 `picture`。
 - **PLATFORM_ADMIN_GROUPS**：可管理 Kite 自有共享元数据的 OIDC Group。继续兼容逗号/空格分隔；Claim 值本身含分隔符时使用 JSON 字符串数组，例如 `["operators,west","platform admins"]`。该配置不会授予 Kubernetes 权限。
 - **PLATFORM_ADMIN_SUBJECTS**：具有相同平台权限的精确 OIDC `sub`。支持相同的旧列表或 JSON 数组语法，适用于不返回 Group 的部署。
-- **CLUSTER_GATEWAY_URL**：可选的 Kube Cluster Hub 根地址。配置后，Kite 会将 `${CLUSTER_GATEWAY_URL}/api/catalog` 作为 RFC 8707 Resource 请求，目录调用使用 Access Token，Kubernetes 调用使用 ID Token。
+- **CLUSTER_GATEWAY_URL**：可选的 Kube Cluster Hub 根地址。配置后，Kite 会将 `${CLUSTER_GATEWAY_URL}/api` 作为 RFC 8707 Resource 请求，目录调用使用 Access Token，Kubernetes 调用使用 ID Token。
 
 - **JWT_SECRET**：用于签名和验证 JWT 的密钥
 - **KITE_ENCRYPT_KEY**：用于加密服务端 OIDC Token 的密钥。

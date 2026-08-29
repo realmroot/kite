@@ -21,7 +21,7 @@ import (
 
 const (
 	gatewayCatalogSource = "cluster-gateway"
-	gatewayAPIVersion    = "2026-08-28"
+	gatewayAPIVersion    = "2026-08-29"
 )
 
 type gatewayCatalog struct {
@@ -108,7 +108,7 @@ func (g *gatewayCatalog) List(ctx context.Context, token string) ([]gatewayClust
 			query.Set("pageToken", pageToken)
 		}
 		var page gatewayClusterPage
-		if err := g.request(ctx, token, http.MethodGet, "/api/catalog/clusters?"+query.Encode(), "", nil, &page); err != nil {
+		if err := g.request(ctx, token, http.MethodGet, "/api/clusters?"+query.Encode(), "", nil, &page); err != nil {
 			return nil, err
 		}
 		items = append(items, page.Items...)
@@ -121,7 +121,7 @@ func (g *gatewayCatalog) List(ctx context.Context, token string) ([]gatewayClust
 
 func (g *gatewayCatalog) Get(ctx context.Context, token, id string) (*gatewayCluster, error) {
 	var cluster gatewayCluster
-	if err := g.request(ctx, token, http.MethodGet, "/api/catalog/clusters/"+url.PathEscape(id), "", nil, &cluster); err != nil {
+	if err := g.request(ctx, token, http.MethodGet, "/api/clusters/"+url.PathEscape(id), "", nil, &cluster); err != nil {
 		return nil, err
 	}
 	return &cluster, nil
@@ -139,14 +139,14 @@ func (g *gatewayCatalog) Put(ctx context.Context, token string, cluster gatewayC
 		Enabled: cluster.Enabled, Default: cluster.Default,
 	}
 	var stored gatewayCluster
-	if err := g.request(ctx, token, http.MethodPut, "/api/catalog/clusters/"+url.PathEscape(cluster.ID), precondition, input, &stored); err != nil {
+	if err := g.request(ctx, token, http.MethodPut, "/api/clusters/"+url.PathEscape(cluster.ID), precondition, input, &stored); err != nil {
 		return nil, err
 	}
 	return &stored, nil
 }
 
 func (g *gatewayCatalog) Delete(ctx context.Context, token, id string, resourceVersion uint64) error {
-	return g.request(ctx, token, http.MethodDelete, "/api/catalog/clusters/"+url.PathEscape(id), `"`+strconv.FormatUint(resourceVersion, 10)+`"`, nil, nil)
+	return g.request(ctx, token, http.MethodDelete, "/api/clusters/"+url.PathEscape(id), `"`+strconv.FormatUint(resourceVersion, 10)+`"`, nil, nil)
 }
 
 func (g *gatewayCatalog) AuditEvents(ctx context.Context, token, pageToken string, pageSize int) (*GatewayAuditPage, error) {
@@ -155,7 +155,7 @@ func (g *gatewayCatalog) AuditEvents(ctx context.Context, token, pageToken strin
 		query.Set("pageToken", pageToken)
 	}
 	var page GatewayAuditPage
-	if err := g.request(ctx, token, http.MethodGet, "/api/catalog/audit-events?"+query.Encode(), "", nil, &page); err != nil {
+	if err := g.request(ctx, token, http.MethodGet, "/api/audit-events?"+query.Encode(), "", nil, &page); err != nil {
 		return nil, err
 	}
 	return &page, nil

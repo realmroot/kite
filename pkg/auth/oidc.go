@@ -146,7 +146,7 @@ func oidcResourceOptions() []oauth2.AuthCodeOption {
 		return nil
 	}
 	return []oauth2.AuthCodeOption{
-		oauth2.SetAuthURLParam("resource", common.ClusterGatewayURL+"/api/catalog"),
+		oauth2.SetAuthURLParam("resource", common.ClusterGatewayURL+"/api"),
 	}
 }
 

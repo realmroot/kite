@@ -47,7 +47,7 @@ func TestOIDCResourceOptionsTargetConfiguredClusterCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := request.URL.Query().Get("resource"); got != "https://hub.example.com/api/catalog" {
+	if got := request.URL.Query().Get("resource"); got != "https://hub.example.com/api" {
 		t.Fatalf("resource = %q", got)
 	}
 }
