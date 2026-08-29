@@ -90,6 +90,9 @@ jobs:
           cache: true
           check-latest: true
 
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install --yes ripgrep
+
       - name: Install deps
         run: make deps
       - name: Build
