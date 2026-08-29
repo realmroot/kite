@@ -47,6 +47,9 @@ Lightkite is installed as a new deployment. It does not support converting or
 upgrading an existing Kite installation in place. Use a new release, namespace,
 configuration, Secret, and database or PVC.
 
+Lightkite starts its independent release line at `v0.1.0`; upstream Kite version
+numbers describe ancestry only and are not Lightkite upgrade predecessors.
+
 The existing `KITE_*` environment-variable names remain the supported Lightkite
 configuration interface. This is an intentional configuration convention, not
 an upgrade or data-migration promise.

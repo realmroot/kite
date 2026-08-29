@@ -42,6 +42,9 @@ Lightkite 保留与新安全模型相容的 Dashboard 能力，包括资源查�
 Lightkite 只作为全新部署安装，不支持把现有 Kite 安装原地转换或升级为
 Lightkite。部署时应使用新的 Release、Namespace、配置、Secret 和数据库或 PVC。
 
+Lightkite 的独立版本线从 `v0.1.0` 开始；上游 Kite 的版本号只用于说明代码来源，
+不是 Lightkite 的升级前置版本。
+
 现有 `KITE_*` 环境变量名称继续作为 Lightkite 的配置接口。这是有意保留的配置
 约定，不代表项目承诺提供升级或数据迁移能力。
 
