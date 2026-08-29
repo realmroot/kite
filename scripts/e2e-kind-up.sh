@@ -9,6 +9,7 @@ OIDC_CA_FILE="${OIDC_CERT_DIR}/ca.crt"
 NODE_IMAGE="${E2E_NODE_IMAGE:-}"
 CONTROL_PLANE="${KIND_NAME}-control-plane"
 FORWARDER="${KIND_NAME}-oidc-forwarder"
+DEX_CONTAINER="${E2E_DEX_CONTAINER:-lightkite-e2e-dex}"
 RUNTIME_CONFIG="$(mktemp "${TMPDIR:-/tmp}/lightkite-kind.XXXXXX.yaml")"
 
 cleanup() {
@@ -21,11 +22,23 @@ sed "s|__OIDC_CA_FILE__|${OIDC_CA_FILE}|g" \
   "${ROOT_DIR}/e2e/fixtures/kind/config.yaml" >"${RUNTIME_CONFIG}"
 
 start_forwarder() {
+  if ! docker inspect "${DEX_CONTAINER}" >/dev/null 2>&1; then
+    printf 'OIDC provider container %s does not exist\n' "${DEX_CONTAINER}" >&2
+    return 1
+  fi
+  docker network connect kind "${DEX_CONTAINER}" >/dev/null 2>&1 || true
+  DEX_IP="$(docker inspect \
+    --format '{{with index .NetworkSettings.Networks "kind"}}{{.IPAddress}}{{end}}' \
+    "${DEX_CONTAINER}")"
+  if [ -z "${DEX_IP}" ]; then
+    printf 'OIDC provider container %s is not attached to the kind network\n' "${DEX_CONTAINER}" >&2
+    return 1
+  fi
   docker rm -f "${FORWARDER}" >/dev/null 2>&1 || true
   docker run -d --name "${FORWARDER}" \
     --network "container:${CONTROL_PLANE}" \
     alpine/socat:1.8.0.3 \
-    TCP-LISTEN:5556,fork,reuseaddr TCP:host.docker.internal:5556 >/dev/null
+    TCP-LISTEN:5556,fork,reuseaddr "TCP:${DEX_IP}:5556" >/dev/null
 }
 
 install_metrics_server() {
