@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/zxh326/kite/pkg/common"
 	"github.com/zxh326/kite/pkg/model"
+	"k8s.io/klog/v2"
 )
 
 type bootstrapAuthOptions struct {
@@ -34,7 +35,14 @@ func (h *AuthHandler) Bootstrap(c *gin.Context) {
 		return
 	}
 
-	user := h.bootstrapUser(c, setting)
+	user, authErr := h.bootstrapUser(c, setting)
+	if authErr != nil {
+		klog.V(2).Infof("OIDC bootstrap authentication failed: %v", authErr)
+		if transientSessionError(authErr) {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "OIDC session refresh is temporarily unavailable"})
+			return
+		}
+	}
 
 	globalSidebarPreference := strings.TrimSpace(setting.GlobalSidebarPreference)
 	if user == nil {
@@ -64,16 +72,16 @@ func (h *AuthHandler) bootstrapAuth(setting *model.GeneralSetting) bootstrapAuth
 	}
 }
 
-func (h *AuthHandler) bootstrapUser(c *gin.Context, setting *model.GeneralSetting) *model.User {
+func (h *AuthHandler) bootstrapUser(c *gin.Context, setting *model.GeneralSetting) (*model.User, error) {
 	user, _, _, err := h.oidc.authenticatedSession(c)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 
 	currentUser := *user
 	applyBootstrapSidebarPreference(&currentUser, setting)
 
-	return &currentUser
+	return &currentUser, nil
 }
 
 func applyBootstrapSidebarPreference(user *model.User, setting *model.GeneralSetting) {

@@ -264,6 +264,24 @@ func TestOIDCSessionRefreshLocksAreSharded(t *testing.T) {
 	}
 }
 
+func TestOIDCRefreshContextOutlivesCanceledBrowserRequest(t *testing.T) {
+	requestContext, cancelRequest := context.WithCancel(context.Background())
+	cancelRequest()
+
+	refreshContext, cancelRefresh := oidcRefreshContext(requestContext)
+	defer cancelRefresh()
+	if err := refreshContext.Err(); err != nil {
+		t.Fatalf("refresh context inherited browser cancellation: %v", err)
+	}
+	deadline, ok := refreshContext.Deadline()
+	if !ok {
+		t.Fatal("refresh context has no deadline")
+	}
+	if remaining := time.Until(deadline); remaining <= 0 || remaining > oidcRefreshTimeout {
+		t.Fatalf("refresh deadline remaining = %v, want within %v", remaining, oidcRefreshTimeout)
+	}
+}
+
 func TestIDTokenForMissingSessionIsPermanent(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	if err != nil {

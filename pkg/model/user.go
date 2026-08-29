@@ -60,15 +60,19 @@ func GetUserByID(id uint64) (*User, error) {
 }
 
 func FindWithSubOrUpsertUser(user *User) error {
+	return FindWithSubOrUpsertUserDB(DB, user)
+}
+
+func FindWithSubOrUpsertUserDB(db *gorm.DB, user *User) error {
 	if user.Issuer == "" || user.Sub == "" {
 		return errors.New("OIDC issuer and subject are required")
 	}
 	var existing User
 	now := time.Now()
 	user.LastLoginAt = &now
-	err := DB.Where("issuer = ? AND sub = ?", user.Issuer, user.Sub).First(&existing).Error
+	err := db.Where("issuer = ? AND sub = ?", user.Issuer, user.Sub).First(&existing).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return DB.Create(user).Error
+		return db.Create(user).Error
 	}
 	if err != nil {
 		return err
@@ -76,7 +80,7 @@ func FindWithSubOrUpsertUser(user *User) error {
 	user.ID = existing.ID
 	user.CreatedAt = existing.CreatedAt
 	user.SidebarPreference = existing.SidebarPreference
-	if err := DB.Save(user).Error; err != nil {
+	if err := db.Save(user).Error; err != nil {
 		return err
 	}
 	InvalidateUserCache(uint64(user.ID))

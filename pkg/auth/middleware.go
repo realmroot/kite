@@ -1,6 +1,8 @@
 package auth
 
 import (
+	"context"
+	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -24,6 +26,13 @@ func (h *AuthHandler) RequireAuth() gin.HandlerFunc {
 		user, idToken, sessionID, err := h.oidc.authenticatedSession(c)
 		if err != nil {
 			klog.V(2).Infof("OIDC session authentication failed: %v", err)
+			if transientSessionError(err) {
+				c.JSON(http.StatusServiceUnavailable, gin.H{
+					"error": "OIDC session refresh is temporarily unavailable",
+				})
+				c.Abort()
+				return
+			}
 			c.JSON(http.StatusUnauthorized, gin.H{
 				"error": "Invalid or expired OIDC session",
 			})
@@ -37,6 +46,14 @@ func (h *AuthHandler) RequireAuth() gin.HandlerFunc {
 		c.Set(oidcSessionIDContextKey, sessionID)
 		c.Next()
 	}
+}
+
+func transientSessionError(err error) bool {
+	var credentialError *SessionCredentialError
+	if errors.As(err, &credentialError) {
+		return !credentialError.Permanent
+	}
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
 }
 
 func (h *AuthHandler) RequireAdmin() gin.HandlerFunc {

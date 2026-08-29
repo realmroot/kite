@@ -1,6 +1,8 @@
 package auth
 
 import (
+	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -13,6 +15,27 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
+
+func TestTransientSessionError(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{name: "temporary credential failure", err: &SessionCredentialError{Err: errors.New("provider unavailable")}, want: true},
+		{name: "permanent credential failure", err: &SessionCredentialError{Err: errors.New("invalid grant"), Permanent: true}, want: false},
+		{name: "request canceled", err: context.Canceled, want: true},
+		{name: "deadline exceeded", err: context.DeadlineExceeded, want: true},
+		{name: "unrelated failure", err: errors.New("database corrupt"), want: false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := transientSessionError(test.err); got != test.want {
+				t.Fatalf("transientSessionError() = %t, want %t", got, test.want)
+			}
+		})
+	}
+}
 
 func TestSetCookieSecureUsesCanonicalHostAndExactLifetime(t *testing.T) {
 	originalHost := common.Host

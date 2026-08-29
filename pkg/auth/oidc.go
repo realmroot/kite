@@ -30,6 +30,7 @@ const (
 	idTokenContextKey     = "oidc-id-token"
 	accessTokenContextKey = "oidc-access-token"
 	sessionLockShards     = 64
+	oidcRefreshTimeout    = 30 * time.Second
 )
 
 type oidcClaims struct {
@@ -417,10 +418,12 @@ func (a *oidcAuthenticator) sessionTokensForLoadedSession(ctx context.Context, s
 	refreshLock := &a.sessionRefreshLocks[session.ID%sessionLockShards]
 	refreshLock.Lock()
 	defer refreshLock.Unlock()
+	refreshCtx, cancelRefresh := oidcRefreshContext(ctx)
+	defer cancelRefresh()
 
 	var rawIDToken string
 	var accessToken string
-	err := model.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err := model.DB.WithContext(refreshCtx).Transaction(func(tx *gorm.DB) error {
 		current, err := model.GetOIDCSessionByID(tx.Clauses(clause.Locking{Strength: "UPDATE"}), session.ID)
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -429,7 +432,7 @@ func (a *oidcAuthenticator) sessionTokensForLoadedSession(ctx context.Context, s
 			return err
 		}
 		if time.Until(current.ExpiresAt) <= time.Minute {
-			if err := a.refreshSession(ctx, tx, current); err != nil {
+			if err := a.refreshSession(refreshCtx, tx, current); err != nil {
 				return err
 			}
 		}
@@ -442,6 +445,10 @@ func (a *oidcAuthenticator) sessionTokensForLoadedSession(ctx context.Context, s
 		_ = model.RevokeOIDCSession(session.ID, "OIDC authorization expired; re-enable this task to authorize it again")
 	}
 	return rawIDToken, accessToken, err
+}
+
+func oidcRefreshContext(requestContext context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(requestContext), oidcRefreshTimeout)
 }
 
 func (a *oidcAuthenticator) refreshSession(ctx context.Context, db *gorm.DB, session *model.OIDCSession) error {
@@ -484,7 +491,7 @@ func (a *oidcAuthenticator) refreshSession(ctx context.Context, db *gorm.DB, ses
 	updatedUser.ID = user.ID
 	updatedUser.CreatedAt = user.CreatedAt
 	updatedUser.SidebarPreference = user.SidebarPreference
-	if err := model.FindWithSubOrUpsertUser(updatedUser); err != nil {
+	if err := model.FindWithSubOrUpsertUserDB(db, updatedUser); err != nil {
 		return err
 	}
 	refreshToken := refreshed.RefreshToken
