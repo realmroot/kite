@@ -4,7 +4,9 @@
 .vscode
 .DS_Store
 
-bin
+bin/*
+!bin/lightkite-amd64
+!bin/lightkite-arm64
 kite
 lightkite
 static
