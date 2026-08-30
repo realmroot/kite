@@ -327,10 +327,6 @@ func newUserClientSet(name string, config *rest.Config, httpClient *http.Client,
 	return clientSet, nil
 }
 
-func NewClusterManager() (*ClusterManager, error) {
-	return NewClusterManagerWithContext(context.Background())
-}
-
 func NewClusterManagerWithContext(ctx context.Context) (*ClusterManager, error) {
 	cm := &ClusterManager{
 		runtimes:     make(map[uint]*clusterRuntime),

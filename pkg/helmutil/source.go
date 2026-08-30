@@ -36,10 +36,6 @@ type artifactHubPackage struct {
 	ContentURL string `json:"content_url"`
 }
 
-func LatestChartPackage(ctx context.Context, source, repositoryName, chartName string) (ChartPackage, error) {
-	return ResolveChartPackage(ctx, source, repositoryName, chartName, "")
-}
-
 // ResolveChartPackage resolves a chart package from a server-known catalog
 // identity. Callers never need to trust a client-supplied download URL.
 func ResolveChartPackage(ctx context.Context, source, repositoryName, chartName, version string) (ChartPackage, error) {
@@ -154,10 +150,6 @@ func artifactHubChartPackage(ctx context.Context, repositoryName, chartName, ver
 		Version: pkg.Version,
 		URL:     pkg.ContentURL,
 	}, nil
-}
-
-func IsChartVersionNewer(next, current string) bool {
-	return CompareChartVersions(next, current) > 0
 }
 
 func CompareChartVersions(a, b string) int {

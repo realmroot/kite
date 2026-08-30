@@ -12,13 +12,11 @@ import (
 	"github.com/realmroot/lightkite/pkg/kube"
 	"golang.org/x/sync/errgroup"
 	appsv1 "k8s.io/api/apps/v1"
-	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	v1 "k8s.io/api/networking/v1"
 	policyv1 "k8s.io/api/policy/v1"
-	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -347,51 +345,29 @@ func discoverPodsByPodDisruptionBudget(ctx context.Context, k8sClient *kube.K8sC
 	return relatedPods, nil
 }
 
-func discoverPodsByPodDisruptionBudgetV1Beta1(ctx context.Context, k8sClient *kube.K8sClient, namespace string, selector *metav1.LabelSelector) ([]common.RelatedResource, error) {
-	if selector == nil || isEmptyLabelSelector(selector) {
-		return []common.RelatedResource{}, nil
-	}
-	return discoverPodsByPodDisruptionBudget(ctx, k8sClient, namespace, selector)
-}
-
 func discoverPodDisruptionBudgetsByPod(ctx context.Context, k8sClient *kube.K8sClient, namespace string, podLabels map[string]string) ([]common.RelatedResource, error) {
 	if len(podLabels) == 0 {
 		return []common.RelatedResource{}, nil
 	}
 
 	var pdbList policyv1.PodDisruptionBudgetList
-	if err := k8sClient.List(ctx, &pdbList, client.InNamespace(namespace)); err == nil {
-		return matchingPodDisruptionBudgetsByPod(pdbList.Items, podLabels), nil
-	}
-
-	var betaPDBList policyv1beta1.PodDisruptionBudgetList
-	if err := k8sClient.List(ctx, &betaPDBList, client.InNamespace(namespace)); err != nil {
+	if err := k8sClient.List(ctx, &pdbList, client.InNamespace(namespace)); err != nil {
 		return nil, err
 	}
-
-	return matchingBetaPodDisruptionBudgetsByPod(betaPDBList.Items, podLabels), nil
+	return matchingPodDisruptionBudgetsByPod(pdbList.Items, podLabels), nil
 }
 
 func matchingPodDisruptionBudgetsByPod(items []policyv1.PodDisruptionBudget, podLabels map[string]string) []common.RelatedResource {
 	relatedPDBs := make([]common.RelatedResource, 0)
 	for _, pdb := range items {
-		relatedPDBs = appendMatchingPodDisruptionBudget(relatedPDBs, pdb.Namespace, pdb.Name, pdb.Spec.Selector, podLabels, false)
+		relatedPDBs = appendMatchingPodDisruptionBudget(relatedPDBs, pdb.Namespace, pdb.Name, pdb.Spec.Selector, podLabels)
 	}
 
 	return relatedPDBs
 }
 
-func matchingBetaPodDisruptionBudgetsByPod(items []policyv1beta1.PodDisruptionBudget, podLabels map[string]string) []common.RelatedResource {
-	relatedPDBs := make([]common.RelatedResource, 0)
-	for _, pdb := range items {
-		relatedPDBs = appendMatchingPodDisruptionBudget(relatedPDBs, pdb.Namespace, pdb.Name, pdb.Spec.Selector, podLabels, true)
-	}
-
-	return relatedPDBs
-}
-
-func appendMatchingPodDisruptionBudget(relatedPDBs []common.RelatedResource, namespace, name string, selector *metav1.LabelSelector, podLabels map[string]string, beta bool) []common.RelatedResource {
-	if selector == nil || beta && isEmptyLabelSelector(selector) {
+func appendMatchingPodDisruptionBudget(relatedPDBs []common.RelatedResource, namespace, name string, selector *metav1.LabelSelector, podLabels map[string]string) []common.RelatedResource {
+	if selector == nil {
 		return relatedPDBs
 	}
 
@@ -409,10 +385,6 @@ func appendMatchingPodDisruptionBudget(relatedPDBs []common.RelatedResource, nam
 		Namespace: namespace,
 		Name:      name,
 	})
-}
-
-func isEmptyLabelSelector(selector *metav1.LabelSelector) bool {
-	return len(selector.MatchLabels) == 0 && len(selector.MatchExpressions) == 0
 }
 
 func getStorageClassRelatedResources(c *gin.Context) {
@@ -514,17 +486,11 @@ func GetRelatedResources(c *gin.Context) {
 		result = getHTTPRouteRelatedResouces(res, namespace)
 	case *autoscalingv2.HorizontalPodAutoscaler:
 		result = getAutoScalingRelatedResources(res, namespace)
-	case *autoscalingv1.HorizontalPodAutoscaler:
-		result = getScaleTargetRelatedResources(res.Spec.ScaleTargetRef.Kind, res.Spec.ScaleTargetRef.APIVersion, res.Spec.ScaleTargetRef.Name, namespace)
 	case *v1.Ingress:
 		services := discoverIngressServices(namespace, res)
 		result = append(result, services...)
 	case *policyv1.PodDisruptionBudget:
 		if relatedPods, err := discoverPodsByPodDisruptionBudget(ctx, cs.K8sClient, namespace, res.Spec.Selector); err == nil {
-			result = append(result, relatedPods...)
-		}
-	case *policyv1beta1.PodDisruptionBudget:
-		if relatedPods, err := discoverPodsByPodDisruptionBudgetV1Beta1(ctx, cs.K8sClient, namespace, res.Spec.Selector); err == nil {
 			result = append(result, relatedPods...)
 		}
 	}

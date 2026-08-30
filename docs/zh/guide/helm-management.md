@@ -37,20 +37,6 @@ Release 详情页会展示状态、Chart 版本、values、资源、历史记录
 
 安装和升级前支持 dry-run 预览。你可以在详情页升级 Release，在历史记录中回滚，也可以删除 Release 来从集群中卸载。
 
-## 自动升级
-
-自动升级能力予以保留，并与交互式 Helm 操作遵循相同的身份边界。保存自动升级
-配置时，任务会显式绑定当前 OIDC 会话。执行时 Lightkite 刷新该会话，把得到的用户
-Token 交给 Kubernetes，由 Kubernetes RBAC 对 Release Secret 和 Chart 渲染资源
-进行最终授权。Lightkite 不会替换为平台凭据或集群 ServiceAccount 凭据。
-
-读取或修改自动升级配置之前，当前 Kubernetes 身份必须能够访问对应的 Helm
-Release。保存配置后，后续任务会归属于本次保存操作的用户及会话；如果已保存的
-操作者与会话不再匹配，任务会停用，而不会在身份归属不明确的情况下继续执行。
-
-如果身份提供方撤销 Refresh Grant、用户退出该会话，或者提供方不再签发刷新后的
-ID Token，任务会记录错误并自动停用。用户重新登录后再次启用即可重新授权。
-
 ## 权限
 
 Repository 元数据属于 Lightkite 自有共享数据，需要 `PLATFORM_ADMIN_GROUPS` 提供的

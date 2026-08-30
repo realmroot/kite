@@ -17,8 +17,6 @@ if rg -n -i \
   --glob '!**/.git/**' \
   --glob '!static/**' \
   --glob '!docs/architecture/product-decisions.md' \
-  --glob '!pkg/model/migrations.go' \
-  --glob '!pkg/model/migrations_test.go' \
   --glob '!scripts/verify-architecture.sh' \
   --glob '!scripts/verify-no-embedded-ai.sh' \
   .; then

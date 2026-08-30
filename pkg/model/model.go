@@ -105,9 +105,6 @@ func InitDB() {
 			panic("failed to enable sqlite foreign keys: " + err.Error())
 		}
 	}
-	if err := runSchemaMigrations(DB); err != nil {
-		panic("failed to run database migrations: " + err.Error())
-	}
 	models := []interface{}{
 		User{},
 		Cluster{},

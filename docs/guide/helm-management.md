@@ -39,25 +39,6 @@ The release detail page shows release status, chart version, values, resources, 
 
 Lightkite supports dry-run previews before install and upgrade. You can upgrade a release from the detail page, roll back from the history tab, or delete a release to uninstall it from the cluster.
 
-## Automatic Upgrades
-
-Automatic upgrade is retained and follows the same identity boundary as an
-interactive Helm operation. Saving its configuration explicitly binds the task
-to the current OIDC session. At run time Lightkite refreshes that session, presents
-the resulting user token to Kubernetes, and lets Kubernetes RBAC authorize the
-release Secrets and rendered resources. Lightkite never substitutes a platform or
-cluster service-account credential.
-
-Reading or changing automatic-upgrade configuration first requires access to
-the corresponding Helm release under the current Kubernetes identity. Saving
-the configuration transfers future task attribution to the user and session
-that performed that save. A task whose stored actor and session no longer match
-is disabled instead of running under ambiguous attribution.
-
-If the identity provider revokes the refresh grant, the user logs out that
-session, or the provider stops issuing a refreshed ID token, the task is
-disabled with an error. Re-enable it while signed in to authorize it again.
-
 ## Permissions
 
 Repository metadata is Lightkite-owned shared data and requires platform-management

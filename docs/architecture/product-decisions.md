@@ -137,9 +137,10 @@ bounded outbound requests.
   contain presentation preferences and last-login data only; it is not an
   identity authority and has no enabled/disabled, password, role, MFA, or API
   key state.
-- Database changes require explicit forward migrations that remove sensitive
-  legacy columns and obsolete tables. AutoMigrate alone is not an acceptable
-  deletion strategy.
+- Lightkite `v0.1.0` starts from the current schema and does not carry database
+  migrations from upstream Kite. After the first Lightkite release, every
+  persisted-schema change requires an explicit forward migration from each
+  supported Lightkite version; AutoMigrate alone is not an upgrade strategy.
 - Security failures are explicit and fail closed. Streaming and Kubernetes API
   errors preserve useful upstream status without leaking tokens or secrets.
 

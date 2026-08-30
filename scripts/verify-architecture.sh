@@ -47,9 +47,7 @@ if rg -n 'api\.(GET|POST|PUT|PATCH|DELETE)\("/(pods|nodes|namespaces|services|de
   exit 1
 fi
 
-if rg -n 'auto-upgrade|HelmReleaseAutoUpgrade|helm_release_auto_upgrade' \
-  --glob '!pkg/model/migrations.go' \
-  --glob '!pkg/model/migrations_test.go' \
+if rg -n -i 'auto[- ]upgrade|HelmReleaseAutoUpgrade|helm_release_auto_upgrade|Automatic Upgrades' \
   --glob '!scripts/verify-architecture.sh' \
   --glob '!docs/architecture/product-decisions.md' \
   .; then
@@ -100,8 +98,6 @@ for path in \
 done
 
 if rg -n '(clusterAgent|ClusterAgent|connectionMode|ConnectionMode|JWT_SECRET|JwtSecret|remotedialer)' \
-  --glob '!pkg/model/migrations.go' \
-  --glob '!pkg/model/migrations_test.go' \
   --glob '!docs/architecture/product-decisions.md' \
   --glob '!scripts/verify-architecture.sh' \
   --glob '!**/.git/**' \
@@ -132,9 +128,17 @@ if rg -n \
   --hidden \
   --glob '*.go' \
   --glob '!**/*_test.go' \
-  --glob '!pkg/model/migrations.go' \
   .; then
   echo "removed identity or authorization implementation remains" >&2
+  exit 1
+fi
+
+if rg -n \
+  '(k8s\.io/api/(batch|discovery|extensions|flowcontrol|networking|policy|storage)/v1beta|flowcontrol\.apiserver\.k8s\.io/v1beta|extensions/v1beta1)' \
+  --glob '*.go' \
+  --glob '!**/*_test.go' \
+  .; then
+  echo "Kubernetes API compatibility branch older than the supported minor window remains" >&2
   exit 1
 fi
 

@@ -81,9 +81,9 @@ The backend package layout is feature-oriented:
   discovery, and optional standard Cluster Inventory discovery.
 - `pkg/kube` wraps controller-runtime/client-go clients and owns the shared
   runtime scheme.
-- `pkg/resources` owns Kubernetes resource APIs. Most resources use
-  `GenericResourceHandler`; version-dependent APIs use
-  `versionedResourceHandler`; CRDs use `CRHandler`.
+- `pkg/resources` owns Kubernetes resource APIs. Built-in resources use the
+  current typed Kubernetes APIs through `GenericResourceHandler`; CRDs use
+  `CRHandler`.
 - `pkg/common/resource.go` is the backend resource registry for kinds, aliases,
   scope, searchability, and related-resource support.
 - `pkg/auth` owns the standard OIDC Authorization Code + PKCE flow, encrypted

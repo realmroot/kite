@@ -9,8 +9,7 @@ standard `issuer + sub` pair. The profile contains display fields, the last
 login time, provider groups used for platform-policy evaluation, and dashboard
 preferences. Groups are stored as a JSON string array so each claim value is
 preserved exactly, including punctuation. It is not an account and cannot
-authenticate independently. Upgrading from the legacy comma-separated group
-encoding revokes existing sessions; users sign in again.
+authenticate independently.
 
 Grant Kubernetes permissions by binding the provider's exact user or group
 identity with native Kubernetes RBAC. Grant maintenance of Lightkite-owned shared

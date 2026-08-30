@@ -97,10 +97,6 @@ func (h *GenericResourceHandler[T, V]) IsClusterScoped() bool {
 	return h.isClusterScoped
 }
 
-func (h *GenericResourceHandler[T, V]) Name() string {
-	return h.name
-}
-
 func (h *GenericResourceHandler[T, V]) Searchable() bool {
 	return h.enableSearch
 }
